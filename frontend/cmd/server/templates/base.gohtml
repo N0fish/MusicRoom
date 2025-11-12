@@ -1,0 +1,28 @@
+{{ define "base" -}}
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>MusicRoom</title>
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="/static/main.css" rel="stylesheet" />
+  </head>
+  <body class="bg-slate-50 min-h-screen">
+    <header class="sticky top-0 z-10 bg-white/90 backdrop-blur border-b">
+      <div class="max-w-5xl mx-auto px-4 h-14 flex items-center gap-4">
+        <a class="text-indigo-600 hover:underline" href="/">Home</a>
+        <a class="text-indigo-600 hover:underline" href="/auth">Auth</a>
+        <a class="text-indigo-600 hover:underline" href="/playlists">Playlists</a>
+        <a class="text-indigo-600 hover:underline" href="/event">Event</a>
+        <a class="text-indigo-600 hover:underline" href="/realtime">Realtime</a>
+        <div class="ml-auto text-xs text-slate-500">API: {{ .API }} &nbsp; WS: {{ .WS }}</div>
+      </div>
+    </header>
+    <main class="max-w-5xl mx-auto px-4 py-6">
+      {{ template "content" . }}
+    </main>
+  </body>
+</html>
+{{- end }}

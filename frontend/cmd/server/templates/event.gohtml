@@ -1,0 +1,63 @@
+{{ define "content" }}
+<div class="grid md:grid-cols-2 gap-6">
+  <div class="bg-white rounded-2xl shadow p-6">
+    <div class="text-xl font-semibold mb-4">Создать событие</div>
+    <div class="space-y-3">
+      <input id="ev-name" class="w-full px-3 py-2 rounded-xl border border-slate-300" value="Friday Night" />
+      <button class="px-4 py-2 rounded-xl border" onclick="createEvent()">Создать</button>
+      <div class="text-sm text-slate-600">ID: <code id="ev-id"></code></div>
+    </div>
+  </div>
+  <div class="bg-white rounded-2xl shadow p-6">
+    <div class="text-xl font-semibold mb-4">Голосование</div>
+    <div class="space-y-3">
+      <input id="vote-track" class="w-full px-3 py-2 rounded-xl border border-slate-300" value="Song A" />
+      <input id="vote-user" class="w-full px-3 py-2 rounded-xl border border-slate-300" value="user1" />
+      <div class="flex gap-2">
+        <button class="px-4 py-2 rounded-xl border" onclick="castVote()">Голосовать</button>
+        <button class="px-4 py-2 rounded-xl border" onclick="loadTally()">Обновить</button>
+      </div>
+      <ul id="tally" class="mt-2 space-y-1"></ul>
+    </div>
+  </div>
+</div>
+<script>
+const API = "{{ .API }}"
+async function createEvent(){
+  const name = document.getElementById('ev-name').value
+  const res = await fetch(API + '/events', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name, visibility: 'public' })
+  })
+  const json = await res.json()
+  document.getElementById('ev-id').textContent = json.id || ''
+}
+async function castVote(){
+  const id = document.getElementById('ev-id').textContent
+  const track = document.getElementById('vote-track').value
+  const voterId = document.getElementById('vote-user').value
+  if(!id) return
+  await fetch(API + `/events/${id}/votes`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ track, voterId })
+  })
+  await loadTally()
+}
+async function loadTally(){
+  const id = document.getElementById('ev-id').textContent
+  if(!id) return
+  const res = await fetch(API + `/events/${id}/tally`)
+  const list = await res.json()
+  const ul = document.getElementById('tally')
+  ul.innerHTML = ''
+  ;(list || []).forEach(row => {
+    const li = document.createElement('li')
+    li.textContent = `${row.track}: ${row.count}`
+    ul.appendChild(li)
+  })
+}
+</script>
+{{ end }}
+{{ template "base" . }}

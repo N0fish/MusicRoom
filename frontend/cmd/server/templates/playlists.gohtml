@@ -1,0 +1,70 @@
+{{ define "content" }}
+<div class="grid md:grid-cols-2 gap-6">
+  <div class="bg-white rounded-2xl shadow p-6">
+    <div class="text-xl font-semibold mb-4">Создать плейлист</div>
+    <div class="space-y-3">
+      <input id="pl-name" class="w-full px-3 py-2 rounded-xl border border-slate-300" value="Party" />
+      <select id="pl-vis" class="w-full px-3 py-2 rounded-xl border border-slate-300">
+        <option value="public" selected>public</option>
+        <option value="private">private</option>
+      </select>
+      <button class="px-4 py-2 rounded-xl border" onclick="createPlaylist()">Создать</button>
+      <div class="text-sm text-slate-600">ID: <code id="pl-id"></code></div>
+      <div id="pl-err" class="text-sm text-red-600"></div>
+    </div>
+  </div>
+  <div class="bg-white rounded-2xl shadow p-6">
+    <div class="text-xl font-semibold mb-4">Добавить трек</div>
+    <div class="space-y-3">
+      <input id="track-title" class="w-full px-3 py-2 rounded-xl border border-slate-300" value="Song A" />
+      <input id="track-artist" class="w-full px-3 py-2 rounded-xl border border-slate-300" value="Artist 1" />
+      <div class="flex gap-2">
+        <button class="px-4 py-2 rounded-xl border" onclick="addTrack()">Добавить</button>
+        <button class="px-4 py-2 rounded-xl border" onclick="loadPlaylist()">Обновить</button>
+      </div>
+      <ul id="tracks" class="mt-2 space-y-1"></ul>
+    </div>
+  </div>
+</div>
+<script>
+const API = "{{ .API }}"
+async function createPlaylist(){
+  const name = document.getElementById('pl-name').value
+  const visibility = document.getElementById('pl-vis').value
+  const res = await fetch(API + '/playlists', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-user-id': 'user1' },
+    body: JSON.stringify({ name, visibility })
+  })
+  const json = await res.json()
+  document.getElementById('pl-id').textContent = json.id || ''
+  document.getElementById('pl-err').textContent = res.ok ? '' : JSON.stringify(json)
+}
+async function addTrack(){
+  const id = document.getElementById('pl-id').textContent
+  const title = document.getElementById('track-title').value
+  const artist = document.getElementById('track-artist').value
+  if(!id) return
+  await fetch(API + `/playlists/${id}/tracks`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ title, artist })
+  })
+  await loadPlaylist()
+}
+async function loadPlaylist(){
+  const id = document.getElementById('pl-id').textContent
+  if(!id) return
+  const res = await fetch(API + `/playlists/${id}`)
+  const json = await res.json()
+  const ul = document.getElementById('tracks')
+  ul.innerHTML = ''
+  ;(json.tracks || []).forEach(t => {
+    const li = document.createElement('li')
+    li.textContent = `${t.position}. ${t.title} — ${t.artist}`
+    ul.appendChild(li)
+  })
+}
+</script>
+{{ end }}
+{{ template "base" . }}

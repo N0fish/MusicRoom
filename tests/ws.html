@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <meta charset="utf-8"/>
+  <title>MusicRoom WS Tester</title>
+  <body>
+    <h1>WS Tester</h1>
+    <input id="url" value="ws://localhost:3004/ws" style="width:400px"/>
+    <button id="connect">Connect</button>
+    <pre id="log" style="border:1px solid #ccc; padding:10px; height:200px; overflow:auto;"></pre>
+    <script>
+      const log = msg => {
+        const pre = document.getElementById('log');
+        pre.textContent += msg + "\n";
+        pre.scrollTop = pre.scrollHeight;
+      };
+      document.getElementById('connect').onclick = () => {
+        const url = document.getElementById('url').value;
+        const ws = new WebSocket(url);
+        ws.onopen = () => log('[open]');
+        ws.onmessage = e => log('[msg] ' + e.data);
+        ws.onerror = e => log('[error] ' + e.message);
+        ws.onclose = () => log('[close]');
+      };
+    </script>
+  </body>
+</html>

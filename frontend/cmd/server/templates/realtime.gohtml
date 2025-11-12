@@ -1,0 +1,29 @@
+{{ define "content" }}
+<div class="bg-white rounded-2xl shadow p-6">
+  <div class="text-xl font-semibold mb-2">Realtime</div>
+  <div class="text-sm mb-2">WS: <code id="ws-url">{{ .WS }}</code></div>
+  <div class="mb-3">
+    <button class="px-4 py-2 rounded-xl border" onclick="connectWS()">Connect</button>
+    <span id="ws-status" class="text-sm ml-2 text-slate-600">disconnected</span>
+  </div>
+  <div id="log" class="space-y-2 max-h-96 overflow-auto text-xs bg-slate-50 p-2 rounded"></div>
+</div>
+<script>
+let ws
+function log(msg){
+  const el = document.createElement('pre')
+  el.textContent = msg
+  document.getElementById('log').appendChild(el)
+}
+function connectWS(){
+  const url = document.getElementById('ws-url').textContent
+  ws = new WebSocket(url)
+  document.getElementById('ws-status').textContent = 'connecting'
+  ws.onopen = () => document.getElementById('ws-status').textContent = 'connected'
+  ws.onmessage = e => log(e.data)
+  ws.onerror = () => document.getElementById('ws-status').textContent = 'error'
+  ws.onclose = () => document.getElementById('ws-status').textContent = 'disconnected'
+}
+</script>
+{{ end }}
+{{ template "base" . }}

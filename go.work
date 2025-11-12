@@ -1,0 +1,10 @@
+go 1.22
+
+use (
+	./backend/services/auth-service
+	./backend/services/playlist-service
+	./backend/services/vote-service
+	./backend/services/realtime-service
+	./backend/services/api-gateway
+	./frontend
+)

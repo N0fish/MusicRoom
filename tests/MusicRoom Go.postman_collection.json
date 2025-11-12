@@ -1,0 +1,204 @@
+{
+  "info": {
+    "name": "MusicRoom Go",
+    "_postman_id": "a1111111-b222-4333-c444-555555555555",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth - Signup",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:3001/auth/signup",
+          "host": [
+            "http://localhost:3001"
+          ],
+          "path": [
+            "auth",
+            "signup"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"email\": \"test@example.com\", \"password\": \"secret123\"}"
+        }
+      }
+    },
+    {
+      "name": "Auth - Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:3001/auth/login",
+          "host": [
+            "http://localhost:3001"
+          ],
+          "path": [
+            "auth",
+            "login"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"email\": \"test@example.com\", \"password\": \"secret123\"}"
+        }
+      }
+    },
+    {
+      "name": "Playlist - Create",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "x-user-id",
+            "value": "user1"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:3002/playlists",
+          "host": [
+            "http://localhost:3002"
+          ],
+          "path": [
+            "playlists"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\": \"Party\", \"visibility\": \"public\"}"
+        }
+      }
+    },
+    {
+      "name": "Playlist - Get",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3002/playlists/{{playlistId}}",
+          "host": [
+            "http://localhost:3002"
+          ],
+          "path": [
+            "playlists",
+            "{{playlistId}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Playlist - Add Track",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:3002/playlists/{{playlistId}}/tracks",
+          "host": [
+            "http://localhost:3002"
+          ],
+          "path": [
+            "playlists",
+            "{{playlistId}}",
+            "tracks"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"title\": \"Song A\", \"artist\": \"Artist 1\"}"
+        }
+      }
+    },
+    {
+      "name": "Vote - Create Event",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:3003/events",
+          "host": [
+            "http://localhost:3003"
+          ],
+          "path": [
+            "events"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\": \"Friday Night\", \"visibility\": \"public\"}"
+        }
+      }
+    },
+    {
+      "name": "Vote - Cast",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:3003/events/{{eventId}}/votes",
+          "host": [
+            "http://localhost:3003"
+          ],
+          "path": [
+            "events",
+            "{{eventId}}",
+            "votes"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"track\": \"Song A\", \"voterId\": \"user1\"}"
+        }
+      }
+    },
+    {
+      "name": "Vote - Tally",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3003/events/{{eventId}}/tally",
+          "host": [
+            "http://localhost:3003"
+          ],
+          "path": [
+            "events",
+            "{{eventId}}",
+            "tally"
+          ]
+        }
+      }
+    }
+  ]
+}

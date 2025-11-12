@@ -1,0 +1,100 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: musicroom
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api-gateway:
+    build: ./backend/services/api-gateway
+    environment:
+      GATEWAY_PORT: 8080
+      AUTH_URL: http://auth-service:3001
+      PLAYLIST_URL: http://playlist-service:3002
+      VOTE_URL: http://vote-service:3003
+    ports:
+      - "8080:8080"
+    depends_on:
+      - auth-service
+      - playlist-service
+      - vote-service
+
+  auth-service:
+    build: ./backend/services/auth-service
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/musicroom?sslmode=disable
+      JWT_SECRET: supersecretdev
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  playlist-service:
+    build: ./backend/services/playlist-service
+    environment:
+      PORT: 3002
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/musicroom?sslmode=disable
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  vote-service:
+    build: ./backend/services/vote-service
+    environment:
+      PORT: 3003
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/musicroom?sslmode=disable
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3003:3003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  realtime-service:
+    build: ./backend/services/realtime-service
+    environment:
+      PORT: 3004
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3004:3004"
+    depends_on:
+      redis:
+        condition: service_started
+  frontend:
+    build: ./frontend
+    environment:
+      API_URL: http://localhost:8080
+      WS_URL: ws://localhost:3004/ws
+      PORT: 5175
+    ports:
+      - "5175:5175"
+    depends_on:
+      - api-gateway
+      - realtime-service
+
+volumes:
+  pgdata:
