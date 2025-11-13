@@ -1,0 +1,106 @@
+{{define "content"}}
+<h1>My profile</h1>
+
+<div id="profile">
+  <p><strong>Email:</strong> <span id="email"></span></p>
+  <p><strong>Display name:</strong> <span id="displayName"></span></p>
+  <p><strong>Bio:</strong> <span id="bio"></span></p>
+  <p><strong>Visibility:</strong> <span id="visibility"></span></p>
+</div>
+
+<h2>Edit profile</h2>
+<form id="profile-form">
+  <div>
+    <label>Display name:
+      <input type="text" name="displayName" id="input-displayName">
+    </label>
+  </div>
+  <div>
+    <label>Bio:
+      <textarea name="bio" id="input-bio"></textarea>
+    </label>
+  </div>
+  <div>
+    <label>Visibility:
+      <select name="visibility" id="input-visibility">
+        <option value="public">public</option>
+        <option value="friends">friends</option>
+        <option value="private">private</option>
+      </select>
+    </label>
+  </div>
+  <div>
+    <label>Favorite genres (comma separated):
+      <input type="text" name="genres" id="input-genres">
+    </label>
+  </div>
+  <button type="submit">Save</button>
+</form>
+
+<script>
+  const API = "{{.API}}";
+
+  // TODO: временно, пока нет нормальной auth/JWT.
+  // Можно брать userId из localStorage после логина.
+  const USER_ID = localStorage.getItem("userId") || "user1";
+
+  async function loadProfile() {
+    const res = await fetch(API + "/users/me", {
+      headers: {
+        "X-User-Id": USER_ID
+      }
+    });
+    if (!res.ok) {
+      console.error("failed to load profile", await res.text());
+      return;
+    }
+    const data = await res.json();
+    document.getElementById("email").textContent = data.email || "";
+    document.getElementById("displayName").textContent = data.displayName || "";
+    document.getElementById("bio").textContent = data.bio || "";
+    document.getElementById("visibility").textContent = data.visibility || "";
+
+    const genres = (data.preferences && data.preferences.genres) || [];
+    document.getElementById("input-displayName").value = data.displayName || "";
+    document.getElementById("input-bio").value = data.bio || "";
+    document.getElementById("input-visibility").value = data.visibility || "public";
+    document.getElementById("input-genres").value = genres.join(", ");
+  }
+
+  document.getElementById("profile-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const displayName = document.getElementById("input-displayName").value;
+    const bio = document.getElementById("input-bio").value;
+    const visibility = document.getElementById("input-visibility").value;
+    const genresStr = document.getElementById("input-genres").value;
+    const genres = genresStr.split(",").map(s => s.trim()).filter(Boolean);
+
+    const body = {
+      displayName,
+      bio,
+      visibility,
+      preferences: {
+        genres: genres
+      }
+    };
+
+    const res = await fetch(API + "/users/me/profile", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "X-User-Id": USER_ID
+      },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      alert("Failed to save profile: " + await res.text());
+      return;
+    }
+    await loadProfile();
+    alert("Profile updated");
+  });
+
+  loadProfile();
+</script>
+{{end}}
+{{ template "base" . }}

@@ -25,12 +25,14 @@ services:
     environment:
       GATEWAY_PORT: 8080
       AUTH_URL: http://auth-service:3001
+      USER_URL: http://user-service:3005
       PLAYLIST_URL: http://playlist-service:3002
       VOTE_URL: http://vote-service:3003
     ports:
       - "8080:8080"
     depends_on:
       - auth-service
+      - user-service
       - playlist-service
       - vote-service
 
@@ -42,6 +44,17 @@ services:
       JWT_SECRET: ${JWT_SECRET:-supersecretdev}
     ports:
       - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  user-service:
+    build: ./backend/services/user-service
+    environment:
+      PORT: 3005
+      DATABASE_URL: ${DATABASE_URL:-postgres://musicroom:musicroom@postgres:5432/musicroom?sslmode=disable}
+    ports:
+      - "3005:3005"
     depends_on:
       postgres:
         condition: service_healthy

@@ -45,17 +45,42 @@ func main() {
 
 	r.Post("/auth/signup", func(w http.ResponseWriter, r *http.Request) {
 		var c Credentials
-		if err := json.NewDecoder(r.Body).Decode(&c); err != nil { http.Error(w, err.Error(), 400); return }
-		if len(c.Password) < 6 || len(c.Email) < 3 { http.Error(w, "invalid credentials", 400); return }
-		hash, _ := bcrypt.GenerateFromPassword([]byte(c.Password), bcrypt.DefaultCost)
-		var id string
-		err := pool.QueryRow(ctx, `INSERT INTO auth_users(email,password) VALUES($1,$2) ON CONFLICT(email) DO NOTHING RETURNING id`, c.Email, string(hash)).Scan(&id)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) { http.Error(w, "email already registered", 409); return }
-			http.Error(w, err.Error(), 500); return
+		if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
 		}
-		tok := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"email": c.Email, "id": id, "exp": time.Now().Add(24*time.Hour).Unix()})
+		if len(c.Password) < 6 || len(c.Email) < 3 {
+			http.Error(w, "invalid credentials", 400)
+			return
+		}
+
+		hash, _ := bcrypt.GenerateFromPassword([]byte(c.Password), bcrypt.DefaultCost)
+
+		var id string
+		err := pool.QueryRow(ctx,
+			`INSERT INTO auth_users(email,password)
+					VALUES($1,$2)
+					ON CONFLICT(email) DO NOTHING
+					RETURNING id`,
+			c.Email, string(hash),
+		).Scan(&id)
+
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				http.Error(w, "email already registered", 409)
+				return
+			}
+			http.Error(w, err.Error(), 500)
+			return
+		}
+
+		tok := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"email": c.Email,
+			"id":    id,
+			"exp":   time.Now().Add(24 * time.Hour).Unix(),
+		})
 		signed, _ := tok.SignedString([]byte(jwtSecret))
+
 		json.NewEncoder(w).Encode(map[string]any{"token": signed})
 	})
 

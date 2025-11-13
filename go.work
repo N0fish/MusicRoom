@@ -2,6 +2,7 @@ go 1.22.0
 
 use (
 	./backend/services/auth-service
+	./backend/services/user-service
 	./backend/services/playlist-service
 	./backend/services/vote-service
 	./backend/services/realtime-service

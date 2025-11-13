@@ -17,6 +17,7 @@ func main(){
 	authURL := getenv("AUTH_URL","http://localhost:3001")
 	tplURL := getenv("PLAYLIST_URL","http://localhost:3002")
 	voteURL := getenv("VOTE_URL","http://localhost:3003")
+	userURL := getenv("USER_URL","http://localhost:3005")
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
@@ -27,6 +28,7 @@ func main(){
 	r.Mount("/auth", proxy(authURL))
 	r.Mount("/playlists", proxy(tplURL))
 	r.Mount("/events", proxy(voteURL))
+	r.Mount("/users", proxy(userURL))
 
 	log.Printf("api-gateway on :%s", port)
 	http.ListenAndServe(":"+port, r)

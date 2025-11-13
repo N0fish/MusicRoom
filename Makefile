@@ -1,6 +1,7 @@
 SHELL := /bin/bash
 SERVICES := backend/services/api-gateway/cmd/service \
 						backend/services/auth-service/cmd/service \
+						backend/services/user-service/cmd/service \
 						backend/services/playlist-service/cmd/service \
 						backend/services/realtime-service/cmd/service \
 						backend/services/vote-service/cmd/service \

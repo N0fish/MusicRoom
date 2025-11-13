@@ -8,6 +8,7 @@ POSTGRES_DB=musicroom
 JWT_SECRET=supersecretdev
 SERVICES := backend/services/api-gateway \
 						backend/services/auth-service \
+						backend/services/user-service \
 						backend/services/playlist-service \
 						backend/services/realtime-service \
 						backend/services/vote-service \
