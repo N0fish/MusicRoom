@@ -30,8 +30,8 @@ type Credentials struct {
 
 func main() {
 	port := getenv("PORT", "3001")
-	dsn := getenv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/musicroom?sslmode=disable")
-	jwtSecret := getenv("JWT_SECRET", "dev")
+	dsn := getenv("DATABASE_URL", "postgres://music:music@postgres:5432/music?sslmode=disable")
+	jwtSecret := getenv("JWT_SECRET", "supersecretdev")
 
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dsn)

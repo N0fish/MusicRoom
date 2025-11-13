@@ -38,8 +38,8 @@ services:
     build: ./backend/services/auth-service
     environment:
       PORT: 3001
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/musicroom?sslmode=disable
-      JWT_SECRET: supersecretdev
+      DATABASE_URL: ${DATABASE_URL:-postgres://music:music@postgres:5432/music?sslmode=disable}
+      JWT_SECRET: ${JWT_SECRET:-supersecretdev}
     ports:
       - "3001:3001"
     depends_on:
@@ -50,8 +50,8 @@ services:
     build: ./backend/services/playlist-service
     environment:
       PORT: 3002
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/musicroom?sslmode=disable
-      REDIS_URL: redis://redis:6379
+      DATABASE_URL: ${DATABASE_URL:-postgres://music:music@postgres:5432/music?sslmode=disable}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
     ports:
       - "3002:3002"
     depends_on:
@@ -64,8 +64,8 @@ services:
     build: ./backend/services/vote-service
     environment:
       PORT: 3003
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/musicroom?sslmode=disable
-      REDIS_URL: redis://redis:6379
+      DATABASE_URL: ${DATABASE_URL:-postgres://music:music@postgres:5432/music?sslmode=disable}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
     ports:
       - "3003:3003"
     depends_on:
@@ -78,7 +78,7 @@ services:
     build: ./backend/services/realtime-service
     environment:
       PORT: 3004
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
     ports:
       - "3004:3004"
     depends_on:
