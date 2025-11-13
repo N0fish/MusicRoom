@@ -2,9 +2,9 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: musicroom
+      POSTGRES_USER: ${POSTGRES_USER:-musicroom}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-musicroom}
+      POSTGRES_DB: ${POSTGRES_DB:-musicroom}
     ports:
       - "5432:5432"
     volumes:
@@ -84,6 +84,7 @@ services:
     depends_on:
       redis:
         condition: service_started
+
   frontend:
     build: ./frontend
     environment:
