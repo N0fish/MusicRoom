@@ -49,8 +49,7 @@ services:
   playlist-service:
     build: ./backend/services/playlist-service
     environment:
-      PORT: 3002
-      DATABASE_URL: ${DATABASE_URL:-postgres://music:music@postgres:5432/music?sslmode=disable}
+      DATABASE_URL: ${DATABASE_URL:-postgres://musicroom:musicroom@postgres:5432/musicroom?sslmode=disable}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
     ports:
       - "3002:3002"
@@ -64,7 +63,7 @@ services:
     build: ./backend/services/vote-service
     environment:
       PORT: 3003
-      DATABASE_URL: ${DATABASE_URL:-postgres://music:music@postgres:5432/music?sslmode=disable}
+      DATABASE_URL: ${DATABASE_URL:-postgres://musicroom:musicroom@postgres:5432/musicroom?sslmode=disable}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
     ports:
       - "3003:3003"
