@@ -14,7 +14,7 @@ import (
 
 func main(){
 	port := getenv("PORT","3003")
-	dsn := getenv("DATABASE_URL","postgres://music:music@postgres:5432/music?sslmode=disable")
+	dsn := getenv("DATABASE_URL","postgres://musicroom:musicroom@postgres:5432/musicroom?sslmode=disable")
 	redisURL := getenv("REDIS_URL","redis://localhost:6379")
 	ctx := context.Background()
 

@@ -38,7 +38,7 @@ services:
     build: ./backend/services/auth-service
     environment:
       PORT: 3001
-      DATABASE_URL: ${DATABASE_URL:-postgres://music:music@postgres:5432/music?sslmode=disable}
+      DATABASE_URL: ${DATABASE_URL:-postgres://musicroom:musicroom@postgres:5432/musicroom?sslmode=disable}
       JWT_SECRET: ${JWT_SECRET:-supersecretdev}
     ports:
       - "3001:3001"

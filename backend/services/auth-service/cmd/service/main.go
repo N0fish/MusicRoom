@@ -30,7 +30,7 @@ type Credentials struct {
 
 func main() {
 	port := getenv("PORT", "3001")
-	dsn := getenv("DATABASE_URL", "postgres://music:music@postgres:5432/music?sslmode=disable")
+	dsn := getenv("DATABASE_URL", "postgres://musicroom:musicroom@postgres:5432/musicroom?sslmode=disable")
 	jwtSecret := getenv("JWT_SECRET", "supersecretdev")
 
 	ctx := context.Background()

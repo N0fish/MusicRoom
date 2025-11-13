@@ -18,7 +18,7 @@ for svc in ${SERVICES}; do
   if [[ ! -f "../$svc/.env" ]]; then
     cat > "../$svc/.env" <<EENV
 PORT=8080
-DATABASE_URL=postgres://music:music@postgres:5432/music?sslmode=disable
+DATABASE_URL=postgres://musicroom:musicroom@postgres:5432/musicroom?sslmode=disable
 REDIS_URL=redis://redis:6379
 JWT_SECRET=${JWT_SECRET:-supersecretdev}
 ENV=dev
