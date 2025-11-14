@@ -21,7 +21,6 @@ var staticFS embed.FS
 type App struct {
 	API string
 	WS  string
-	tpl *template.Template
 }
 
 func main() {
@@ -29,8 +28,7 @@ func main() {
 	ws := getenv("WS_URL", "ws://localhost:3004/ws")
 	port := getenv("PORT", "5175")
 
-	tpl := template.Must(template.ParseFS(tplFS, "templates/*.gohtml"))
-	app := &App{API: api, WS: ws, tpl: tpl}
+	app := &App{API: api, WS: ws}
 
 	r := chi.NewRouter()
 	r.Get("/", app.page("home.gohtml"))
@@ -63,12 +61,18 @@ func main() {
 
 func (a *App) page(name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		tpl, err := template.ParseFS(tplFS, "templates/base.gohtml", "templates/"+name)
+		if err != nil {
+			http.Error(w, "template error", 500)
+			return
+		}
+
 		data := map[string]any{
 			"API":  a.API,
 			"WS":   a.WS,
 			"Path": r.URL.Path,
 		}
-		if err := a.tpl.ExecuteTemplate(w, name, data); err != nil {
+		if err := tpl.ExecuteTemplate(w, "base", data); err != nil {
 			http.Error(w, err.Error(), 500)
 		}
 	}

@@ -4,21 +4,26 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>MusicRoom</title>
+    <title>Music Room</title>
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="/static/main.css" rel="stylesheet" />
   </head>
   <body class="bg-slate-50 min-h-screen">
     <header class="sticky top-0 z-10 bg-white/90 backdrop-blur border-b">
-      <div class="max-w-5xl mx-auto px-4 h-14 flex items-center gap-4">
-        <a class="text-indigo-600 hover:underline" href="/">Home</a>
-        <a class="text-indigo-600 hover:underline" href="/auth">Auth</a>
-        <a class="text-indigo-600 hover:underline" href="/playlists">Playlists</a>
-        <a class="text-indigo-600 hover:underline" href="/event">Event</a>
-        <a class="text-indigo-600 hover:underline" href="/realtime">Realtime</a>
-        <a class="text-indigo-600 hover:underline" href="/me">Me</a>
-        <div class="ml-auto text-xs text-slate-500">API: {{ .API }} &nbsp; WS: {{ .WS }}</div>
+      <div class="max-w-5xl mx-auto px-4">
+        <div class="flex items-center justify-between h-16">
+          <a class="text-2xl font-bold text-indigo-600" href="/">Music Room</a>
+          <nav class="hidden md:flex gap-8">
+            <a class="{{if eq .Path "/" }}text-indigo-600{{else}}text-slate-600{{end}} hover:underline" href="/">Home</a>
+            <a class="{{if eq .Path "/auth" }}text-indigo-600{{else}}text-slate-600{{end}} hover:underline" href="/auth">Auth</a>
+            <a class="{{if eq .Path "/playlists" }}text-indigo-600{{else}}text-slate-600{{end}} hover:underline" href="/playlists">Playlists</a>
+            <a class="{{if eq .Path "/event" }}text-indigo-600{{else}}text-slate-600{{end}} hover:underline" href="/event">Event</a>
+            <a class="{{if eq .Path "/realtime" }}text-indigo-600{{else}}text-slate-600{{end}} hover:underline" href="/realtime">Realtime</a>
+            <a class="{{if eq .Path "/me" }}text-indigo-600{{else}}text-slate-600{{end}} hover:underline" href="/me">Me</a>
+          </nav>
+          <div class="text-xs text-slate-500">API: {{ .API }} &nbsp; WS: {{ .WS }}</div>
+        </div>
       </div>
     </header>
     <main class="max-w-5xl mx-auto px-4 py-6">
