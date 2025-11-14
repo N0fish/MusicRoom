@@ -13,6 +13,7 @@ import (
 )
 
 func main(){
+	// это читка адреса сервисов и порт шлюза из .env. КОНЕЧНО в будущем надо убрать это все в .env
 	port := getenv("GATEWAY_PORT", "8080")
 	authURL := getenv("AUTH_URL", "http://localhost:3001")
 	tplURL := getenv("PLAYLIST_URL", "http://localhost:3002")
@@ -20,6 +21,7 @@ func main(){
 	userURL := getenv("USER_URL", "http://localhost:3005")
 	mockURL := getenv("MOCK_URL", "http://localhost:3006")
 
+	// это chi-роутер, логгер, CORS-middlewar
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(cors)
@@ -35,11 +37,15 @@ func main(){
 	r.Mount("/mock", proxy(mockURL))
 
 	log.Printf("api-gateway on :%s", port)
-	http.ListenAndServe(":"+port, r)
+	log.Fatal(http.ListenAndServe(":"+port, r))
 }
 
 func proxy(target string) http.Handler {
-	u, _ := url.Parse(target)
+	u, err := url.Parse(target)
+	if err != nil {
+			log.Fatalf("invalid proxy target %q: %v", target, err)
+	}
+
 	p := httputil.NewSingleHostReverseProxy(u)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Host = u.Host

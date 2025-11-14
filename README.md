@@ -128,7 +128,7 @@ requests → │         API Gateway   :8080 │ ← фронт / мобилка
 
 ## Сервисы:
 ### 1. API Gateway
-### `api-gateway` — Единая точка входа (порт 8080)
+### `api-gateway` — Единая точка входа (порт 8080) - единый backend / API.
 - Проксирует:
   - `/auth` → `auth-service`
   - `/playlists` → `playlist-service`
@@ -140,6 +140,15 @@ requests → │         API Gateway   :8080 │ ← фронт / мобилка
 ```bash
 curl -X POST http://localhost:8080/playlists   -H 'content-type: application/json' -H 'x-user-id: user1'   -d '{"name":"Party","visibility":"public"}'
 ```
+
+По сабжекту просят единый сервер-backend, через который ходит мобильное приложение.  
+Все сервисы (auth, users, playlists, votes и т.д.) могут быть разнесены, но клиент не должен знать про кучу разных портов и URL.  
+Собственно по этому этот сервис существует и через него должны проходить все коммуникаци.
+
+Этот сервер должен
+- принимаеть все запросы от мобилки / фронтенда;
+- прокидывает их на нужный микросервис (auth, playlists, vote, users, mock);
+-
 
 ---
 
