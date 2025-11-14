@@ -39,6 +39,7 @@ docker stop <id> # если есть незакрытые порты
 | **playlist-service** | Плейлисты и треки    | 3002 |
 | **vote-service**   | События и голосование  | 3003 |
 | **realtime-service** | WebSocket уведомления | 3004 |
+| **mock-service**     | Mock / статистические данные | 3006 |
 | **postgres**       | Общая база данных      | 5432 |
 | **redis**          | Pub/Sub сообщения      | 6379 |
 
@@ -48,6 +49,7 @@ docker stop <id> # если есть незакрытые порты
 - Playlist: http://localhost:3002
 - Vote: http://localhost:3003
 - Realtime WS: ws://localhost:3004/ws
+- Mock API: http://localhost:3006
 - Postgres: localhost:5432 (user: postgres / password: postgres, db: musicroom)
 - Redis: localhost:6379
 
@@ -56,9 +58,12 @@ docker stop <id> # если есть незакрытые порты
 ## Архитектура
 
 ```sql
-                 ┌────────────┐
-     requests →  │ API Gateway│ ← фронт / мобилка
-                 └────┬───────┘
+                 frontend/mobile                
+                       │
+                       ▼
+                ┌─────────────┐         ┌───────────────────┐
+     requests → │ API Gateway │ /mock → │   mock-service    │
+                └─────┬───────┘         └───────────────────┘
                       │
         ┌─────────────┼──────────────┬───────────────┐
         ↓             ↓              ↓               ↓
@@ -92,10 +97,10 @@ docker stop <id> # если есть незакрытые порты
            ┌─────────────────────────────┐
 requests → │         API Gateway   :8080 │ ← фронт / мобилка
            │ /auth      → auth-service   │  
-           │ /playlists → playlist-s.    │
-           │ /events    → vote-service   │
-           │ /users     → user-service   │
-           └────────────┬────────────────┘
+           │ /playlists → playlist-s.    │         ┌───────────────────┐
+           │ /events    → vote-service   │ /mock → │   mock-service    │
+           │ /users     → user-service   │         │             :3006 │
+           └────────────┬────────────────┘         └───────────────────┘
                         │
      ┌──────────────────┼─────────────────────────────┐
      ↓                  ↓                             ↓
@@ -122,7 +127,23 @@ requests → │         API Gateway   :8080 │ ← фронт / мобилка
 ---
 
 ## Сервисы:
-### 1. Auth
+### 1. API Gateway
+### `api-gateway` — Единая точка входа (порт 8080)
+- Проксирует:
+  - `/auth` → `auth-service`
+  - `/playlists` → `playlist-service`
+  - `/events` → `vote-service`
+- Можно обращаться **только к `localhost:8080`**, не к внутренним сервисам.
+
+Пример:
+#### создать плейлист
+```bash
+curl -X POST http://localhost:8080/playlists   -H 'content-type: application/json' -H 'x-user-id: user1'   -d '{"name":"Party","visibility":"public"}'
+```
+
+---
+
+### 2. Auth
 ### `auth-service` — Авторизация (порт 3001)
 - `/auth/signup` — регистрация пользователя
 - `/auth/login` — вход, возвращает JWT
@@ -141,7 +162,7 @@ curl -X POST http://localhost:3001/auth/login   -H 'content-type: application/js
 
 ---
 
-### 2. User
+### 3. User
 ### `user-service` — Профили пользователей (порт 3005)
 - `/users/me` — получить профиль текущего пользователя (по `X-User-Id` / JWT).
 - `/users/me/profile` — создать/обновить профиль (displayName, bio, visibility, preferences).
@@ -174,9 +195,12 @@ curl -X PUT http://localhost:3005/users/me/profile \
 curl http://localhost:3005/users/<OTHER_USER_ID>
 ```
 
+Если **через gateway**, должно быть `:8080`.
+`3005` — это прямой порт user-сервиса.
+
 ---
 
-### 3. Playlist
+### 4. Playlist
 ### `playlist-service` — Плейлисты и треки (порт 3002)
 - `/playlists` — создать плейлист  
 - `/playlists/:id/tracks` — добавить трек  
@@ -200,7 +224,7 @@ curl -X POST http://localhost:3002/playlists/<playlistId>/tracks -H 'content-typ
 
 ---
 
-### 3. Vote
+### 5. Vote
 ### `vote-service` — События и голосование (порт 3003)
 - `/events` — создать событие  
 - `/events/:id/votes` — проголосовать  
@@ -224,7 +248,7 @@ curl http://localhost:3003/events/<eventId>/tally
 
 ---
 
-### 5. Realtime
+### 6. Realtime
 ### `realtime-service` — WebSocket уведомления (порт 3004)
 - Клиенты подключаются к `ws://localhost:3004/ws`
 - Принимает события от Redis и рассылает в браузеры
@@ -235,17 +259,30 @@ curl http://localhost:3003/events/<eventId>/tally
 
 ---
 
-### 6. `api-gateway` — Единая точка входа (порт 8080)
-- Проксирует:
-  - `/auth` → `auth-service`
-  - `/playlists` → `playlist-service`
-  - `/events` → `vote-service`
-- Можно обращаться **только к `localhost:8080`**, не к внутренним сервисам.
+### 7. Mock
+### `mock-service` — Заглушечные данные для фронта/мобилки (порт 3006)
 
-Пример:
-#### создать плейлист
+Сервис возвращает **фиксированные тестовые данные**, чтобы фронт и мобильное приложение
+могли показывать заполненные экраны, даже если база пустая или реальный backend ещё не готов.
+
+Эндпоинты (через API Gateway):
+
+- `GET /mock/initial` — стартовый набор данных:
+  - текущий пользователь (mock),
+  - список плейлистов,
+  - список событий.
+- `GET /mock/user` — только мок-пользователь.
+- `GET /mock/playlists` — только мок-плейлисты.
+- `GET /mock/events` — только мок-события.
+
+Примеры:
 ```bash
-curl -X POST http://localhost:8080/playlists   -H 'content-type: application/json' -H 'x-user-id: user1'   -d '{"name":"Party","visibility":"public"}'
+# через API Gateway
+curl http://localhost:8080/mock/initial
+```
+```bash
+# напрямую
+curl http://localhost:3006/mock/initial
 ```
 
 ---
@@ -288,7 +325,7 @@ curl -X POST http://localhost:8080/playlists   -H 'content-type: application/jso
    -H "X-User-Id: $USER_ID" \
    -d '{
       "displayName": "Alla",
-      "bio": "Люблю собачек,
+      "bio": "Люблю собачек",
       "visibility": "public",
       "preferences": { "genres": ["dog", "cat"] }
    }'

@@ -28,6 +28,7 @@ services:
       USER_URL: http://user-service:3005
       PLAYLIST_URL: http://playlist-service:3002
       VOTE_URL: http://vote-service:3003
+      MOCK_URL: http://mock-service:3006
     ports:
       - "8080:8080"
     depends_on:
@@ -35,6 +36,7 @@ services:
       - user-service
       - playlist-service
       - vote-service
+      - mock-service
 
   auth-service:
     build: ./backend/services/auth-service
@@ -96,6 +98,13 @@ services:
     depends_on:
       redis:
         condition: service_started
+
+  mock-service:
+    build: ./backend/services/mock-service
+    environment:
+      PORT: 3006
+    ports:
+      - "3006:3006"
 
   frontend:
     build: ./frontend
