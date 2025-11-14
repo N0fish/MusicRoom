@@ -67,6 +67,19 @@ func main() {
 		json.NewEncoder(w).Encode(sampleUser())
 	})
 
+	r.Get("/mock/users/me", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(sampleUser())
+	})
+
+	r.Get("/mock/users/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		u := sampleUser()
+		if id != "" {
+			u.ID = id
+		}
+		json.NewEncoder(w).Encode(u)
+	})
+
 	r.Get("/mock/playlists", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(samplePlaylists())
 	})
