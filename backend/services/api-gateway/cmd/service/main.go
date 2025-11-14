@@ -7,13 +7,13 @@ import (
 	"os"
 	"strings"
 
+	"net/http/httputil"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"net/http/httputil"
 )
 
-func main(){
-	// это читка адреса сервисов и порт шлюза из .env. КОНЕЧНО в будущем надо убрать это все в .env
+func main() {
 	port := getenv("GATEWAY_PORT", "8080")
 	authURL := getenv("AUTH_URL", "http://localhost:3001")
 	tplURL := getenv("PLAYLIST_URL", "http://localhost:3002")
@@ -26,8 +26,16 @@ func main(){
 	r.Use(middleware.Logger)
 	r.Use(cors)
 
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request){
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"status":"ok","service":"api-gateway"}`))
+	})
+
+	// Swagger
+	openapiPath := getenv("OPENAPI_FILE", "./backend/services/api-gateway/openapi.yaml")
+	r.Get("/docs/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
+		// fmt.Println("saluut")
+		w.Header().Set("Content-Type", "application/yaml")
+		http.ServeFile(w, r, openapiPath)
 	})
 
 	r.Mount("/auth", proxy(authURL))
@@ -43,7 +51,7 @@ func main(){
 func proxy(target string) http.Handler {
 	u, err := url.Parse(target)
 	if err != nil {
-			log.Fatalf("invalid proxy target %q: %v", target, err)
+		log.Fatalf("invalid proxy target %q: %v", target, err)
 	}
 
 	p := httputil.NewSingleHostReverseProxy(u)
@@ -55,19 +63,19 @@ func proxy(target string) http.Handler {
 
 func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Origin", "*") // все домены могут отправлять запросы, поменять ближе к завершению
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-User-Id")
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
 		if strings.ToUpper(r.Method) == "OPTIONS" {
 			w.WriteHeader(204)
 			return
 		}
-		next.ServeHTTP(w,r)
+		next.ServeHTTP(w, r)
 	})
 }
 
 func getenv(k, def string) string {
-	if v:=os.Getenv(k); v != "" {
+	if v := os.Getenv(k); v != "" {
 		return v
 	}
 	return def

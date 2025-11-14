@@ -29,6 +29,7 @@ services:
       PLAYLIST_URL: http://playlist-service:3002
       VOTE_URL: http://vote-service:3003
       MOCK_URL: http://mock-service:3006
+      OPENAPI_FILE: /app/openapi.yaml
     ports:
       - "8080:8080"
     depends_on:

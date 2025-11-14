@@ -15,7 +15,6 @@ make up
 make logs  # все логи
 ```
 ```bash
-make logs  # логи
 # or
 docker compose logs -f auth-service  # логи конкретного сервиса
 ```
@@ -52,6 +51,12 @@ docker stop <id> # если есть незакрытые порты
 - Mock API: http://localhost:3006
 - Postgres: localhost:5432 (user: postgres / password: postgres, db: musicroom)
 - Redis: localhost:6379
+
+### Запустить только на `go` по сервису (без докер):
+Пример:
+```bash
+go run ./backend/services/mock-service/cmd/service
+```
 
 ---
 

@@ -1,0 +1,124 @@
+openapi: 3.0.3
+info:
+  title: Music Room Gateway API
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local development gateway
+
+paths:
+  /health:
+    get:
+      summary: Health check for API gateway
+      responses:
+        '200':
+          description: Gateway is healthy
+
+  /auth/register:
+    post:
+      summary: Register a new user with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User successfully registered
+        '400':
+          description: Invalid input data
+
+  /auth/login:
+    post:
+      summary: Login with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful, returns tokens
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        '401':
+          description: Invalid credentials
+
+  /auth/me:
+    get:
+      summary: Get current authenticated user basic info
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current user info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthMeResponse'
+        '401':
+          description: Unauthorized
+
+  /users/me:
+    get:
+      summary: Get current user profile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current user profile
+        '401':
+          description: Unauthorized
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    AuthTokens:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+
+    AuthMeResponse:
+      type: object
+      properties:
+        userId:
+          type: string
+        email:
+          type: string
+          format: email
+        emailVerified:
+          type: boolean
