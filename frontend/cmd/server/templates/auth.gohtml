@@ -1,46 +1,69 @@
 {{ define "content" }}
 <div class="grid md:grid-cols-2 gap-6">
-  <div class="bg-white rounded-2xl shadow p-6">
+
+  <!-- AUTH CARD -->
+  <div class="card">
     <div class="text-xl font-semibold mb-4">Auth</div>
+
     <form class="space-y-3" onsubmit="return false;">
       <div>
-        <div class="text-sm text-slate-600">Email</div>
-        <input class="w-full px-3 py-2 rounded-xl border border-slate-300" id="email" value="test@example.com" />
+        <div class="text-sm text-text-muted">Email</div>
+        <input id="email" value="test@example.com" class="input" />
       </div>
+
       <div>
-        <div class="text-sm text-slate-600">Password</div>
-        <input type="password" class="w-full px-3 py-2 rounded-xl border border-slate-300" id="password" value="secret123" />
+        <div class="text-sm text-text-muted">Password</div>
+        <input id="password" type="password" value="secret123" class="input" />
       </div>
+
       <div class="flex gap-2">
-        <button class="px-4 py-2 rounded-xl border" onclick="auth('/auth/signup')">Sign up</button>
-        <button class="px-4 py-2 rounded-xl border" onclick="auth('/auth/login')">Login</button>
+        <button class="btn" onclick="auth('/auth/signup')">Sign up</button>
+        <button class="btn" onclick="auth('/auth/login')">Login</button>
       </div>
-      <div id="auth-msg" class="text-sm text-emerald-600"></div>
+
+      <div id="auth-msg" class="text-sm text-success"></div>
     </form>
   </div>
-  <div class="bg-white rounded-2xl shadow p-6">
+
+  <!-- INFO CARD -->
+  <div class="card">
     <div class="text-xl font-semibold mb-2">Справка</div>
-    <ul class="list-disc ml-6 text-slate-700 space-y-1">
+
+    <ul class="list-disc ml-6 text-text-muted space-y-1">
       <li>JWT сохраняется в <code>localStorage.token</code></li>
       <li>Другие страницы пока не требуют JWT — для простоты старта</li>
     </ul>
   </div>
+
 </div>
+
 <script>
 async function auth(path){
   const API = "{{ .API }}"
-  const email = (document.getElementById('email')).value
-  const password = (document.getElementById('password')).value
-  const res = await fetch(API + path, { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ email, password }) })
+  const email = document.getElementById('email').value
+  const password = document.getElementById('password').value
+
+  const res = await fetch(API + path, {
+    method:'POST',
+    headers:{ 'content-type':'application/json' },
+    body: JSON.stringify({ email, password })
+  })
+
   const txt = await res.text()
+
   try {
     const json = JSON.parse(txt)
-    if(json.token){ localStorage.setItem('token', json.token); document.getElementById('auth-msg').textContent = 'OK: token saved' }
-    else { document.getElementById('auth-msg').textContent = txt }
+    if(json.token){
+      localStorage.setItem('token', json.token)
+      document.getElementById('auth-msg').textContent = 'OK: token saved'
+    } else {
+      document.getElementById('auth-msg').textContent = txt
+    }
   } catch {
     document.getElementById('auth-msg').textContent = txt
   }
 }
 </script>
 {{ end }}
+
 {{ template "base" . }}

@@ -1,28 +1,28 @@
 {{ define "content" }}
 <div class="grid md:grid-cols-2 gap-6">
-  <div class="bg-white rounded-2xl shadow p-6">
+  <div class="card">
     <div class="text-xl font-semibold mb-4">Создать плейлист</div>
     <div class="space-y-3">
-      <input id="pl-name" class="w-full px-3 py-2 rounded-xl border border-slate-300" value="Party" />
-      <select id="pl-vis" class="w-full px-3 py-2 rounded-xl border border-slate-300">
+      <input id="pl-name" class="input" value="Party" />
+      <select id="pl-vis" class="input">
         <option value="public" selected>public</option>
         <option value="private">private</option>
       </select>
-      <button class="px-4 py-2 rounded-xl border" onclick="createPlaylist()">Создать</button>
-      <div class="text-sm text-slate-600">ID: <code id="pl-id"></code></div>
-      <div id="pl-err" class="text-sm text-red-600"></div>
+      <button class="btn" onclick="createPlaylist()">Создать</button>
+      <div class="text-sm text-text-muted">ID: <code id="pl-id"></code></div>
+      <div id="pl-err" class="text-sm text-error"></div>
     </div>
   </div>
-  <div class="bg-white rounded-2xl shadow p-6">
+  <div class="card">
     <div class="text-xl font-semibold mb-4">Добавить трек</div>
     <div class="space-y-3">
-      <input id="track-title" class="w-full px-3 py-2 rounded-xl border border-slate-300" value="Song A" />
-      <input id="track-artist" class="w-full px-3 py-2 rounded-xl border border-slate-300" value="Artist 1" />
+      <input id="track-title" class="input" value="Song A" />
+      <input id="track-artist" class="input" value="Artist 1" />
       <div class="flex gap-2">
-        <button class="px-4 py-2 rounded-xl border" onclick="addTrack()">Добавить</button>
-        <button class="px-4 py-2 rounded-xl border" onclick="loadPlaylist()">Обновить</button>
+        <button class="btn" onclick="addTrack()">Добавить</button>
+        <button class="btn" onclick="loadPlaylist()">Обновить</button>
       </div>
-      <ul id="tracks" class="mt-2 space-y-1"></ul>
+      <ul id="tracks" class="mt-2 space-y-1 text-text-muted"></ul>
     </div>
   </div>
 </div>

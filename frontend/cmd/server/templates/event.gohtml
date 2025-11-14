@@ -1,23 +1,23 @@
 {{ define "content" }}
 <div class="grid md:grid-cols-2 gap-6">
-  <div class="bg-white rounded-2xl shadow p-6">
+  <div class="card">
     <div class="text-xl font-semibold mb-4">Создать событие</div>
     <div class="space-y-3">
-      <input id="ev-name" class="w-full px-3 py-2 rounded-xl border border-slate-300" value="Friday Night" />
-      <button class="px-4 py-2 rounded-xl border" onclick="createEvent()">Создать</button>
-      <div class="text-sm text-slate-600">ID: <code id="ev-id"></code></div>
+      <input id="ev-name" class="input" value="Friday Night" />
+      <button class="btn" onclick="createEvent()">Создать</button>
+      <div class="text-sm text-text-muted">ID: <code id="ev-id"></code></div>
     </div>
   </div>
-  <div class="bg-white rounded-2xl shadow p-6">
+  <div class="card">
     <div class="text-xl font-semibold mb-4">Голосование</div>
     <div class="space-y-3">
-      <input id="vote-track" class="w-full px-3 py-2 rounded-xl border border-slate-300" value="Song A" />
-      <input id="vote-user" class="w-full px-3 py-2 rounded-xl border border-slate-300" value="user1" />
+      <input id="vote-track" class="input" value="Song A" />
+      <input id="vote-user" class="input" value="user1" />
       <div class="flex gap-2">
-        <button class="px-4 py-2 rounded-xl border" onclick="castVote()">Голосовать</button>
-        <button class="px-4 py-2 rounded-xl border" onclick="loadTally()">Обновить</button>
+        <button class="btn" onclick="castVote()">Голосовать</button>
+        <button class="btn" onclick="loadTally()">Обновить</button>
       </div>
-      <ul id="tally" class="mt-2 space-y-1"></ul>
+      <ul id="tally" class="mt-2 space-y-1 text-text-muted"></ul>
     </div>
   </div>
 </div>

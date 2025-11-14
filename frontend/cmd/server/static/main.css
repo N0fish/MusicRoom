@@ -1,8 +1,49 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
+:root {
+  --color-primary: rgb(255, 136, 0);
+  --color-primary-hover: rgb(255, 171, 75);
+
+  --color-background: rgb(29, 29, 29);
+  --color-card-bg: rgb(180, 180, 180);
+
+  --color-text: rgb(223, 223, 223);
+  --color-text-muted: rgb(255, 206, 150);
+
+  --color-input-bg: rgb(180, 180, 180);
+  --color-input-border: rgb(255, 136, 0);
+  --color-input-focus: #0f766e;
+  --color-input-ring: #2dd4bf;
+
+  --color-success: #10b981;
+  --color-error: #ef4444;
+}
+
+/* @media (prefers-color-scheme: dark) {
+  :root {
+    --color-primary: #e5e246;
+    --color-primary-hover: #f0bf36;
+
+    --color-background: #0f172a;
+    --color-card-bg: #1e293b;
+
+    --color-text: #f1f5f9;
+    --color-text-muted: #94a3b8;
+
+    --color-input-bg: #1e293b;
+    --color-input-border: #334155;
+    --color-input-focus: #22d3ee;
+    --color-input-ring: #06b6d4;
+
+    --color-success: #34d399;
+    --color-error: #f87171;
+  }
+} */
+
 body {
   font-family: 'Inter', sans-serif;
-  background-color: #f8fafc;
+  background: var(--color-background);
+  color: var(--color-text);
 }
 
 @tailwind base;
@@ -11,7 +52,15 @@ body {
 
 @layer components {
   .btn {
-    @apply inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105;
+    @apply inline-block bg-primary hover:bg-primary-hover text-white font-semibold py-2 px-4 rounded-lg shadow transition-transform transform hover:scale-105;
+  }
+
+  .input {
+    @apply w-full bg-input-bg border-input-border rounded-md px-3 py-2
+           focus:outline-none focus:ring-1 focus:ring-input-ring focus:border-input-focus;
+  }
+
+  .card {
+    @apply bg-card-bg rounded-2xl shadow p-6;
   }
 }
-

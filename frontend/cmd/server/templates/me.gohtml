@@ -1,41 +1,42 @@
 {{define "content"}}
-<h1>My profile</h1>
+<div class="grid md:grid-cols-2 gap-6">
+  <div class="card">
+    <h1 class="text-2xl font-bold mb-4">My Profile</h1>
+    <div id="profile" class="space-y-2 text-text-muted">
+      <p><strong>Email:</strong> <span id="email"></span></p>
+      <p><strong>Display name:</strong> <span id="displayName"></span></p>
+      <p><strong>Bio:</strong> <span id="bio"></span></p>
+      <p><strong>Visibility:</strong> <span id="visibility"></span></p>
+    </div>
+  </div>
 
-<div id="profile">
-  <p><strong>Email:</strong> <span id="email"></span></p>
-  <p><strong>Display name:</strong> <span id="displayName"></span></p>
-  <p><strong>Bio:</strong> <span id="bio"></span></p>
-  <p><strong>Visibility:</strong> <span id="visibility"></span></p>
+  <div class="card">
+    <h2 class="text-2xl font-bold mb-4">Edit Profile</h2>
+    <form id="profile-form" class="space-y-4">
+      <div>
+        <label for="input-displayName" class="block text-sm font-medium text-text-muted">Display name:</label>
+        <input type="text" name="displayName" id="input-displayName" class="input mt-1">
+      </div>
+      <div>
+        <label for="input-bio" class="block text-sm font-medium text-text-muted">Bio:</label>
+        <textarea name="bio" id="input-bio" rows="3" class="input mt-1"></textarea>
+      </div>
+      <div>
+        <label for="input-visibility" class="block text-sm font-medium text-text-muted">Visibility:</label>
+        <select name="visibility" id="input-visibility" class="input mt-1">
+          <option value="public">public</option>
+          <option value="friends">friends</option>
+          <option value="private">private</option>
+        </select>
+      </div>
+      <div>
+        <label for="input-genres" class="block text-sm font-medium text-text-muted">Favorite genres (comma separated):</label>
+        <input type="text" name="genres" id="input-genres" class="input mt-1">
+      </div>
+      <button type="submit" class="btn">Save</button>
+    </form>
+  </div>
 </div>
-
-<h2>Edit profile</h2>
-<form id="profile-form">
-  <div>
-    <label>Display name:
-      <input type="text" name="displayName" id="input-displayName">
-    </label>
-  </div>
-  <div>
-    <label>Bio:
-      <textarea name="bio" id="input-bio"></textarea>
-    </label>
-  </div>
-  <div>
-    <label>Visibility:
-      <select name="visibility" id="input-visibility">
-        <option value="public">public</option>
-        <option value="friends">friends</option>
-        <option value="private">private</option>
-      </select>
-    </label>
-  </div>
-  <div>
-    <label>Favorite genres (comma separated):
-      <input type="text" name="genres" id="input-genres">
-    </label>
-  </div>
-  <button type="submit">Save</button>
-</form>
 
 <script>
   const API = "{{.API}}";

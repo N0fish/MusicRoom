@@ -1,20 +1,20 @@
 {{ define "content" }}
-  <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+  <div class="card">
     <div class="p-8 sm:p-10">
-      <h1 class="text-4xl sm:text-5xl font-extrabold text-slate-900">Welcome to MusicRoom</h1>
-      <p class="mt-4 text-lg text-slate-600">Your collaborative music experience. Create playlists, vote on tracks, and enjoy music together in real-time.</p>
+      <h1 class="text-4xl sm:text-5xl font-extrabold">Welcome to MusicRoom</h1>
+      <p class="mt-4 text-lg text-text-muted">Your collaborative music experience. Create playlists, vote on tracks, and enjoy music together in real-time.</p>
       <div class="mt-8">
-        <a href="/auth" class="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-transform transform hover:scale-105">
+        <a href="/auth" class="btn">
           Get Started
         </a>
       </div>
     </div>
-    <div class="p-8 sm:p-10 bg-slate-50 border-t border-slate-200">
-      <h2 class="text-2xl font-bold text-slate-800">How it works</h2>
-      <ol class="mt-4 list-decimal ml-6 text-slate-700 space-y-2">
-        <li><a href="/auth" class="text-indigo-600 hover:underline">Sign up or log in</a> to create your account.</li>
-        <li><a href="/playlists" class="text-indigo-600 hover:underline">Create a playlist</a> and add your favorite tracks.</li>
-        <li><a href="/event" class="text-indigo-600 hover:underline">Start an event</a> and invite your friends.</li>
+    <div class="p-8 sm:p-10 bg-background/50 border-t border-input-border">
+      <h2 class="text-2xl font-bold">How it works</h2>
+      <ol class="mt-4 list-decimal ml-6 text-text-muted space-y-2">
+        <li><a href="/auth" class="text-primary hover:underline">Sign up or log in</a> to create your account.</li>
+        <li><a href="/playlists" class="text-primary hover:underline">Create a playlist</a> and add your favorite tracks.</li>
+        <li><a href="/event" class="text-primary hover:underline">Start an event</a> and invite your friends.</li>
         <li>Vote on tracks and enjoy a real-time music experience.</li>
       </ol>
     </div>

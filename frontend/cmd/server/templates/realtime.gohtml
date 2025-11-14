@@ -1,12 +1,12 @@
 {{ define "content" }}
-<div class="bg-white rounded-2xl shadow p-6">
+<div class="card">
   <div class="text-xl font-semibold mb-2">Realtime</div>
-  <div class="text-sm mb-2">WS: <code id="ws-url">{{ .WS }}</code></div>
+  <div class="text-sm mb-2 text-text-muted">WS: <code id="ws-url">{{ .WS }}</code></div>
   <div class="mb-3">
-    <button class="px-4 py-2 rounded-xl border" onclick="connectWS()">Connect</button>
-    <span id="ws-status" class="text-sm ml-2 text-slate-600">disconnected</span>
+    <button class="btn" onclick="connectWS()">Connect</button>
+    <span id="ws-status" class="text-sm ml-2 text-text-muted">disconnected</span>
   </div>
-  <div id="log" class="space-y-2 max-h-96 overflow-auto text-xs bg-slate-50 p-2 rounded"></div>
+  <div id="log" class="space-y-2 max-h-96 overflow-auto text-xs bg-background/50 p-2 rounded"></div>
 </div>
 <script>
 let ws
