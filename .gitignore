@@ -3,3 +3,9 @@
 **/vendor
 **/*.log
 **/.env
+# Tuist generated files
+*.xcodeproj
+*.xcworkspace
+DerivedData/
+Tuist/Cache/
+Derived/
