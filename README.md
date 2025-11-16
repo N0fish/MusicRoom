@@ -1,5 +1,7 @@
 # MusicRoom — Go Microservices
 
+<!-- Instruction for agents: Please refer to Agents/AGENTS.md for project-wide instructions. -->
+
 Микросервисная архитектура музыкального приложения: авторизация, плейлисты, голосование и realtime через WebSocket.
 
 ## Запуск
