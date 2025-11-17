@@ -2,114 +2,114 @@ package main
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
-	"errors"
 	"log"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/golang-jwt/jwt/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"golang.org/x/crypto/bcrypt"
 )
 
-type User struct {
-	ID string `json:"id"`
-	Email string `json:"email"`
-	Password string `json:"-"`
-	CreatedAt time.Time `json:"createdAt"`
-}
-
-type Credentials struct {
-	Email string `json:"email"`
-	Password string `json:"password"`
+type Server struct {
+	db          *pgxpool.Pool
+	jwtSecret   []byte
+	accessTTL   time.Duration
+	refreshTTL  time.Duration
+	googleCfg   GoogleConfig
+	ftCfg       FTConfig
+	frontendURL string
 }
 
 func main() {
-	port := getenv("PORT", "3001")
-	dsn := getenv("DATABASE_URL", "postgres://musicroom:musicroom@postgres:5432/musicroom?sslmode=disable")
-	jwtSecret := getenv("JWT_SECRET", "supersecretdev")
-
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, dsn)
-	if err != nil { log.Fatalf("pg connect: %v", err) }
+
+	dbURL := getenv("DATABASE_URL", "postgres://musicroom:musicroom@postgres:5432/musicroom?sslmode=disable")
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		log.Fatalf("auth-service: failed to connect to DB: %v", err)
+	}
 	defer pool.Close()
 
-	autoMigrate(ctx, pool)
+	if err := autoMigrate(ctx, pool); err != nil {
+		log.Fatalf("auth-service: migrate error: %v", err)
+	}
+
+	jwtSecret := []byte(getenv("JWT_SECRET", ""))
+	if len(jwtSecret) == 0 {
+		log.Fatal("auth-service: JWT_SECRET is required")
+	}
+
+	accessTTL := mustParseDuration("ACCESS_TOKEN_TTL", "15m")
+	refreshTTL := mustParseDuration("REFRESH_TOKEN_TTL", "720h")
+
+	srv := &Server{
+		db:          pool,
+		jwtSecret:   jwtSecret,
+		accessTTL:   accessTTL,
+		refreshTTL:  refreshTTL,
+		googleCfg:   loadGoogleConfigFromEnv(),
+		ftCfg:       loadFTConfigFromEnv(),
+		frontendURL: getenv("OAUTH_FRONTEND_REDIRECT", "http://localhost:5175/auth/callback"),
+	}
 
 	r := chi.NewRouter()
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) { json.NewEncoder(w).Encode(map[string]any{"status":"ok","service":"auth-service"}) })
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
 
-	r.Post("/auth/signup", func(w http.ResponseWriter, r *http.Request) {
-		var c Credentials
-		if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
-			http.Error(w, err.Error(), 400)
-			return
-		}
-		if len(c.Password) < 6 || len(c.Email) < 3 {
-			http.Error(w, "invalid credentials", 400)
-			return
-		}
-
-		hash, _ := bcrypt.GenerateFromPassword([]byte(c.Password), bcrypt.DefaultCost)
-
-		var id string
-		err := pool.QueryRow(ctx,
-			`INSERT INTO auth_users(email,password)
-					VALUES($1,$2)
-					ON CONFLICT(email) DO NOTHING
-					RETURNING id`,
-			c.Email, string(hash),
-		).Scan(&id)
-
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				http.Error(w, "email already registered", 409)
-				return
-			}
-			http.Error(w, err.Error(), 500)
-			return
-		}
-
-		tok := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"email": c.Email,
-			"id":    id,
-			"exp":   time.Now().Add(24 * time.Hour).Unix(),
-		})
-		signed, _ := tok.SignedString([]byte(jwtSecret))
-
-		json.NewEncoder(w).Encode(map[string]any{"token": signed})
+	// Health
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok","service":"auth-service"}`))
+		// _, _ = w.Write([]byte("ok"))
 	})
 
-	r.Post("/auth/login", func(w http.ResponseWriter, r *http.Request) {
-		var c Credentials
-		if err := json.NewDecoder(r.Body).Decode(&c); err != nil { http.Error(w, err.Error(), 400); return }
-		var id, hash string
-		err := pool.QueryRow(ctx, `SELECT id, password FROM auth_users WHERE email=$1`, c.Email).Scan(&id, &hash)
-		if err != nil { http.Error(w, "invalid credentials", 401); return }
-		if bcrypt.CompareHashAndPassword([]byte(hash), []byte(c.Password)) != nil { http.Error(w, "invalid credentials", 401); return }
-		tok := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"email": c.Email, "id": id, "exp": time.Now().Add(24*time.Hour).Unix()})
-		signed, _ := tok.SignedString([]byte(jwtSecret))
-		json.NewEncoder(w).Encode(map[string]any{"token": signed})
+	// Email/password auth
+	r.Post("/auth/register", srv.handleRegister)
+	r.Post("/auth/login", srv.handleLogin)
+	r.Post("/auth/refresh", srv.handleRefresh)
+
+	// Email verification and password reset
+	r.Post("/auth/request-email-verification", srv.handleRequestEmailVerification)
+	r.Get("/auth/verify-email", srv.handleVerifyEmail)
+	r.Post("/auth/forgot-password", srv.handleForgotPassword)
+	r.Post("/auth/reset-password", srv.handleResetPassword)
+
+	// OAuth flows (Google & 42)
+	r.Get("/auth/google/login", srv.handleGoogleLogin)
+	r.Get("/auth/google/callback", srv.handleGoogleCallback)
+
+	r.Get("/auth/42/login", srv.handleFTLogin)
+	r.Get("/auth/42/callback", srv.handleFTCallback)
+
+	// Minimal technical info about current session
+	r.Group(func(r chi.Router) {
+		r.Use(srv.authMiddleware)
+		r.Get("/auth/me", srv.handleMe)
 	})
 
-	log.Printf("auth-service on :%s", port)
-	http.ListenAndServe(":"+port, r)
+	port := getenv("PORT", "3001")
+	log.Printf("auth-service listening on :%s", port)
+	if err := http.ListenAndServe(":"+port, r); err != nil {
+		log.Fatalf("auth-service: %v", err)
+	}
 }
 
-func autoMigrate(ctx context.Context, pool *pgxpool.Pool) {
-	_, err := pool.Exec(ctx, `CREATE EXTENSION IF NOT EXISTS pgcrypto`)
-	if err != nil { log.Printf("extension: %v", err) }
-	_, err = pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS auth_users(
-		id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-		email TEXT UNIQUE NOT NULL,
-		password TEXT NOT NULL,
-		created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-	)`)
-	if err != nil { log.Printf("migrate: %v", err) }
+func mustParseDuration(envKey, def string) time.Duration {
+	raw := getenv(envKey, def)
+	dur, err := time.ParseDuration(raw)
+	if err != nil {
+		log.Fatalf("auth-service: invalid duration in %s=%s: %v", envKey, raw, err)
+	}
+	return dur
 }
 
-func getenv(k, def string) string { if v:=os.Getenv(k); v!="" { return v }; return def }
+func getenv(k, def string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
+	}
+	return def
+}

@@ -13,14 +13,14 @@ import (
 )
 
 type UserProfile struct {
-	ID          string                 `json:"id"`
-	Email       string                 `json:"email"`
-	DisplayName string                 `json:"displayName"`
-	Bio         string                 `json:"bio"`
-	Visibility  string                 `json:"visibility"`
-	Preferences map[string]any         `json:"preferences"`
-	CreatedAt   time.Time              `json:"createdAt"`
-	UpdatedAt   time.Time              `json:"updatedAt"`
+	ID          string         `json:"id"`
+	Email       string         `json:"email"`
+	DisplayName string         `json:"displayName"`
+	Bio         string         `json:"bio"`
+	Visibility  string         `json:"visibility"`
+	Preferences map[string]any `json:"preferences"`
+	CreatedAt   time.Time      `json:"createdAt"`
+	UpdatedAt   time.Time      `json:"updatedAt"`
 }
 
 func main() {
@@ -148,6 +148,8 @@ CREATE TABLE IF NOT EXISTS user_profiles (
 		log.Printf("migrate user_profiles: %v", err)
 	}
 }
+
+// avatar_url   text,
 
 func loadProfile(ctx context.Context, pool *pgxpool.Pool, userID string) (*UserProfile, error) {
 	const q = `
