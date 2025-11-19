@@ -44,7 +44,7 @@ func autoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
           user_id uuid UNIQUE NOT NULL,
           display_name TEXT NOT NULL DEFAULT '',
-          avatar_url TEXT,
+          avatar_url TEXT NOT NULL DEFAULT '',
           public_bio TEXT NOT NULL DEFAULT '',
           friends_bio TEXT NOT NULL DEFAULT '',
           private_bio TEXT NOT NULL DEFAULT '',
