@@ -5,10 +5,10 @@
 2. Сохранить `accessToken`, `refreshToken`
 3. `GET /auth/me` → получить `userId`
 
-Профиль: `пока нет - в разработке`
+Профиль: `имеется`
 4. `GET /users/me` → вытащить профиль
 5. `PATCH /users/me` → сохранить изменения
-6. `GET /users/{id}` → смотреть чужие профили (public view)
+6. `GET /users/{id}` → смотреть чужие профили (с приватными данными или публичными)
 
 Плейлисты: `пока нет - в разработке`
 7. `GET /playlists` → список публичных
@@ -136,8 +136,10 @@ Authorization: Bearer <accessToken>
   "id": "uuid-профиля",
   "userId": "uuid-пользователя",
   "displayName": "Alla",
-  "bio": "DJ from Paris",
   "avatarUrl": "https://example.com/avatar.png",
+  "publicBio": "DJ from Paris",
+  "friendsBio": "Текст, который потом будет только для друзей",
+  "privateBio": "Мои личные заметки",
   "visibility": "public",            // "public" | "friends" | "private"
   "preferences": {
     "genres": ["techno", "house"],
@@ -163,7 +165,9 @@ Content-Type: application/json
 ```json
 {
   "displayName": "DJ Alla",
-  "bio": "I play techno & lofi.",
+  "publicBio": "I play techno & lofi.",
+  "friendsBio": "С друзьями тусим по пятницам",
+  "privateBio": "Внутренние заметки",
   "avatarUrl": "https://example.com/new-avatar.png",
   "visibility": "friends",
   "preferences": {
@@ -179,8 +183,10 @@ Content-Type: application/json
   "id": "uuid-профиля",
   "userId": "uuid-пользователя",
   "displayName": "DJ Alla",
-  "bio": "I play techno & lofi.",
   "avatarUrl": "https://example.com/new-avatar.png",
+  "publicBio": "I play techno & lofi.",
+  "friendsBio": "С друзьями тусим по пятницам",
+  "privateBio": "Внутренние заметки",
   "visibility": "friends",
   "preferences": {
     "genres": ["techno", "lofi"],
@@ -204,10 +210,10 @@ GET /users/{id}
 - Ответ 200 OK:
 ```json
 {
-  "id": "uuid-пользователя",
+  "userId": "uuid-пользователя",
   "displayName": "DJ Lilo",
-  "bio": "Loves house music",
   "avatarUrl": "https://example.com/alice.png",
+  "publicBio": "Loves house music",
   "visibility": "public",
   "preferences": {
     "genres": ["house"],

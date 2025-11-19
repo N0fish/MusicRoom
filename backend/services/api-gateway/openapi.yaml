@@ -729,13 +729,22 @@ components:
           description: Profile ID
         userId:
           type: string
+          description: ID пользователя из auth-service (auth_users.id)
         displayName:
           type: string
-        bio:
-          type: string
+          description: Отображаемое имя пользователя
         avatarUrl:
           type: string
           format: uri
+        publicBio:
+          type: string
+          description: Публичная информация (видна всем)
+        friendsBio:
+          type: string
+          description: Информация, которая в будущем будет видна только друзьям
+        privateBio:
+          type: string
+          description: Приватная информация (видит только владелец)
         visibility:
           $ref: '#/components/schemas/UserVisibility'
         preferences:
@@ -751,32 +760,36 @@ components:
     PublicUserProfile:
       type: object
       properties:
-        id:
+        userId:
           type: string
-          description: User ID (owner of the profile)
+          description: ID пользователя (как в auth / auth_me)
         displayName:
-          type: string
-        bio:
           type: string
         avatarUrl:
           type: string
           format: uri
+        publicBio:
+          type: string
         visibility:
           $ref: '#/components/schemas/UserVisibility'
         preferences:
           $ref: '#/components/schemas/MusicPreferences'
-      required: [id, displayName, visibility]
+      required: [userId, displayName, visibility]
 
     UpdateUserProfileRequest:
       type: object
       properties:
         displayName:
           type: string
-        bio:
-          type: string
         avatarUrl:
           type: string
           format: uri
+        publicBio:
+          type: string
+        friendsBio:
+          type: string
+        privateBio:
+          type: string
         visibility:
           $ref: '#/components/schemas/UserVisibility'
         preferences:

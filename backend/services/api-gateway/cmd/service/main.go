@@ -57,7 +57,11 @@ func main() {
 
 	// Auth routes (no JWT required)
 	r.Method(http.MethodPost, "/auth/register", authProxy)
-	r.Method(http.MethodPost, "/auth/login", authProxy)
+	// r.Method(http.MethodPost, "/auth/login", authProxy)
+	r.Group(func(r chi.Router) {
+		r.Use(loginRateLimitMiddleware)
+		r.Method(http.MethodPost, "/auth/login", authProxy)
+	})
 	r.Method(http.MethodPost, "/auth/refresh", authProxy)
 	r.Method(http.MethodPost, "/auth/forgot-password", authProxy)
 	r.Method(http.MethodPost, "/auth/reset-password", authProxy)
@@ -88,7 +92,8 @@ func main() {
 		if len(jwtSecret) != 0 {
 			r.Use(jwtAuthMiddleware(jwtSecret))
 		}
-		r.Method(http.MethodPost, "/playlists", playlistProxy)
+		r.With(playlistCreateRateLimitMiddleware).
+			Method(http.MethodPost, "/playlists", playlistProxy)
 		r.Method(http.MethodPatch, "/playlists/{id}", playlistProxy)
 	})
 

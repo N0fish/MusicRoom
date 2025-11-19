@@ -106,6 +106,56 @@ func rateLimitMiddleware(rps int) func(http.Handler) http.Handler {
 	}
 }
 
+var (
+	loginRateMu   sync.Mutex
+	loginLastSeen = map[string]time.Time{}
+)
+
+func loginRateLimitMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ip := clientIP(r)
+		now := time.Now()
+
+		loginRateMu.Lock()
+		last, ok := loginLastSeen[ip]
+		if ok && now.Sub(last) < time.Second {
+			loginRateMu.Unlock()
+			http.Error(w, "too many login attempts", http.StatusTooManyRequests)
+			return
+		}
+		loginLastSeen[ip] = now
+		loginRateMu.Unlock()
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+var (
+	playlistCreateRateMu   sync.Mutex
+	playlistCreateLastSeen = map[string]time.Time{}
+)
+
+func playlistCreateRateLimitMiddleware(next http.Handler) http.Handler {
+	const window = 5 * time.Second
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ip := clientIP(r)
+		now := time.Now()
+
+		playlistCreateRateMu.Lock()
+		last, ok := playlistCreateLastSeen[ip]
+		if ok && now.Sub(last) < window {
+			playlistCreateRateMu.Unlock()
+			http.Error(w, "too many playlist creations", http.StatusTooManyRequests)
+			return
+		}
+		playlistCreateLastSeen[ip] = now
+		playlistCreateRateMu.Unlock()
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func getenvInt(key string, def int) int {
 	raw := getenv(key, "")
 	if raw == "" {
