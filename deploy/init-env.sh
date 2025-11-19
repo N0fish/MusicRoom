@@ -12,6 +12,7 @@ SERVICES := backend/services/api-gateway \
 						backend/services/playlist-service \
 						backend/services/realtime-service \
 						backend/services/vote-service \
+						backend/services/mock-service \
 						frontend
 EOF
 for svc in ${SERVICES}; do
