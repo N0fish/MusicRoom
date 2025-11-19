@@ -3,8 +3,8 @@
   <div class="card">
     <div class="text-xl font-semibold mb-4">Создать плейлист</div>
     <div class="space-y-3">
-      <input id="pl-name" class="input" value="Party" />
-      <select id="pl-vis" class="input">
+      <input id="pl-name" class="w-full bg-input-bg border-input-border rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-input-ring focus:border-input-focus" value="Party" />
+      <select id="pl-vis" class="w-full bg-input-bg border-input-border rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-input-ring focus:border-input-focus">
         <option value="public" selected>public</option>
         <option value="private">private</option>
       </select>
@@ -16,8 +16,8 @@
   <div class="card">
     <div class="text-xl font-semibold mb-4">Добавить трек</div>
     <div class="space-y-3">
-      <input id="track-title" class="input" value="Song A" />
-      <input id="track-artist" class="input" value="Artist 1" />
+      <input id="track-title" class="w-full bg-input-bg border-input-border rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-input-ring focus:border-input-focus" value="Song A" />
+      <input id="track-artist" class="w-full bg-input-bg border-input-border rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-input-ring focus:border-input-focus" value="Artist 1" />
       <div class="flex gap-2">
         <button class="btn" onclick="addTrack()">Добавить</button>
         <button class="btn" onclick="loadPlaylist()">Обновить</button>

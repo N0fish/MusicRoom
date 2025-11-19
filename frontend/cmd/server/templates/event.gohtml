@@ -3,7 +3,7 @@
   <div class="card">
     <div class="text-xl font-semibold mb-4">Создать событие</div>
     <div class="space-y-3">
-      <input id="ev-name" class="input" value="Friday Night" />
+      <input id="ev-name" class="w-full bg-input-bg border-input-border rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-input-ring focus:border-input-focus" value="Friday Night" />
       <button class="btn" onclick="createEvent()">Создать</button>
       <div class="text-sm text-text-muted">ID: <code id="ev-id"></code></div>
     </div>
@@ -11,8 +11,8 @@
   <div class="card">
     <div class="text-xl font-semibold mb-4">Голосование</div>
     <div class="space-y-3">
-      <input id="vote-track" class="input" value="Song A" />
-      <input id="vote-user" class="input" value="user1" />
+      <input id="vote-track" class="w-full bg-input-bg border-input-border rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-input-ring focus:border-input-focus" value="Song A" />
+      <input id="vote-user" class="w-full bg-input-bg border-input-border rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-input-ring focus:border-input-focus" value="user1" />
       <div class="flex gap-2">
         <button class="btn" onclick="castVote()">Голосовать</button>
         <button class="btn" onclick="loadTally()">Обновить</button>

@@ -7,10 +7,10 @@
   --color-background: rgb(29, 29, 29);
   --color-card-bg: rgb(180, 180, 180);
 
-  --color-text: rgb(223, 223, 223);
-  --color-text-muted: rgb(255, 206, 150);
+  --color-text: white;
+  --color-text-muted: white;
 
-  --color-input-bg: rgb(180, 180, 180);
+  --color-input-bg: rgb(29, 29, 29);
   --color-input-border: rgb(255, 136, 0);
   --color-input-focus: #0f766e;
   --color-input-ring: #2dd4bf;
@@ -53,11 +53,6 @@ body {
 @layer components {
   .btn {
     @apply inline-block bg-primary hover:bg-primary-hover text-white font-semibold py-2 px-4 rounded-lg shadow transition-transform transform hover:scale-105;
-  }
-
-  .input {
-    @apply w-full bg-input-bg border-input-border rounded-md px-3 py-2
-           focus:outline-none focus:ring-1 focus:ring-input-ring focus:border-input-focus;
   }
 
   .card {
