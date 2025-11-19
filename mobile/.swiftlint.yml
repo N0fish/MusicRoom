@@ -1,0 +1,29 @@
+disabled_rules:
+  - trailing_comma
+  - todo
+  - force_cast
+opt_in_rules:
+  - empty_count
+  - force_unwrapping
+  - closure_spacing
+  - explicit_init
+  - redundant_type_annotation
+analyzer_rules:
+  - unused_import
+  - unused_declaration
+included:
+  - Targets
+  - Project.swift
+excluded:
+  - Derived
+line_length:
+  warning: 120
+  error: 140
+file_length:
+  warning: 400
+  error: 600
+cyclomatic_complexity:
+  ignores_case_statements: true
+  warning: 15
+  error: 25
+reporter: "xcode"

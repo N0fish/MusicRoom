@@ -1,0 +1,14 @@
+--swiftversion 6.0
+--indent 4
+--maxwidth 120
+--wrapcollections before-first
+--wraparguments before-first
+--wrapparameters before-first
+--elseposition next-line
+--stripunusedargs closure-only
+--self init-only
+--ifdef no-indent
+--enable isEmpty
+--enable redundantNilInit
+--enable redundantType
+--enable sortedImports

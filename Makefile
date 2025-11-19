@@ -5,6 +5,7 @@ SERVICES := backend/services/api-gateway/cmd/service \
 						backend/services/playlist-service/cmd/service \
 						backend/services/realtime-service/cmd/service \
 						backend/services/vote-service/cmd/service \
+						backend/services/mock-service/cmd/service \
 						frontend/cmd/service
 
 .PHONY: up down logs
