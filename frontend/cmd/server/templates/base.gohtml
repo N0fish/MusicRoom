@@ -45,13 +45,14 @@
         <div class="flex items-center justify-between h-16">
           <a class="text-2xl font-bold text-primary" href="/">MusicRoom</a>
 
-          <nav class="hidden md:flex gap-8 text-text-muted">
-            <a class="{{if eq .Path "/" }}text-primary{{end}} hover:underline" href="/">Home</a>
-            <a class="{{if eq .Path "/auth" }}text-primary{{end}} hover:underline" href="/auth">Auth</a>
-            <a class="{{if eq .Path "/playlists" }}text-primary{{end}} hover:underline" href="/playlists">Playlists</a>
-            <a class="{{if eq .Path "/event" }}text-primary{{end}} hover:underline" href="/event">Event</a>
-            <a class="{{if eq .Path "/realtime" }}text-primary{{end}} hover:underline" href="/realtime">Realtime</a>
-            <a class="{{if eq .Path "/me" }}text-primary{{end}} hover:underline" href="/me">Me</a>
+          <nav id="nav-links" class="hidden md:flex gap-8 text-text-muted">
+            <a class="{{if eq .Path "/" }}text-primary{{end}}" href="/">Home</a>
+            <a id="nav-auth" class="{{if eq .Path "/auth" }}text-primary{{end}}" href="/auth">Auth</a>
+            <a class="{{if eq .Path "/playlists" }}text-primary{{end}}" href="/playlists">Playlists</a>
+            <a class="{{if eq .Path "/event" }}text-primary{{end}}" href="/event">Event</a>
+            <a class="{{if eq .Path "/realtime" }}text-primary{{end}}" href="/realtime">Realtime</a>
+            <a id="nav-me" class="{{if eq .Path "/me" }}text-primary{{end}}" href="/me" style="display: none;">Me</a>
+            <a id="nav-logout" href="#" style="display: none;">Logout</a>
           </nav>
 
           <div class="text-xs text-text-muted">
@@ -60,6 +61,29 @@
         </div>
       </div>
     </header>
+
+    <script>
+      const token = localStorage.getItem("token");
+      const navAuth = document.getElementById("nav-auth");
+      const navMe = document.getElementById("nav-me");
+      const navLogout = document.getElementById("nav-logout");
+
+      function logout() {
+        localStorage.removeItem("token");
+        window.location.href = "/auth";
+      }
+
+      if (token) {
+        navAuth.style.display = "none";
+        navMe.style.display = "block";
+        navLogout.style.display = "block";
+        navLogout.addEventListener("click", logout);
+      } else {
+        navAuth.style.display = "block";
+        navMe.style.display = "none";
+        navLogout.style.display = "none";
+      }
+    </script>
 
     <main class="max-w-5xl mx-auto px-4 py-6">
       {{ template "content" . }}

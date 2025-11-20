@@ -4,13 +4,13 @@
   --color-primary: rgb(255, 136, 0);
   --color-primary-hover: rgb(255, 171, 75);
 
-  --color-background: rgb(29, 29, 29);
-  --color-card-bg: rgb(180, 180, 180);
+  --color-background: rgb(25, 25, 25);
+  --color-card-bg: rgb(42, 42, 42);
 
   --color-text: white;
   --color-text-muted: white;
 
-  --color-input-bg: rgb(29, 29, 29);
+  --color-input-bg: rgb(25, 25, 25);
   --color-input-border: rgb(255, 136, 0);
   --color-input-focus: #0f766e;
   --color-input-ring: #2dd4bf;
@@ -19,31 +19,20 @@
   --color-error: #ef4444;
 }
 
-/* @media (prefers-color-scheme: dark) {
-  :root {
-    --color-primary: #e5e246;
-    --color-primary-hover: #f0bf36;
-
-    --color-background: #0f172a;
-    --color-card-bg: #1e293b;
-
-    --color-text: #f1f5f9;
-    --color-text-muted: #94a3b8;
-
-    --color-input-bg: #1e293b;
-    --color-input-border: #334155;
-    --color-input-focus: #22d3ee;
-    --color-input-ring: #06b6d4;
-
-    --color-success: #34d399;
-    --color-error: #f87171;
-  }
-} */
-
 body {
   font-family: 'Inter', sans-serif;
   background: var(--color-background);
   color: var(--color-text);
+  user-select: none; /* Disable text selection */
+}
+
+/* Fix for autofill background color */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0px 1000px var(--color-input-bg) inset !important;
+    -webkit-text-fill-color: var(--color-text) !important;
 }
 
 @tailwind base;

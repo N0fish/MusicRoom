@@ -40,15 +40,16 @@
 
 <script>
   const API = "{{.API}}";
+  const token = localStorage.getItem("token");
 
-  // TODO: временно, пока нет нормальной auth/JWT.
-  // Можно брать userId из localStorage после логина.
-  const USER_ID = localStorage.getItem("userId") || "user1";
+  if (!token) {
+    window.location.href = "/auth";
+  }
 
   async function loadProfile() {
     const res = await fetch(API + "/users/me", {
       headers: {
-        "X-User-Id": USER_ID
+        "Authorization": "Bearer " + token
       }
     });
     if (!res.ok) {
@@ -89,7 +90,7 @@
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
-        "X-User-Id": USER_ID
+        "Authorization": "Bearer " + token
       },
       body: JSON.stringify(body)
     });
