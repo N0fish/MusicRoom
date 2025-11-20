@@ -38,6 +38,11 @@ docker compose ps  # проверить состояние
 docker stop <id> # если есть незакрытые порты
 ```
 
+## Очистить базу данных
+```bash
+make rmbd
+```
+
 ## Пересобрать
 ```bash
 make re

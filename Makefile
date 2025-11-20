@@ -24,7 +24,7 @@ env:
 	LOCAL_IP=$(LOCAL_IP) bash deploy/create_env.sh
 
 
-.PHONY: up down logs re
+.PHONY: up down logs ps rmbd re
 up:
 	docker compose up -d --build
 
@@ -33,6 +33,12 @@ down:
 
 logs:
 	docker compose logs -f --tail=200
+
+rmbd:
+	docker compose down -v
+
+ps:
+	docker compose ps
 
 re: down up
 
