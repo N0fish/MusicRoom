@@ -1,16 +1,18 @@
 services:
   postgres:
     image: postgres:16-alpine
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-musicroom}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-musicroom}
-      POSTGRES_DB: ${POSTGRES_DB:-musicroom}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -22,14 +24,8 @@ services:
 
   api-gateway:
     build: ./backend/services/api-gateway
-    environment:
-      GATEWAY_PORT: 8080
-      AUTH_URL: http://auth-service:3001
-      USER_URL: http://user-service:3005
-      PLAYLIST_URL: http://playlist-service:3002
-      VOTE_URL: http://vote-service:3003
-      MOCK_URL: http://mock-service:3006
-      OPENAPI_FILE: /app/openapi.yaml
+    env_file:
+      - ./backend/services/api-gateway/.env
     ports:
       - "8080:8080"
     depends_on:
@@ -41,10 +37,8 @@ services:
 
   auth-service:
     build: ./backend/services/auth-service
-    environment:
-      PORT: 3001
-      DATABASE_URL: ${DATABASE_URL:-postgres://musicroom:musicroom@postgres:5432/musicroom?sslmode=disable}
-      JWT_SECRET: ${JWT_SECRET:-supersecretdev}
+    env_file:
+      - ./backend/services/auth-service/.env
     ports:
       - "3001:3001"
     depends_on:
@@ -53,9 +47,8 @@ services:
 
   user-service:
     build: ./backend/services/user-service
-    environment:
-      PORT: 3005
-      DATABASE_URL: ${DATABASE_URL:-postgres://musicroom:musicroom@postgres:5432/musicroom?sslmode=disable}
+    env_file:
+      - ./backend/services/user-service/.env
     ports:
       - "3005:3005"
     depends_on:
@@ -64,9 +57,8 @@ services:
 
   playlist-service:
     build: ./backend/services/playlist-service
-    environment:
-      DATABASE_URL: ${DATABASE_URL:-postgres://musicroom:musicroom@postgres:5432/musicroom?sslmode=disable}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+    env_file:
+      - ./backend/services/playlist-service/.env
     ports:
       - "3002:3002"
     depends_on:
@@ -77,10 +69,8 @@ services:
 
   vote-service:
     build: ./backend/services/vote-service
-    environment:
-      PORT: 3003
-      DATABASE_URL: ${DATABASE_URL:-postgres://musicroom:musicroom@postgres:5432/musicroom?sslmode=disable}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+    env_file:
+      - ./backend/services/vote-service/.env
     ports:
       - "3003:3003"
     depends_on:
@@ -91,9 +81,8 @@ services:
 
   realtime-service:
     build: ./backend/services/realtime-service
-    environment:
-      PORT: 3004
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+    env_file:
+      - ./backend/services/realtime-service/.env
     ports:
       - "3004:3004"
     depends_on:
@@ -109,10 +98,8 @@ services:
 
   frontend:
     build: ./frontend
-    environment:
-      API_URL: http://localhost:8080
-      WS_URL: ws://localhost:3004/ws
-      PORT: 5175
+    env_file:
+      - ./frontend/.env
     ports:
       - "5175:5175"
     depends_on:

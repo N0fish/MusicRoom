@@ -6,11 +6,11 @@ RUN go mod download
 
 COPY . .
 RUN go mod tidy
-RUN CGO_ENABLED=0 GOOS=linux go build -o /out/service ./cmd/service
+RUN CGO_ENABLED=0 GOOS=linux go build -o /out/mock-service ./cmd/service
 
 FROM alpine:3.19
 WORKDIR /app
-COPY --from=build /out/service /app/service
+COPY --from=build /out/mock-service /app/mock-service
 EXPOSE 3006
-CMD ["/app/service"]
+CMD ["/app/mock-service"]
 
