@@ -1,8 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
 :root {
-  --color-primary: rgb(255, 136, 0);
-  --color-primary-hover: rgb(255, 171, 75);
+  --color-primary: rgb(255, 115, 0);
+  --color-primary-hover: rgb(201, 90, 0);
 
   --color-background: rgb(25, 25, 25);
   --color-card-bg: rgb(42, 42, 42);
@@ -11,7 +11,7 @@
   --color-text-muted: white;
 
   --color-input-bg: rgb(25, 25, 25);
-  --color-input-border: rgb(255, 136, 0);
+  --color-input-border: rgb(255, 115, 0);
   --color-input-focus: #0f766e;
   --color-input-ring: #2dd4bf;
 

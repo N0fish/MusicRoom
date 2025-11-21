@@ -24,6 +24,7 @@ services:
     build: ./backend/services/api-gateway
     environment:
       GATEWAY_PORT: 8080
+      JWT_SECRET: ${JWT_SECRET:-supersecretdev}
       AUTH_URL: http://auth-service:3001
       USER_URL: http://user-service:3005
       PLAYLIST_URL: http://playlist-service:3002
