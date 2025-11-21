@@ -2,6 +2,7 @@ FROM golang:1.22.0-alpine AS build
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
+WORKDIR /app
 COPY . .
 RUN go mod tidy
 RUN CGO_ENABLED=0 GOOS=linux go build -o /out/auth-service ./cmd/service
