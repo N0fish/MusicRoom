@@ -287,3 +287,15 @@ Ex : GET /users/me
 - какое максимальное колличество пользователей могут использовать приложение
 - сделать сертификаты и перейти на https
 - какой сервер выбрать, чтобы уйти от localhost
+- добавить сертификат для https, без https не работает колбэк google "Ошибка 400: invalid_request"
+
+## Полезные ссылки
+```http
+https://api.intra.42.fr/apidoc
+```
+```http
+https://profile.intra.42.fr/oauth/applications/new
+```
+```http
+https://console.cloud.google.com
+```

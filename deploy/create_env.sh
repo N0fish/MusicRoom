@@ -96,6 +96,7 @@ REFRESH_TOKEN_TTL=720h
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URL=http://localhost:${GATEWAY_PORT}/auth/google/callback
+# Пока localhost, в дальнейшем при https заменить на LOCAL_IP в скрипте
 
 # OAuth2 42 (Intra) (заполни своими значениями)
 FT_CLIENT_ID=

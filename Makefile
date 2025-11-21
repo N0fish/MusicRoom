@@ -50,6 +50,7 @@ tidy:
 fmt:
 	for s in $(SERVICES); do (cd $$s && go fmt ./...); done
 
+
 .PHONY: start
 start:
 	@$(MAKE) env
