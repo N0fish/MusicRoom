@@ -36,7 +36,7 @@ func autoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
 	_, err = pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS auth_users(
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         email TEXT UNIQUE NOT NULL,
-        password TEXT,
+        password TEXT NOT NULL DEFAULT '',
         email_verified BOOLEAN NOT NULL DEFAULT FALSE,
         google_id TEXT UNIQUE,
         ft_id TEXT UNIQUE,
