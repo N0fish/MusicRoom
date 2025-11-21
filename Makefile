@@ -5,10 +5,26 @@ SERVICES := backend/services/api-gateway/cmd/service \
 						backend/services/playlist-service/cmd/service \
 						backend/services/realtime-service/cmd/service \
 						backend/services/vote-service/cmd/service \
+						backend/services/mock-service/cmd/service \
 						frontend/cmd/service
 
-.PHONY: up down logs
 
+.PHONY: ip url
+LOCAL_IP := $(shell ipconfig getifaddr en0 2>/dev/null || ip route get 1.1.1.1 | awk '{print $$7}' | head -1)
+
+ip:
+	@echo $(LOCAL_IP)
+
+url:
+	@echo "http://$(LOCAL_IP):5175"
+
+
+.PHONY: env
+env:
+	LOCAL_IP=$(LOCAL_IP) bash deploy/create_env.sh
+
+
+.PHONY: up down logs ps rmbd re
 up:
 	docker compose up -d --build
 
@@ -18,13 +34,25 @@ down:
 logs:
 	docker compose logs -f --tail=200
 
-.PHONY: tidy fmt env
+rmbd:
+	docker compose down -v
 
+ps:
+	docker compose ps
+
+re: down up
+
+
+.PHONY: tidy fmt
 tidy:
 	for s in $(SERVICES); do (cd $$s && go mod tidy); done
 
 fmt:
 	for s in $(SERVICES); do (cd $$s && go fmt ./...); done
 
-env: #не тестить, пока не работает
-	bash deploy/init-env.sh
+
+.PHONY: start
+start:
+	@$(MAKE) env
+	@$(MAKE) up
+	@echo "The site is available at: http://$(LOCAL_IP):5175"

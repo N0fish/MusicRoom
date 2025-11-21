@@ -7,5 +7,6 @@ use (
 	./backend/services/vote-service
 	./backend/services/realtime-service
 	./backend/services/api-gateway
+	./backend/services/mock-service
 	./frontend
 )
