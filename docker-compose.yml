@@ -91,8 +91,6 @@ services:
 
   mock-service:
     build: ./backend/services/mock-service
-    env_file:
-      - ./backend/services/mock-service/.env
     ports:
       - "3006:3006"
 
