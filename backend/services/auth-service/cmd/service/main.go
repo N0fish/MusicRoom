@@ -20,6 +20,10 @@ type Server struct {
 	googleCfg   GoogleConfig
 	ftCfg       FTConfig
 	frontendURL string
+
+	emailSender         EmailSender
+	verificationURLBase string
+	resetURLBase        string
 }
 
 func main() {
@@ -44,6 +48,12 @@ func main() {
 	accessTTL := mustParseDuration("ACCESS_TOKEN_TTL", "15m")
 	refreshTTL := mustParseDuration("REFRESH_TOKEN_TTL", "720h")
 
+	emailSender, err := NewSMTPSenderFromEnv()
+	if err != nil {
+		log.Printf("auth-service: SMTP not configured, using LogEmailSender: %v", err)
+		emailSender = LogEmailSender{}
+	}
+
 	srv := &Server{
 		db:          pool,
 		jwtSecret:   jwtSecret,
@@ -52,6 +62,10 @@ func main() {
 		googleCfg:   loadGoogleConfigFromEnv(),
 		ftCfg:       loadFTConfigFromEnv(),
 		frontendURL: getenv("OAUTH_FRONTEND_REDIRECT", "http://localhost:5175/auth/callback"),
+
+		emailSender:         emailSender,
+		verificationURLBase: getenv("EMAIL_VERIFICATION_URL", ""),
+		resetURLBase:        getenv("PASSWORD_RESET_URL", ""),
 	}
 
 	r := chi.NewRouter()

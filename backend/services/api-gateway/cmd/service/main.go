@@ -34,6 +34,7 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Use(rateLimitMiddleware(rps))
 	r.Use(corsMiddleware)
+	r.Use(requestLogMiddleware)
 
 	// health
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -81,9 +82,50 @@ func main() {
 		if len(jwtSecret) != 0 {
 			r.Use(jwtAuthMiddleware(jwtSecret))
 		}
+
+		// profile
 		r.Method(http.MethodGet, "/users/me", userProxy)
+		r.With(
+			bodySizeLimitMiddleware(int64(getenvInt("USER_PATCH_BODY_LIMIT", 4096))),
+			rateLimitMiddleware(getenvInt("USER_PATCH_RPS", 5)),
+		).
+			Method(http.MethodPatch, "/users/me", userProxy)
+
+		// avatar
+		r.With(
+			bodySizeLimitMiddleware(4096),
+			rateLimitMiddleware(getenvInt("AVATAR_RPS", 2)),
+		).
+			Method(http.MethodPost, "/users/me/avatar/random", userProxy)
+
+		// search
+		r.Method(http.MethodGet, "/users/search", userProxy)
+
+		// friends
+		r.Method(http.MethodGet, "/users/me/friends", userProxy)
+		r.With(
+			bodySizeLimitMiddleware(2048),
+			rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5)),
+		).
+			Method(http.MethodPost, "/users/me/friends/{id}/request", userProxy)
+		r.With(
+			bodySizeLimitMiddleware(2048),
+			rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5)),
+		).
+			Method(http.MethodPost, "/users/me/friends/{id}/accept", userProxy)
+		r.With(
+			bodySizeLimitMiddleware(2048),
+			rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5)),
+		).
+			Method(http.MethodPost, "/users/me/friends/{id}/reject", userProxy)
+		r.With(
+			bodySizeLimitMiddleware(2048),
+			rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5)),
+		).
+			Method(http.MethodDelete, "/users/me/friends/{id}", userProxy)
+
+		// public profile
 		r.Method(http.MethodGet, "/users/{id}", userProxy)
-		r.Method(http.MethodPatch, "/users/me", userProxy)
 	})
 
 	// Playlists

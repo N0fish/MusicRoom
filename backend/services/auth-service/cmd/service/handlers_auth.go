@@ -59,12 +59,14 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// РАСКОМЕНТИРОВАТЬ БЛОГ КОГДА ЗАКОНЧИТСЯ ДЕВ РАЗРАБОТКА - ЭТО АВТОМАТИЧЕСКАЯ ОТПРАВКА ЕМЕЙЛА ПРИ РЕГИСТРАЦИИ
 	token := randomToken(32)
 	if err := s.setVerificationToken(r.Context(), user.ID, token); err != nil {
 		log.Printf("register: setVerificationToken: %v", err)
 	} else {
-		verificationURL := s.frontendURL + "?mode=verify-email&token=" + token
-		log.Printf("[auth-service] email verification for %s: %s", user.Email, verificationURL)
+		// 	log.Printf("[auth-service] email verification for %s: %s", user.Email, verificationURL)
+		// 	verificationURL := s.frontendURL + "?mode=verify-email&token=" + token
+		s.sendVerificationEmail(user, token)
 	}
 
 	tokens, err := s.issueTokens(user)
@@ -158,12 +160,33 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, tokens)
 }
 
+// func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
+// 	claims, ok := r.Context().Value(ctxClaimsKey{}).(*TokenClaims)
+// 	if !ok || claims == nil {
+// 		writeError(w, http.StatusUnauthorized, "unauthorized")
+// 		return
+// 	}
+
+// 	user, err := s.findUserByID(r.Context(), claims.UserID)
+// 	if err != nil {
+// 		writeError(w, http.StatusUnauthorized, "user not found")
+// 		return
+// 	}
+
+//		resp := AuthMeResponse{
+//			UserID:        user.ID,
+//			Email:         user.Email,
+//			EmailVerified: user.EmailVerified,
+//		}
+//		writeJSON(w, http.StatusOK, resp)
+//	}
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(ctxClaimsKey{}).(*TokenClaims)
 	if !ok || claims == nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
+
 	resp := AuthMeResponse{
 		UserID:        claims.UserID,
 		Email:         claims.Email,
@@ -188,14 +211,20 @@ func (s *Server) handleRequestEmailVerification(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	if user.EmailVerified {
+		writeError(w, http.StatusBadRequest, "email already verified")
+		return
+	}
+
 	token := randomToken(32)
 	if err := s.setVerificationToken(r.Context(), user.ID, token); err != nil {
 		log.Printf("request-email-verification: %v", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	verificationURL := s.frontendURL + "?mode=verify-email&token=" + token
-	log.Printf("[auth-service] email verification for %s: %s", user.Email, verificationURL)
+	// verificationURL := s.frontendURL + "?mode=verify-email&token=" + token
+	// log.Printf("[auth-service] email verification for %s: %s", user.Email, verificationURL)
+	s.sendVerificationEmail(user, token)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "verification sent"})
 }
 
@@ -248,8 +277,9 @@ func (s *Server) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resetURL := s.frontendURL + "?mode=reset-password&token=" + token
-	log.Printf("[auth-service] password reset for %s: %s", user.Email, resetURL)
+	// resetURL := s.frontendURL + "?mode=reset-password&token=" + token
+	// log.Printf("[auth-service] password reset for %s: %s", user.Email, resetURL)
+	s.sendResetPasswordEmail(user, token)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "reset link sent"})
 }
 

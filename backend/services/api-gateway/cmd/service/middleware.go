@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -70,6 +71,33 @@ func corsMiddleware(next http.Handler) http.Handler {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func bodySizeLimitMiddleware(maxBytes int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.ContentLength > 0 && r.ContentLength > maxBytes {
+				http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func requestLogMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		platform := r.Header.Get("X-Client-Platform")
+		device := r.Header.Get("X-Client-Device")
+		appVersion := r.Header.Get("X-Client-App-Version")
+
+		log.Printf("req: %s %s platform=%s device=%s app=%s ip=%s",
+			r.Method, r.URL.Path, platform, device, appVersion, clientIP(r),
+		)
+
 		next.ServeHTTP(w, r)
 	})
 }

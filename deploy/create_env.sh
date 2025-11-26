@@ -105,6 +105,16 @@ FT_REDIRECT_URL=http://localhost:${GATEWAY_PORT}/auth/42/callback
 
 # Frontend URL used after OAuth callbacks and email flows
 OAUTH_FRONTEND_REDIRECT=http://localhost:${FRONTEND_PORT}/auth/callback
+
+EMAIL_VERIFICATION_URL=http://localhost:${GATEWAY_PORT}/auth/verify-email
+PASSWORD_RESET_URL=http://localhost:${GATEWAY_PORT}/auth/reset-password
+
+# SMTP (если не заполнено — сервис использует LogEmailSender)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
+SMTP_FROM="Your Service MusicRoom"
 EENV
       ;;
 
