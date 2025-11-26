@@ -91,6 +91,9 @@ services:
 
   mock-service:
     build: ./backend/services/mock-service
+    # нам нужен этот порт их .env, если мы будем использовать этот сервис
+    # env_file:
+    #   - ./backend/services/mock-service/.env
     ports:
       - "3006:3006"
 

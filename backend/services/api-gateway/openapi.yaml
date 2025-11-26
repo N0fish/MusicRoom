@@ -445,6 +445,216 @@ paths:
   # --------------------
   # PLAYLISTS
   # --------------------
+  /users/search:
+    get:
+      summary: Search users by username or display name
+      tags: [users]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: query
+          required: true
+          schema:
+            type: string
+            maxLength: 50
+          description: Part of username or displayName to search for
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PublicUserProfile'
+        '400':
+          description: Invalid query
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/me/friends:
+    get:
+      summary: List current user's friends
+      tags: [users]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of friends
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PublicUserProfile'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/me/friends/{id}/request:
+    post:
+      summary: Send friend request to another user
+      tags: [users]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Target user ID
+      responses:
+        '200':
+          description: Friend request created or accepted (if reciprocal)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '400':
+          description: Invalid request (self, already friends, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/me/friends/{id}/accept:
+    post:
+      summary: Accept incoming friend request
+      tags: [users]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Request sender user ID
+      responses:
+        '200':
+          description: Friend request accepted, users are now friends
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '404':
+          description: No pending request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/me/friends/{id}/reject:
+    post:
+      summary: Reject incoming friend request
+      tags: [users]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Request sender user ID
+      responses:
+        '200':
+          description: Request rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '404':
+          description: No pending request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/me/friends/{id}:
+    delete:
+      summary: Remove friend relationship
+      tags: [users]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Friend user ID
+      responses:
+        '200':
+          description: Friend removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/me/avatar/random:
+    post:
+      summary: Generate a new random SVG avatar for current user
+      tags: [users]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Avatar generated and profile updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /playlists:
     get:
       summary: List public playlists
@@ -730,12 +940,18 @@ components:
         userId:
           type: string
           description: ID пользователя из auth-service (auth_users.id)
+        username:
+          type: string
+          description: Уникальный читаемый ник пользователя (sleepy-strawberry и т.п.)
         displayName:
           type: string
           description: Отображаемое имя пользователя
         avatarUrl:
           type: string
           format: uri
+        hasCustomAvatar:
+          type: boolean
+          description: Показывает, сгенерировал ли пользователь кастомный аватар
         publicBio:
           type: string
           description: Публичная информация (видна всем)
@@ -763,6 +979,9 @@ components:
         userId:
           type: string
           description: ID пользователя (как в auth / auth_me)
+        username:
+          type: string
+          description: Уникальный читаемый ник пользователя
         displayName:
           type: string
         avatarUrl:
@@ -781,9 +1000,6 @@ components:
       properties:
         displayName:
           type: string
-        avatarUrl:
-          type: string
-          format: uri
         publicBio:
           type: string
         friendsBio:
