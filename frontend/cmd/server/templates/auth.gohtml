@@ -30,6 +30,19 @@
           <button id="signup-btn" class="btn w-full">Sign up</button>
         </div>
 
+        <div class="flex items-center">
+          <hr class="w-full border-input-border" />
+          <div class="px-2 text-text-muted">or</div>
+          <hr class="w-full border-input-border" />
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <button id="google-login-btn" type="button" class="btn-social w-full">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" class="w-5 h-5" alt="Google logo" />
+            Sign in with Google
+          </button>
+        </div>
+
         <div id="auth-msg" class="text-sm text-center"></div>
 
         <p class="text-sm font-light text-text-muted">
@@ -53,6 +66,19 @@
 </div>
 
 <script>
+  function handleOAuthCallback() {
+    const fragment = new URLSearchParams(window.location.hash.substring(1));
+    const accessToken = fragment.get('accessToken');
+    const refreshToken = fragment.get('refreshToken');
+
+    if (accessToken && refreshToken) {
+      authService.saveTokens(accessToken, refreshToken);
+      window.location.href = '/me';
+    }
+  }
+
+
+
   const urlParams = new URLSearchParams(window.location.search);
   const mode = urlParams.get('mode');
   const token = urlParams.get('token');
@@ -79,6 +105,11 @@
       window.location.href = '/me';
     }
 
+    document.getElementById('google-login-btn').addEventListener('click', (e) => {
+      e.preventDefault();
+      window.location.href = '{{ .API }}/auth/google/login';
+    });
+
     const emailEl = document.getElementById('email');
     const passwordEl = document.getElementById('password');
     const msgEl = document.getElementById('auth-msg');
@@ -87,6 +118,12 @@
       e.preventDefault();
       const email = emailEl.value;
       const password = passwordEl.value;
+
+      if (!authService.isValidEmail(email)) {
+        showAlert({ title: 'Validation Error', content: 'Please enter a valid email address.' });
+        return;
+      }
+
       const res = await authService.login(email, password);
       if (res) {
         msgEl.textContent = res.error || JSON.stringify(res);
@@ -97,6 +134,12 @@
       e.preventDefault();
       const email = emailEl.value;
       const password = passwordEl.value;
+
+      if (!authService.isValidEmail(email)) {
+        showAlert({ title: 'Validation Error', content: 'Please enter a valid email address.' });
+        return;
+      }
+
       const res = await authService.signup(email, password);
       showAlert({ title: 'Sign Up', content: res.message || JSON.stringify(res) });
     }
@@ -106,16 +149,24 @@
 
     document.getElementById('forgot-password-link').addEventListener('click', async (e) => {
       e.preventDefault();
-      showPrompt({
-        title: 'Forgot Password',
-        content: 'Please enter your email address:',
-        onConfirm: async (email) => {
-          if (email) {
-            const res = await authService.forgotPassword(email);
-            showAlert({ title: 'Forgot Password', content: res.status || JSON.stringify(res) });
-          }
+      try {
+        const email = await showPrompt({
+          title: 'Forgot Password',
+          content: 'Please enter your email address:',
+        });
+
+        if (!authService.isValidEmail(email)) {
+          showAlert({ title: 'Validation Error', content: 'Please enter a valid email address.' });
+          return;
         }
-      });
+        
+        if (email) {
+          await authService.forgotPassword(email);
+          showAlert({ title: 'Forgot Password', content: 'If an account with that email exists, a password reset link has been sent to your email address.' });
+        }
+      } catch {
+        // User clicked cancel, do nothing.
+      }
     });
   }
 </script>

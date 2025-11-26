@@ -57,10 +57,6 @@
             <a id="nav-me" class="{{if eq .Path "/me" }}text-primary{{end}} hover:underline" href="/me" style="display: none;">Me</a>
             <a id="nav-logout" class="hover:underline" href="#" style="display: none;">Logout</a>
           </nav>
-
-          <div class="text-xs text-text-muted">
-            API: {{ .API }} &nbsp; WS: {{ .WS }}
-          </div>
         </div>
       </div>
     </header>
@@ -68,6 +64,7 @@
     <script>
       localStorage.removeItem('token');
       initAuthService("{{.API}}");
+      handleOAuthCallback(); // Call the OAuth callback handler after authService is initialized
 
       function updateHeader() {
         const navAuth = document.getElementById("nav-auth");
@@ -102,7 +99,7 @@
           <h3 class="text-lg leading-6 font-medium text-text" id="modal-title"></h3>
           <div class="mt-2 px-7 py-3">
             <p class="text-sm text-text-muted" id="modal-content"></p>
-            <input type="text" id="modal-input" class="hidden mt-2 w-full bg-input-bg border-input-border rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-input-ring focus:border-input-focus" />
+            <input type="text" id="modal-input" class="hidden mt-2 w-full bg-input-bg border-input-border text-text rounded-md px-3 py-2 focus:outline-none" />
           </div>
           <div class="items-center px-4 py-3" id="modal-actions">
             <button id="modal-close-btn" class="px-4 py-2 bg-gray-700 text-text text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-300">
