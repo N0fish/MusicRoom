@@ -62,9 +62,7 @@
     </header>
 
     <script>
-      localStorage.removeItem('token');
       initAuthService("{{.API}}");
-      handleOAuthCallback(); // Call the OAuth callback handler after authService is initialized
 
       function updateHeader() {
         const navAuth = document.getElementById("nav-auth");

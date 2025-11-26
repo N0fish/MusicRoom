@@ -185,5 +185,21 @@ function initAuthService(apiUrl) {
         return { error: 'Reset password failed' };
       }
     },
+
+    handleOauthCallback: () => {
+      if (window.location.hash) {
+        const params = new URLSearchParams(window.location.hash.substring(1)); // remove #
+        const accessToken = params.get('accessToken');
+        const refreshToken = params.get('refreshToken');
+
+        if (accessToken) {
+          authService.setTokens(accessToken, refreshToken);
+          authService.scheduleTokenRefresh();
+          window.location.href = '/me';
+        }
+      }
+    },
   };
+
+  window.authService.handleOauthCallback();
 }

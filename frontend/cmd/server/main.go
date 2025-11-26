@@ -33,6 +33,7 @@ func main() {
 	r := chi.NewRouter()
 	r.Get("/", app.page("home.gohtml"))
 	r.Get("/auth", app.page("auth.gohtml"))
+	r.Get("/auth/callback", app.page("auth.gohtml"))
 	r.Get("/playlists", app.page("playlists.gohtml"))
 	r.Get("/event", app.page("event.gohtml"))
 	r.Get("/realtime", app.page("realtime.gohtml"))
