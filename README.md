@@ -29,7 +29,10 @@ make logs  # все логи
 docker compose logs -f auth-service  # логи конкретного сервиса
 ```
 ```bash
-make down  # остановить и очистить тома
+make down  # остановить тома
+```
+```bash
+make down-v  # остановить и очистить тома
 ```
 ```bash
 docker compose ps  # проверить состояние
@@ -38,14 +41,13 @@ docker compose ps  # проверить состояние
 docker stop <id> # если есть незакрытые порты
 ```
 
-## Очистить базу данных
-```bash
-make rmbd
-```
-
 ## Пересобрать
 ```bash
 make re
+```
+## Пересобрать и очистить BD
+```bash
+make re-v
 ```
 
 Все сервисы должны быть в состоянии **Up**:
@@ -189,25 +191,41 @@ requests → │         API Gateway   :8080 │ ← фронт / мобилка
 - GET /users/me
 - PATCH /users/me
 - GET /users/{id}
+- GET /users/search
+- GET /users/friends
+- POST /users/me/friends/{id}/request
+- POST /users/me/friends/{id}/accept
+- POST /users/me/friends/{id}/reject
+- DELETE /users/me/friends/{id}
+- POST /users/me/avatar/random
 
 Ex : GET /users/me
 ```json
 {
-  "id": "uuid-профиля",
-  "userId": "uuid-пользователя",
-  "displayName": "Alla",
-  "avatarUrl": "https://example.com/avatar.png",
-  "publicBio": "DJ from Paris",
-  "friendsBio": "Только для друзей",
-  "privateBio": "Личные заметки",
-  "visibility": "public",
-  "preferences": {
-    "genres": ["techno", "house"],
-    "artists": ["Syuzi Dogs"],
-    "moods": ["party"]
-  },
-  "createdAt": "...",
-  "updatedAt": "..."
+	"id": "uuid-профиля",
+	"userId": "uuid-пользователя",
+	"username": "quiet-dragon",
+	"displayName": "Alla",
+	"avatarUrl": "/static/avatars/default.svg",
+	"hasCustomAvatar": false,
+	"publicBio": "DJ from Paris",
+	"friendsBio": "Только для друзей",
+	"privateBio": "Личные заметки",
+	"visibility": "private",
+	"preferences": {
+		"genres": [
+			"techno",
+			"house"
+		],
+		"artists": [
+			"Syuzi Dogs"
+		],
+		"moods": [
+			"party"
+		]
+	},
+	"createdAt": "...",
+	"updatedAt": "..."
 }
 ```
 
@@ -267,23 +285,13 @@ Ex : GET /users/me
 ## Нужно сделать:
 Дохуя всего надо сделать
 
-- Добавить друзей в user service
-- Отправка email с подтверждением почты
 - сервис голосования
 - сервис плейлиста
 - реалтайм сервис
 - может быть мок сервис доделать, хотя он не обязателен
 - понять что будет происходить если нет инернета и как пользователь может продолжать пользоваться приложением
 - написать тесты. думаю займусь этим в самом конце
-- сделать уникальный ник для юзера с его почты, не изменяемый, чтобы использовать для URL
-- поиск юзеров (выпалающий список) из 3х букв ?
-- список друзей
-- что делать с приватность? как сделать приватный профиль, чтобы не отображалась никакая информация ? 
-- сделать фото по умолчанию
-- как вообще ко мне попадает фото в юзер сервис, которое загружает пользователесь. Или сделать несколько аватарок на выбор ? не делать фото. И вообще оно надо в этом приложении ?
 - местоположения пользователя и его время когда он может учавствовать в голосовании
-- ограничение символов на бэке до 400символов или байт
-- проблемы конкуренции в голосовании, это вообще о чем?
 - какое максимальное колличество пользователей могут использовать приложение
 - сделать сертификаты и перейти на https
 - какой сервер выбрать, чтобы уйти от localhost
