@@ -1,9 +1,10 @@
+import AppSupportClients
 import ComposableArchitecture
-import SettingsFeature
-import MusicRoomDomain
 import MusicRoomAPI
+import MusicRoomDomain
 import PolicyEngine
 import RealtimeMocks
+import SettingsFeature
 
 @Reducer
 public struct AppFeature {
@@ -48,6 +49,7 @@ public struct AppFeature {
     @Dependency(\.musicRoomAPI) var musicRoomAPI
     @Dependency(\.policyEngine) var policyEngine
     @Dependency(\.playlistStream) var playlistStream
+    @Dependency(\.telemetry) var telemetry
 
     public init() {}
 
@@ -65,7 +67,12 @@ public struct AppFeature {
                 state.hasBootstrapped = true
                 state.isSampleDataLoading = true
                 state.sampleDataError = nil
-                return .run { [musicRoomAPI = self.musicRoomAPI, policyEngine = self.policyEngine, playlistStream = self.playlistStream] send in
+                return .run {
+                    [
+                        musicRoomAPI = self.musicRoomAPI, policyEngine = self.policyEngine,
+                        playlistStream = self.playlistStream, telemetry = self.telemetry
+                    ] send in
+                    await telemetry.log("App Started", ["Platform": "iOS"])
                     do {
                         let events = try await musicRoomAPI.fetchSampleEvents()
                         await send(.sampleEventsLoaded(events))
@@ -77,27 +84,31 @@ public struct AppFeature {
                         }
                         await send(.playlistStreamCompleted)
                     } catch {
+                        await telemetry.log(
+                            "Sample Data Load Failed", ["Error": error.localizedDescription])
                         await send(.sampleEventsFailed(error.localizedDescription))
                     }
                 }
 
-            case let .sampleEventsLoaded(events):
+            case .sampleEventsLoaded(let events):
                 state.isSampleDataLoading = false
                 state.sampleEvents = events
                 state.sampleDataError = nil
                 return .none
 
-            case let .sampleEventsFailed(message):
+            case .sampleEventsFailed(let message):
                 state.isSampleDataLoading = false
                 state.sampleDataError = message
                 state.sampleEvents = []
                 return .none
 
-            case let .policyEvaluated(decision):
-                state.policySummary = decision.isAllowed ? "Allowed – \(decision.reason)" : "Blocked – \(decision.reason)"
+            case .policyEvaluated(let decision):
+                state.policySummary =
+                    decision.isAllowed
+                    ? "Allowed – \(decision.reason)" : "Blocked – \(decision.reason)"
                 return .none
 
-            case let .playlistUpdate(update):
+            case .playlistUpdate(let update):
                 state.latestStreamMessage = update.message
                 return .none
 

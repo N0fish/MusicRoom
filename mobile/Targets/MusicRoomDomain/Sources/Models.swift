@@ -26,7 +26,7 @@ public enum EventVisibility: String, Codable, Sendable, Equatable {
     }
 }
 
-public struct Track: Identifiable, Equatable, Sendable {
+public struct Track: Identifiable, Equatable, Sendable, Codable {
     public let id: UUID
     public var title: String
     public var artist: String
@@ -40,7 +40,7 @@ public struct Track: Identifiable, Equatable, Sendable {
     }
 }
 
-public struct Event: Identifiable, Equatable, Sendable {
+public struct Event: Identifiable, Equatable, Sendable, Codable {
     public let id: UUID
     public var name: String
     public var location: String
