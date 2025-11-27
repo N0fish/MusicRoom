@@ -2,10 +2,8 @@ package main
 
 import (
 	"context"
-	"crypto/sha1"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"math/rand"
 	"strings"
@@ -228,6 +226,16 @@ func scanUserProfile(row pgx.Row) (UserProfile, error) {
 	return p, nil
 }
 
+func (s *Server) userExists(ctx context.Context, userID string) (bool, error) {
+	var exists bool
+	err := s.db.QueryRow(ctx, `
+        SELECT EXISTS(
+            SELECT 1 FROM user_profiles WHERE user_id = $1
+        )
+    `, userID).Scan(&exists)
+	return exists, err
+}
+
 func (s *Server) areFriends(ctx context.Context, userID1, userID2 string) (bool, error) {
 	if userID1 == "" || userID2 == "" || userID1 == userID2 {
 		return false, nil
@@ -333,48 +341,4 @@ func generateRandomUsername() string {
 	a := adjectives[rand.Intn(len(adjectives))]
 	n := nouns[rand.Intn(len(nouns))]
 	return a + "-" + n
-}
-
-func generateIdenticonSVG(seed string) string {
-	h := sha1.Sum([]byte(seed))
-
-	const gridSize = 5
-	const cellSize = 20
-	totalSize := gridSize * cellSize
-
-	bg := "#f0f0f0"
-	fg := fmt.Sprintf("#%02x%02x%02x", h[0], h[1], h[2])
-
-	var b strings.Builder
-	b.WriteString(fmt.Sprintf(
-		`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">`,
-		totalSize, totalSize, totalSize, totalSize,
-	))
-	b.WriteString(`<rect width="100%" height="100%" fill="` + bg + `"/>`)
-
-	bitIndex := 0
-	for y := 0; y < gridSize; y++ {
-		for x := 0; x < (gridSize+1)/2; x++ {
-			byteIndex := bitIndex / 8
-			bitPos := uint(bitIndex % 8)
-			on := (h[4+byteIndex]>>bitPos)&1 == 1
-			if on {
-				px := x * cellSize
-				py := y * cellSize
-				b.WriteString(fmt.Sprintf(
-					`<rect x="%d" y="%d" width="%d" height="%d" fill="%s"/>`,
-					px, py, cellSize, cellSize, fg,
-				))
-				px2 := (gridSize - 1 - x) * cellSize
-				b.WriteString(fmt.Sprintf(
-					`<rect x="%d" y="%d" width="%d" height="%d" fill="%s"/>`,
-					px2, py, cellSize, cellSize, fg,
-				))
-			}
-			bitIndex++
-		}
-	}
-
-	b.WriteString(`</svg>`)
-	return b.String()
 }

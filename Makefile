@@ -9,6 +9,35 @@ SERVICES := backend/services/api-gateway/cmd/service \
 						frontend/cmd/service
 
 
+.PHONY: help
+help:
+	@echo ""
+	@echo "====================== MUSIC ROOM — MAKE HELP ======================"
+	@echo ""
+	@echo " Main commands:"
+	@echo "   make start        - generate all .env files and start the whole project"
+	@echo "   make up           - docker compose up -d --build"
+	@echo "   make down         - stop all containers"
+	@echo "   make re           - restart (down + up)"
+	@echo "   make down-v       - WARNING: remove containers + PostgreSQL volume"
+	@echo ""
+	@echo " Logs & Status:"
+	@echo "   make logs         - tail logs (-f, last 200 lines)"
+	@echo "   make ps           - list running containers"
+	@echo ""
+	@echo " Utilities:"
+	@echo "   make ip           - print local IP address"
+	@echo "   make url          - show frontend URL"
+	@echo "   make env          - generate environment files (.env)"
+	@echo ""
+	@echo " Go services tooling:"
+	@echo "   make tidy         - run 'go mod tidy' for all services"
+	@echo "   make fmt          - run 'go fmt ./...' for all services"
+	@echo ""
+	@echo "===================================================================="
+	@echo ""
+
+
 .PHONY: ip url
 LOCAL_IP := $(shell ipconfig getifaddr en0 2>/dev/null || ip route get 1.1.1.1 | awk '{print $$7}' | head -1)
 
@@ -24,23 +53,25 @@ env:
 	LOCAL_IP=$(LOCAL_IP) bash deploy/create_env.sh
 
 
-.PHONY: up down logs ps rmbd re
+.PHONY: up down logs ps down-v re re-v
 up:
 	docker compose up -d --build
 
 down:
-	docker compose down -v
+	docker compose down
 
 logs:
 	docker compose logs -f --tail=200
 
-rmbd:
+down-v:
 	docker compose down -v
 
 ps:
 	docker compose ps
 
 re: down up
+
+re-v: down-v up
 
 
 .PHONY: tidy fmt
