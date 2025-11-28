@@ -8,11 +8,11 @@
       <form class="space-y-4 md:space-y-6" action="#">
         <div>
           <label for="email" class="block mb-2 text-sm font-medium text-text-muted">Your email</label>
-          <input type="email" name="email" id="email" class="bg-input-bg border border-input-border text-text sm:text-sm rounded-lg focus:outline-none block w-full p-2.5" placeholder="name@company.com" required="">
+          <input type="email" name="email" id="email" class="bg-input-bg border border-input-border text-text sm:text-sm rounded-lg focus:outline-none focus:ring-1 focus:ring-input-ring focus:border-input-focus block w-full p-2.5" placeholder="name@company.com" required="">
         </div>
         <div>
           <label for="password" class="block mb-2 text-sm font-medium text-text-muted">Password</label>
-          <input type="password" name="password" id="password" placeholder="••••••••" class="bg-input-bg border border-input-border text-text sm:text-sm rounded-lg focus:outline-none block w-full p-2.5" required="">
+          <input type="password" name="password" id="password" placeholder="••••••••" class="bg-input-bg border border-input-border text-text sm:text-sm rounded-lg focus:outline-none focus:ring-1 focus:ring-input-ring focus:border-input-focus block w-full p-2.5" required="">
         </div>
         <div class="flex items-center justify-between">
           <div class="flex items-start">
@@ -25,10 +25,7 @@
           </div>
           <a href="#" id="forgot-password-link" class="text-sm font-medium text-primary hover:underline">Forgot password?</a>
         </div>
-        <button id="login-btn" class="btn w-full">Sign in</button>
-        <div class="flex gap-2">
-          <button id="signup-btn" class="btn w-full">Sign up</button>
-        </div>
+        <button id="auth-btn" class="btn w-full">Sign in</button>
 
         <div class="flex items-center">
           <hr class="w-full border-input-border" />
@@ -36,17 +33,15 @@
           <hr class="w-full border-input-border" />
         </div>
 
-        <div class="flex flex-col gap-2">
-          <button id="google-login-btn" type="button" class="btn-social w-full">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" class="w-5 h-5" alt="Google logo" />
-            Sign in with Google
-          </button>
-        </div>
+        <button type="button" id="google-login-btn" class="btn-social w-full flex items-center justify-center gap-2">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" class="w-5 h-5" alt="Google logo" />
+          <span>Sign in with Google</span>
+        </button>
 
         <div id="auth-msg" class="text-sm text-center"></div>
 
-        <p class="text-sm font-light text-text-muted">
-          Don’t have an account yet? <a href="#" id="signup-link" class="font-medium text-primary hover:underline">Sign up</a>
+        <p id="auth-secondary-action-p" class="text-sm font-light text-text-muted">
+          Don’t have an account yet? <a href="#" id="auth-secondary-action-a" class="font-medium text-primary hover:underline">Sign up</a>
         </p>
       </form>
     </div>
@@ -114,38 +109,50 @@
     const passwordEl = document.getElementById('password');
     const msgEl = document.getElementById('auth-msg');
 
-    document.getElementById('login-btn').addEventListener('click', async (e) => {
+    const authBtn = document.getElementById('auth-btn');
+    const secondaryActionP = document.getElementById('auth-secondary-action-p');
+    const formTitle = document.querySelector('h1');
+
+    let isSignUpMode = false;
+
+    function toggleMode(e) {
       e.preventDefault();
-      const email = emailEl.value;
-      const password = passwordEl.value;
-
-      if (!authService.isValidEmail(email)) {
-        showAlert({ title: 'Validation Error', content: 'Please enter a valid email address.' });
-        return;
+      isSignUpMode = !isSignUpMode;
+      if (isSignUpMode) {
+        formTitle.textContent = 'Sign up for an account';
+        authBtn.textContent = 'Sign up';
+        secondaryActionP.innerHTML = `Already have an account? <a href="#" id="auth-secondary-action-a" class="font-medium text-primary hover:underline">Sign in</a>`;
+      } else {
+        formTitle.textContent = 'Sign in to your account';
+        authBtn.textContent = 'Sign in';
+        secondaryActionP.innerHTML = `Don’t have an account yet? <a href="#" id="auth-secondary-action-a" class="font-medium text-primary hover:underline">Sign up</a>`;
       }
-
-      const res = await authService.login(email, password);
-      if (res) {
-        msgEl.textContent = res.error || JSON.stringify(res);
-      }
-    });
-
-    async function handleSignup(e) {
-      e.preventDefault();
-      const email = emailEl.value;
-      const password = passwordEl.value;
-
-      if (!authService.isValidEmail(email)) {
-        showAlert({ title: 'Validation Error', content: 'Please enter a valid email address.' });
-        return;
-      }
-
-      const res = await authService.signup(email, password);
-      showAlert({ title: 'Sign Up', content: res.message || JSON.stringify(res) });
+      document.getElementById('auth-secondary-action-a').addEventListener('click', toggleMode);
     }
 
-    document.getElementById('signup-btn').addEventListener('click', handleSignup);
-    document.getElementById('signup-link').addEventListener('click', handleSignup);
+    document.getElementById('auth-secondary-action-a').addEventListener('click', toggleMode);
+
+    authBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const email = emailEl.value;
+      const password = passwordEl.value;
+
+      if (!authService.isValidEmail(email)) {
+        showAlert({ title: 'Validation Error', content: 'Please enter a valid email address.' });
+        return;
+      }
+      
+      let res;
+      if (isSignUpMode) {
+        res = await authService.signup(email, password);
+        showAlert({ title: 'Sign Up', content: res.message || JSON.stringify(res) });
+      } else {
+        res = await authService.login(email, password);
+        if (res && res.error) {
+          msgEl.textContent = res.error;
+        }
+      }
+    });
 
     document.getElementById('forgot-password-link').addEventListener('click', async (e) => {
       e.preventDefault();
