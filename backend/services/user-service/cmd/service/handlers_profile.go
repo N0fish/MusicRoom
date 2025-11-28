@@ -184,3 +184,24 @@ func (s *Server) handleGenerateRandomAvatar(w http.ResponseWriter, r *http.Reque
 
 	writeJSON(w, http.StatusOK, resp)
 }
+
+func (s *Server) handleCheckUserExists(w http.ResponseWriter, r *http.Request) {
+	userID := strings.TrimSpace(chi.URLParam(r, "id"))
+	if userID == "" {
+		writeError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	_, err := s.findProfileByUserID(r.Context(), userID)
+	if err != nil {
+		if errors.Is(err, ErrProfileNotFound) {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		log.Printf("user-service: check exists: %v", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

@@ -44,6 +44,12 @@ func main() {
 	})
 
 	// Authenticated user routes (gateway must set X-User-Id)
+	// internal service-to-service endpoints
+	r.Group(func(r chi.Router) {
+		// no auth middleware: only accessible from internal network
+		r.Get("/internal/users/{id}/exists", srv.handleCheckUserExists)
+	})
+
 	r.Group(func(r chi.Router) {
 		r.Use(currentUserMiddleware)
 

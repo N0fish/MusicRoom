@@ -58,7 +58,6 @@ func main() {
 
 	// Auth routes (no JWT required)
 	r.Method(http.MethodPost, "/auth/register", authProxy)
-	// r.Method(http.MethodPost, "/auth/login", authProxy)
 	r.Group(func(r chi.Router) {
 		r.Use(loginRateLimitMiddleware)
 		r.Method(http.MethodPost, "/auth/login", authProxy)
@@ -139,12 +138,24 @@ func main() {
 		r.Method(http.MethodPatch, "/playlists/{id}", playlistProxy)
 	})
 
-	// Voting
+	// Events & Voting
 	r.Group(func(r chi.Router) {
 		if len(jwtSecret) != 0 {
 			r.Use(jwtAuthMiddleware(jwtSecret))
 		}
+		// Event lifecycle and settings
+		r.Method(http.MethodGet, "/events", voteProxy)
+		r.Method(http.MethodPost, "/events", voteProxy)
+		r.Method(http.MethodGet, "/events/{id}", voteProxy)
+		r.Method(http.MethodPatch, "/events/{id}", voteProxy)
+		r.Method(http.MethodDelete, "/events/{id}", voteProxy)
+		// Invites
+		r.Method(http.MethodGet, "/events/{id}/invites", voteProxy)
+		r.Method(http.MethodPost, "/events/{id}/invites", voteProxy)
+		r.Method(http.MethodDelete, "/events/{id}/invites/{userId}", voteProxy)
+		// Voting
 		r.Method(http.MethodPost, "/events/{id}/vote", voteProxy)
+		r.Method(http.MethodGet, "/events/{id}/tally", voteProxy)
 	})
 
 	// Mock routes
