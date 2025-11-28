@@ -6,16 +6,26 @@ let project = Project(
     name: "MusicRoomMobile",
     organizationName: "Music Room",
     packages: [
-        .remote(url: "https://github.com/pointfreeco/swift-composable-architecture", requirement: .upToNextMajor(from: "1.23.0")),
-        .remote(url: "https://github.com/pointfreeco/swift-dependencies", requirement: .upToNextMajor(from: "1.10.0")),
-        .remote(url: "https://github.com/pointfreeco/swift-case-paths", requirement: .upToNextMajor(from: "1.7.2")),
-        .remote(url: "https://github.com/pointfreeco/swift-navigation", requirement: .upToNextMajor(from: "2.6.0")),
-        .remote(url: "https://github.com/pointfreeco/swift-concurrency-extras", requirement: .upToNextMajor(from: "1.3.2"))
+        .remote(
+            url: "https://github.com/pointfreeco/swift-composable-architecture",
+            requirement: .upToNextMajor(from: "1.23.0")),
+        .remote(
+            url: "https://github.com/pointfreeco/swift-dependencies",
+            requirement: .upToNextMajor(from: "1.10.0")),
+        .remote(
+            url: "https://github.com/pointfreeco/swift-case-paths",
+            requirement: .upToNextMajor(from: "1.7.2")),
+        .remote(
+            url: "https://github.com/pointfreeco/swift-navigation",
+            requirement: .upToNextMajor(from: "2.6.0")),
+        .remote(
+            url: "https://github.com/pointfreeco/swift-concurrency-extras",
+            requirement: .upToNextMajor(from: "1.3.2")),
     ],
     settings: .settings(base: [
         "SWIFT_VERSION": "6.0",
         "SWIFT_STRICT_CONCURRENCY": "complete",
-        "SWIFT_TREAT_WARNINGS_AS_ERRORS": "YES"
+        "SWIFT_TREAT_WARNINGS_AS_ERRORS": "YES",
     ]),
     targets: [
         Target.target(
@@ -36,7 +46,7 @@ let project = Project(
             sources: ["Targets/MusicRoomAPI/Sources/**"],
             dependencies: [
                 .target(name: "MusicRoomDomain"),
-                .package(product: "Dependencies")
+                .package(product: "Dependencies"),
             ]
         ),
         Target.target(
@@ -48,7 +58,7 @@ let project = Project(
             sources: ["Targets/PolicyEngine/Sources/**"],
             dependencies: [
                 .target(name: "MusicRoomDomain"),
-                .package(product: "Dependencies")
+                .package(product: "Dependencies"),
             ]
         ),
         Target.target(
@@ -60,7 +70,7 @@ let project = Project(
             sources: ["Targets/RealtimeMocks/Sources/**"],
             dependencies: [
                 .target(name: "MusicRoomDomain"),
-                .package(product: "Dependencies")
+                .package(product: "Dependencies"),
             ]
         ),
         Target.target(
@@ -79,7 +89,7 @@ let project = Project(
                 .package(product: "ComposableArchitecture"),
                 .package(product: "Dependencies"),
                 .package(product: "CasePaths"),
-                .package(product: "SwiftNavigation")
+                .package(product: "SwiftNavigation"),
             ]
         ),
         Target.target(
@@ -96,7 +106,8 @@ let project = Project(
                 .target(name: "MusicRoomAPI"),
                 .target(name: "PolicyEngine"),
                 .target(name: "RealtimeMocks"),
-                .package(product: "ComposableArchitecture")
+                .target(name: "AppSupportClients"),
+                .package(product: "ComposableArchitecture"),
             ]
         ),
         Target.target(
@@ -109,7 +120,7 @@ let project = Project(
             dependencies: [
                 .target(name: "AppSettingsClient"),
                 .target(name: "AppSupportClients"),
-                .package(product: "ComposableArchitecture")
+                .package(product: "ComposableArchitecture"),
             ]
         ),
         Target.target(
@@ -150,8 +161,8 @@ let project = Project(
                 .package(product: "ComposableArchitecture"),
                 .package(product: "SwiftNavigation"),
                 .package(product: "CasePaths"),
-                .package(product: "ConcurrencyExtras")
+                .package(product: "ConcurrencyExtras"),
             ]
-        )
+        ),
     ]
 )

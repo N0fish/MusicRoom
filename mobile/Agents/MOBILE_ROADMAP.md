@@ -1,7 +1,7 @@
 # MOBILE ROADMAP · MOBILE REMOTE CONTROL APP
 
-## Long-Term Roadmap (As Of 2025-11-16)
-1. **Phase 1 – Platform & Modularization**
+## Long-Term Roadmap (As Of 2025-11-27)
+1. **Phase 1 – Platform & Modularization** (COMPLETED)
    - Restructure Tuist project into modular targets (App, Features, Domain, Infrastructure, Tests).
    - Wire base settings screen that edits backend URL, add SwiftLint/SwiftFormat, and ensure CI can build/test headlessly.
 2. **Phase 2 – Infrastructure & Observability**
@@ -21,5 +21,5 @@
    - Stage optional bonuses (multi-platform, IoT beacons, subscriptions, offline enhancements) only after mandatory scope is green.
 
 ## Immediate Next Steps
-- Prioritize Phase 1 backlog: module graph scaffolding, lint setup, configurable backend settings view.
-- Parallelize analysis for Phase 2 dependencies (network stack API surface + telemetry schema) so implementation can start as soon as the shell compiles.
+- **Phase 2 Kickoff:** Implement `APIClient` actor in `MusicRoomAPI` target.
+- **Telemetry:** Design and implement the telemetry pipeline for audit logs.
