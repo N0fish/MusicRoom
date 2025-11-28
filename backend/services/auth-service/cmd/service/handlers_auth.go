@@ -50,7 +50,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	user, err := s.createUserWithPassword(r.Context(), email, string(hash))
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "duplicate key") {
+		if errors.Is(err, ErrUserNotFound) || strings.Contains(strings.ToLower(err.Error()), "duplicate key") {
 			writeError(w, http.StatusConflict, "email already registered")
 			return
 		}
@@ -187,10 +187,16 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user, err := s.findUserByID(r.Context(), claims.UserID)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "user not found")
+		return
+	}
+
 	resp := AuthMeResponse{
-		UserID:        claims.UserID,
-		Email:         claims.Email,
-		EmailVerified: claims.EmailVerified,
+		UserID:        user.ID,
+		Email:         user.Email,
+		EmailVerified: user.EmailVerified,
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -246,10 +252,8 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("[auth-service] email verified for %s", user.Email)
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status":        "email verified",
-		"emailVerified": true,
-	})
+	http.Redirect(w, r, s.frontendBaseURL+"/auth?verification_success=true", http.StatusFound)
+
 }
 
 func (s *Server) handleForgotPassword(w http.ResponseWriter, r *http.Request) {

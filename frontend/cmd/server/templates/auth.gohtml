@@ -77,9 +77,11 @@
   const urlParams = new URLSearchParams(window.location.search);
   const mode = urlParams.get('mode');
   const token = urlParams.get('token');
+  const verificationSuccess = urlParams.get('verification_success');
 
   const loginForm = document.getElementById('login-form');
   const resetPasswordForm = document.getElementById('reset-password-form');
+  const msgEl = document.getElementById('auth-msg');
 
   if (mode === 'reset-password' && token) {
     loginForm.style.display = 'none';
@@ -96,6 +98,10 @@
     });
 
   } else {
+    if (verificationSuccess === 'true') {
+      msgEl.textContent = 'Email successfully verified! You can now sign in.';
+      msgEl.style.color = 'var(--color-success)';
+    }
     if (authService.isLoggedIn()) {
       window.location.href = '/me';
     }

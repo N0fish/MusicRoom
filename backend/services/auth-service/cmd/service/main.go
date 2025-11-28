@@ -20,6 +20,7 @@ type Server struct {
 	googleCfg   GoogleConfig
 	ftCfg       FTConfig
 	frontendURL string
+	frontendBaseURL string
 
 	emailSender         EmailSender
 	verificationURLBase string
@@ -62,9 +63,10 @@ func main() {
 		googleCfg:   loadGoogleConfigFromEnv(),
 		ftCfg:       loadFTConfigFromEnv(),
 		frontendURL: getenv("OAUTH_FRONTEND_REDIRECT", "http://localhost:5175/auth/callback"),
+		frontendBaseURL: getenv("FRONTEND_BASE_URL", "http://localhost:5175"),
 
 		emailSender:         emailSender,
-		verificationURLBase: getenv("EMAIL_VERIFICATION_URL", ""),
+		verificationURLBase: getenv("EMAIL_VERIFICATION_URL", "http://localhost:8080/auth/verify-email"),
 		resetURLBase:        getenv("PASSWORD_RESET_URL", ""),
 	}
 

@@ -4,6 +4,7 @@
     <h1 class="text-2xl font-bold mb-4">My Profile</h1>
     <div id="profile" class="space-y-2 text-text-muted">
       <p><strong>Email:</strong> <span id="email"></span></p>
+      <p><strong>Email Verified:</strong> <span id="email-verified"></span></p>
       <p><strong>Display name:</strong> <span id="displayName"></span></p>
       <p><strong>Bio:</strong> <span id="bio"></span></p>
       <p><strong>Visibility:</strong> <span id="visibility"></span></p>
@@ -42,22 +43,33 @@
   const API = "{{.API}}";
 
   async function loadProfile() {
-    const res = await authService.fetchWithAuth(API + "/users/me");
-    if (!res.ok) {
-      console.error("failed to load profile", await res.text());
+    const resUsers = await authService.fetchWithAuth(API + "/users/me");
+    if (!resUsers.ok) {
+      console.error("failed to load profile", await resUsers.text());
       authService.logout();
       return;
     }
-    const data = await res.json();
-    document.getElementById("email").textContent = data.email || "";
-    document.getElementById("displayName").textContent = data.displayName || "";
-    document.getElementById("bio").textContent = data.bio || "";
-    document.getElementById("visibility").textContent = data.visibility || "";
+    const dataUsers = await resUsers.json();
 
-    const genres = (data.preferences && data.preferences.genres) || [];
-    document.getElementById("input-displayName").value = data.displayName || "";
-    document.getElementById("input-bio").value = data.bio || "";
-    document.getElementById("input-visibility").value = data.visibility || "public";
+    const resAuth = await authService.fetchWithAuth(API + "/auth/me");
+    if (!resAuth.ok) {
+        console.error("failed to load auth data", await resAuth.text());
+        authService.logout();
+        return;
+    }
+    const dataAuth = await resAuth.json();
+
+    document.getElementById("email").textContent = dataAuth.email || "";
+    document.getElementById("email-verified").textContent = dataAuth.emailVerified ? "Yes" : "No";
+
+    document.getElementById("displayName").textContent = dataUsers.displayName || "";
+    document.getElementById("bio").textContent = dataUsers.bio || "";
+    document.getElementById("visibility").textContent = dataUsers.visibility || "";
+
+    const genres = (dataUsers.preferences && dataUsers.preferences.genres) || [];
+    document.getElementById("input-displayName").value = dataUsers.displayName || "";
+    document.getElementById("input-bio").value = dataUsers.bio || "";
+    document.getElementById("input-visibility").value = dataUsers.visibility || "public";
     document.getElementById("input-genres").value = genres.join(", ");
   }
 
