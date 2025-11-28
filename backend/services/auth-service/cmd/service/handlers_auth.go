@@ -160,26 +160,6 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, tokens)
 }
 
-// func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
-// 	claims, ok := r.Context().Value(ctxClaimsKey{}).(*TokenClaims)
-// 	if !ok || claims == nil {
-// 		writeError(w, http.StatusUnauthorized, "unauthorized")
-// 		return
-// 	}
-
-// 	user, err := s.findUserByID(r.Context(), claims.UserID)
-// 	if err != nil {
-// 		writeError(w, http.StatusUnauthorized, "user not found")
-// 		return
-// 	}
-
-//		resp := AuthMeResponse{
-//			UserID:        user.ID,
-//			Email:         user.Email,
-//			EmailVerified: user.EmailVerified,
-//		}
-//		writeJSON(w, http.StatusOK, resp)
-//	}
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(ctxClaimsKey{}).(*TokenClaims)
 	if !ok || claims == nil {

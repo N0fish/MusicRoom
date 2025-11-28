@@ -13,13 +13,13 @@ import (
 )
 
 type Server struct {
-	db          *pgxpool.Pool
-	jwtSecret   []byte
-	accessTTL   time.Duration
-	refreshTTL  time.Duration
-	googleCfg   GoogleConfig
-	ftCfg       FTConfig
-	frontendURL string
+	db              *pgxpool.Pool
+	jwtSecret       []byte
+	accessTTL       time.Duration
+	refreshTTL      time.Duration
+	googleCfg       GoogleConfig
+	ftCfg           FTConfig
+	frontendURL     string
 	frontendBaseURL string
 
 	emailSender         EmailSender
@@ -56,17 +56,17 @@ func main() {
 	}
 
 	srv := &Server{
-		db:          pool,
-		jwtSecret:   jwtSecret,
-		accessTTL:   accessTTL,
-		refreshTTL:  refreshTTL,
-		googleCfg:   loadGoogleConfigFromEnv(),
-		ftCfg:       loadFTConfigFromEnv(),
-		frontendURL: getenv("OAUTH_FRONTEND_REDIRECT", "http://localhost:5175/auth/callback"),
-		frontendBaseURL: getenv("FRONTEND_BASE_URL", "http://localhost:5175"),
+		db:              pool,
+		jwtSecret:       jwtSecret,
+		accessTTL:       accessTTL,
+		refreshTTL:      refreshTTL,
+		googleCfg:       loadGoogleConfigFromEnv(),
+		ftCfg:           loadFTConfigFromEnv(),
+		frontendURL:     getenv("OAUTH_FRONTEND_REDIRECT", ""),
+		frontendBaseURL: getenv("FRONTEND_BASE_URL", ""),
 
 		emailSender:         emailSender,
-		verificationURLBase: getenv("EMAIL_VERIFICATION_URL", "http://localhost:8080/auth/verify-email"),
+		verificationURLBase: getenv("EMAIL_VERIFICATION_URL", ""),
 		resetURLBase:        getenv("PASSWORD_RESET_URL", ""),
 	}
 

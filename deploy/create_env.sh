@@ -105,6 +105,7 @@ FT_REDIRECT_URL=http://localhost:${GATEWAY_PORT}/auth/42/callback
 
 # Frontend URL used after OAuth callbacks and email flows
 OAUTH_FRONTEND_REDIRECT=http://localhost:${FRONTEND_PORT}/auth/callback
+FRONTEND_BASE_URL=http://localhost:${FRONTEND_PORT}
 
 EMAIL_VERIFICATION_URL=http://localhost:${GATEWAY_PORT}/auth/verify-email
 PASSWORD_RESET_URL=http://localhost:${GATEWAY_PORT}/auth/reset-password

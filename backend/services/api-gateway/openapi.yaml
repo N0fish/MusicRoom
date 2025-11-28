@@ -170,6 +170,20 @@ paths:
   /auth/verify-email:
     get:
       summary: Verify email using token
+      description: >
+        Public endpoint exposed through the API Gateway.
+        This URL is included in the verification email and is meant to be opened
+        directly in a browser or mobile webview.
+
+        The API Gateway forwards the request to the auth-service, which validates
+        the token. If the token is valid, the auth-service responds with an
+        HTTP 302 Redirect pointing to the frontend application
+        (FRONTEND_BASE_URL), allowing the UI to display a “Email verified”
+        confirmation page.
+
+        No direct calls to auth-service are ever performed by the client;
+        the client only communicates with the Gateway, as required by the
+        project architecture.
       tags: [auth]
       parameters:
         - in: query
@@ -177,20 +191,51 @@ paths:
           required: true
           schema:
             type: string
-          description: Verification token from email link
+          description: Verification token received in the email
       responses:
-        '200':
-          description: Email successfully verified
-          content:
-            application/json:
+        '302':
+          description: >
+            Email successfully verified. The client (browser/webview) is
+            redirected to the frontend application.
+          headers:
+            Location:
+              description: >
+                URL of the frontend page the user will be redirected to,
+                e.g. `${FRONTEND_BASE_URL}/auth?verification_success=true`.
               schema:
-                $ref: '#/components/schemas/VerifyEmailResponse'
+                type: string
+                format: uri
         '400':
           description: Invalid or expired token
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  # /auth/verify-email:
+  #   get:
+  #     summary: Verify email using token
+  #     tags: [auth]
+  #     parameters:
+  #       - in: query
+  #         name: token
+  #         required: true
+  #         schema:
+  #           type: string
+  #         description: Verification token from email link
+  #     responses:
+  #       '200':
+  #         description: Email successfully verified
+  #         content:
+  #           application/json:
+  #             schema:
+  #               $ref: '#/components/schemas/VerifyEmailResponse'
+  #       '400':
+  #         description: Invalid or expired token
+  #         content:
+  #           application/json:
+  #             schema:
+  #               $ref: '#/components/schemas/ErrorResponse'
 
   /auth/forgot-password:
     post:
