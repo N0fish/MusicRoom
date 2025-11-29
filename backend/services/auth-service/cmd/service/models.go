@@ -150,34 +150,40 @@ func (s *Server) createUserWithPassword(ctx context.Context, email, passwordHash
 
 func (s *Server) upsertUserWithGoogle(ctx context.Context, email, googleID string) (AuthUser, error) {
 	user, err := s.findUserByGoogleID(ctx, googleID)
-	if err == nil {
+	if err != nil {
+		if err != ErrUserNotFound {
+			return AuthUser{}, err
+		}
+	} else {
 		if user.Email != email {
 			row := s.db.QueryRow(ctx, `UPDATE auth_users SET email = $1, updated_at = now() WHERE id = $2
-              RETURNING id, email, password, email_verified,
-                        google_id, ft_id,
-                        verification_token, verification_sent_at,
-                        reset_token, reset_sent_at, reset_expires_at,
-                        created_at, updated_at`, email, user.ID)
+						RETURNING id, email, password, email_verified,
+											google_id, ft_id,
+											verification_token, verification_sent_at,
+											reset_token, reset_sent_at, reset_expires_at,
+											created_at, updated_at`,
+				email, user.ID,
+			)
 			return scanAuthUser(row)
 		}
 		return user, nil
 	}
-	if err != nil && err != ErrUserNotFound {
-		return AuthUser{}, err
-	}
 
 	user, err = s.findUserByEmail(ctx, email)
-	if err == nil {
+	if err != nil {
+		if err != ErrUserNotFound {
+			return AuthUser{}, err
+		}
+	} else {
 		row := s.db.QueryRow(ctx, `UPDATE auth_users SET google_id = $1, email_verified = TRUE, updated_at = now() WHERE id = $2
-            RETURNING id, email, password, email_verified,
-                      google_id, ft_id,
-                      verification_token, verification_sent_at,
-                      reset_token, reset_sent_at, reset_expires_at,
-                      created_at, updated_at`, googleID, user.ID)
+					RETURNING id, email, password, email_verified,
+										google_id, ft_id,
+										verification_token, verification_sent_at,
+										reset_token, reset_sent_at, reset_expires_at,
+										created_at, updated_at`,
+			googleID, user.ID,
+		)
 		return scanAuthUser(row)
-	}
-	if err != nil && err != ErrUserNotFound {
-		return AuthUser{}, err
 	}
 
 	row := s.db.QueryRow(ctx, `INSERT INTO auth_users (email, google_id, email_verified)
@@ -186,7 +192,9 @@ func (s *Server) upsertUserWithGoogle(ctx context.Context, email, googleID strin
                   google_id, ft_id,
                   verification_token, verification_sent_at,
                   reset_token, reset_sent_at, reset_expires_at,
-                  created_at, updated_at`, email, googleID)
+                  created_at, updated_at`,
+		email, googleID,
+	)
 	return scanAuthUser(row)
 }
 
