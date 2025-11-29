@@ -74,7 +74,8 @@ func (s *HTTPServer) handleListEvents(w http.ResponseWriter, r *http.Request) {
 func (s *HTTPServer) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("X-User-Id")
 	if userID == "" {
-		userID = "anonymous"
+		http.Error(w, "missing X-User-Id", http.StatusUnauthorized)
+		return
 	}
 
 	var body struct {
@@ -163,6 +164,8 @@ func (s *HTTPServer) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 
 func (s *HTTPServer) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	userID := r.Header.Get("X-User-Id")
+
 	ev, err := loadEvent(r.Context(), s.pool, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -172,6 +175,26 @@ func (s *HTTPServer) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	if ev.Visibility == visibilityPrivate {
+		if userID == "" {
+			http.Error(w, "missing X-User-Id", http.StatusUnauthorized)
+			return
+		}
+
+		if ev.OwnerID != userID {
+			invited, err := isInvited(r.Context(), s.pool, ev.ID, userID)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if !invited {
+				http.Error(w, "event is private, invite required", http.StatusForbidden)
+				return
+			}
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(ev)
 }
