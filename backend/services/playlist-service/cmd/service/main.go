@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	playlist "playlist-service/cmd/playlist"
+	playlist "playlist-service/internal/playlist"
 
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"

@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	realtime "realtime-service/cmd/realtime"
+	realtime "realtime-service/internal/realtime"
 
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/redis/go-redis/v9"
