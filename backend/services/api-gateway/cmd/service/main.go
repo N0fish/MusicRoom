@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	port := getenv("GATEWAY_PORT", "8080")
+	port := getenv("PORT", "8080")
 	openapiFile := getenv("OPENAPI_FILE", "openapi.yaml")
 
 	authURL := getenv("AUTH_SERVICE_URL", "http://auth-service:3001")
