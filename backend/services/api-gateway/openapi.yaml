@@ -487,9 +487,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  # --------------------
-  # PLAYLISTS
-  # --------------------
   /users/search:
     get:
       summary: Search users by username or display name
@@ -700,6 +697,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  # --------------------
+  # PLAYLISTS
+  # --------------------
   /playlists:
     get:
       summary: List public playlists
@@ -716,6 +716,10 @@ paths:
 
     post:
       summary: Create a new playlist
+      description: >
+        Creates a new playlist for the current authenticated user.
+        The editMode field controls who can edit the playlist
+        (add/move/delete tracks).
       tags: [playlists]
       security:
         - bearerAuth: []
@@ -746,8 +750,42 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
   /playlists/{id}:
+    get:
+      summary: Get playlist details with tracks
+      description: >
+        Returns playlist metadata and all its tracks.
+        Public playlists are visible to everyone.
+        Private playlists are only visible to the owner and invited users.
+      tags: [playlists]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Playlist ID
+      responses:
+        '200':
+          description: Playlist with tracks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaylistWithTracks'
+        '403':
+          description: Playlist is private and the user has no access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Playlist not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
     patch:
-      summary: Update playlist metadata
+      summary: Update playlist metadata and edit mode
       tags: [playlists]
       security:
         - bearerAuth: []
@@ -784,7 +822,323 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden (not owner)
+          description: Forbidden (not the owner)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Playlist not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /playlists/{id}/tracks:
+    post:
+      summary: Add a track to a playlist
+      description: >
+        Adds a new track to the end of the playlist.
+        Access depends on:
+        - playlist visibility (isPublic),
+        - edit mode (editMode),
+        - whether the user is invited (for private / invited playlists).
+      tags: [playlists]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Playlist ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddTrackRequest'
+      responses:
+        '201':
+          description: Track added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Track'
+        '400':
+          description: Invalid track data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden (no edit rights or playlist is private)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Playlist not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /playlists/{id}/tracks/{trackId}:
+    patch:
+      summary: Move (reorder) a track inside a playlist
+      description: >
+        Moves a track to a new position within the playlist,
+        shifting other tracks accordingly.
+        The operation is concurrency-safe using transactions and row locks.
+      tags: [playlists]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Playlist ID
+        - in: path
+          name: trackId
+          required: true
+          schema:
+            type: string
+          description: Track ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveTrackRequest'
+      responses:
+        '200':
+          description: Track moved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoveTrackResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden (no edit rights)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Playlist or track not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict or no tracks to move
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      summary: Delete a track from a playlist
+      description: >
+        Deletes a track from the playlist and compacts positions
+        of the remaining tracks.
+      tags: [playlists]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Playlist ID
+        - in: path
+          name: trackId
+          required: true
+          schema:
+            type: string
+          description: Track ID
+      responses:
+        '204':
+          description: Track deleted
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden (no edit rights)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Playlist or track not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /playlists/{id}/invites:
+    get:
+      summary: List invited users for a playlist
+      description: >
+        Returns the list of invited users for a playlist.
+        Only the playlist owner can access this endpoint.
+      tags: [playlists]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Playlist ID
+      responses:
+        '200':
+          description: List of invited users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlaylistInvite'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden (not the owner)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Playlist not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      summary: Invite a user to a playlist
+      description: >
+        Adds a user to the invited list for the playlist.
+        The operation is idempotent: re-inviting the same user has no effect.
+        Only the playlist owner can invite users.
+      tags: [playlists]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Playlist ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: string
+                  description: User ID to invite
+      responses:
+        '204':
+          description: Invitation created or already existed
+        '400':
+          description: Invalid userId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden (not the owner)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Playlist not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /playlists/{id}/invites/{userId}:
+    delete:
+      summary: Remove an invite for a user
+      description: >
+        Removes an invited user from the playlist.
+        Only the playlist owner can perform this operation.
+      tags: [playlists]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Playlist ID
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+          description: Invited user ID
+      responses:
+        '204':
+          description: Invitation removed or did not exist
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden (not the owner)
           content:
             application/json:
               schema:
@@ -1412,6 +1766,15 @@ components:
           $ref: '#/components/schemas/MusicPreferences'
 
     # ---------- PLAYLISTS ----------
+    PlaylistEditMode:
+      type: string
+      enum: [everyone, invited]
+      default: everyone
+      description: |
+        "everyone" — any authenticated user who has access to the playlist can edit it
+        (add/move/delete tracks).
+        "invited" — only the owner and explicitly invited users can edit the playlist.
+
     Playlist:
       type: object
       properties:
@@ -1419,19 +1782,63 @@ components:
           type: string
         ownerId:
           type: string
+          description: ID of the playlist owner (same as auth userId)
         name:
           type: string
         description:
           type: string
         isPublic:
           type: boolean
+          description: |
+            true  — playlist is visible to everyone,
+            false — visible only to the owner and invited users.
+        editMode:
+          $ref: '#/components/schemas/PlaylistEditMode'
         createdAt:
           type: string
           format: date-time
-        updatedAt:
+      required: [id, ownerId, name, isPublic, editMode, createdAt]
+
+    Track:
+      type: object
+      properties:
+        id:
+          type: string
+        playlistId:
+          type: string
+        title:
+          type: string
+        artist:
+          type: string
+        position:
+          type: integer
+          description: Zero-based index of the track within the playlist
+        createdAt:
           type: string
           format: date-time
-      required: [id, ownerId, name, isPublic, createdAt, updatedAt]
+      required: [id, playlistId, title, artist, position, createdAt]
+
+    PlaylistWithTracks:
+      type: object
+      properties:
+        playlist:
+          $ref: '#/components/schemas/Playlist'
+        tracks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Track'
+      required: [playlist, tracks]
+
+    PlaylistInvite:
+      type: object
+      properties:
+        userId:
+          type: string
+          description: ID of the invited user
+        createdAt:
+          type: string
+          format: date-time
+      required: [userId, createdAt]
 
     CreatePlaylistRequest:
       type: object
@@ -1439,21 +1846,64 @@ components:
       properties:
         name:
           type: string
+          description: Playlist name (1–200 characters)
         description:
           type: string
+          description: Optional playlist description (up to 1000 characters)
         isPublic:
           type: boolean
           default: true
+          description: Whether the playlist is public or private
+        editMode:
+          $ref: '#/components/schemas/PlaylistEditMode'
 
     UpdatePlaylistRequest:
       type: object
       properties:
         name:
           type: string
+          description: New playlist name
         description:
           type: string
+          description: New playlist description
         isPublic:
           type: boolean
+          description: New public/private flag
+        editMode:
+          $ref: '#/components/schemas/PlaylistEditMode'
+
+    AddTrackRequest:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          description: Track title (1–300 characters)
+        artist:
+          type: string
+          description: Optional artist name (up to 200 characters)
+
+    MoveTrackRequest:
+      type: object
+      required: [newPosition]
+      properties:
+        newPosition:
+          type: integer
+          minimum: 0
+          description: New zero-based position of the track within the playlist
+
+    MoveTrackResponse:
+      type: object
+      properties:
+        trackId:
+          type: string
+        from:
+          type: integer
+          description: Previous position
+        to:
+          type: integer
+          description: New position
+      required: [trackId, from, to]
 
     # ---------- EVENTS & VOTING ----------
     EventVisibility:
