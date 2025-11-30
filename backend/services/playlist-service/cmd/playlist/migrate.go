@@ -1,0 +1,66 @@
+package playlist
+
+import (
+	"context"
+	"log"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+func AutoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
+	_, err := pool.Exec(ctx, `
+      CREATE TABLE IF NOT EXISTS playlists (
+          id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          owner_id    TEXT NOT NULL,
+          name        TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          is_public   BOOLEAN NOT NULL DEFAULT TRUE,
+          edit_mode   TEXT NOT NULL DEFAULT 'everyone',
+          created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+  `)
+	if err != nil {
+		log.Printf("migrate playlists-service: %v", err)
+	}
+
+	// Ensure edit_mode exists (for older schemas).
+	if _, err := pool.Exec(ctx, `
+      ALTER TABLE playlists
+      ADD COLUMN IF NOT EXISTS edit_mode TEXT NOT NULL DEFAULT 'everyone'
+  `); err != nil {
+		return err
+	}
+
+	if _, err := pool.Exec(ctx, `
+      CREATE TABLE IF NOT EXISTS tracks (
+          id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          playlist_id uuid NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+          title       TEXT NOT NULL,
+          artist      TEXT NOT NULL,
+          position    INT NOT NULL,
+          created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+  `); err != nil {
+		return err
+	}
+
+	if _, err := pool.Exec(ctx, `
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_tracks_playlist_position
+      ON tracks(playlist_id, position)
+  `); err != nil {
+		return err
+	}
+
+	if _, err := pool.Exec(ctx, `
+      CREATE TABLE IF NOT EXISTS playlist_members (
+          playlist_id uuid NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+          user_id     TEXT NOT NULL,
+          created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (playlist_id, user_id)
+      )
+  `); err != nil {
+		return err
+	}
+
+	return nil
+}
