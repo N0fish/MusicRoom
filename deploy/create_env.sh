@@ -59,7 +59,7 @@ for svc in "${SERVICES[@]}"; do
   # API GATEWAY
   "backend/services/api-gateway")
     cat > "$ENV_FILE" <<EENV
-GATEWAY_PORT=${GATEWAY_PORT}
+PORT=${GATEWAY_PORT}
 OPENAPI_FILE=openapi.yaml
 
 # Internal services URLs (inside docker-compose network)
