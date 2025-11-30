@@ -38,12 +38,7 @@ type Preferences struct {
 var ErrProfileNotFound = errors.New("profile not found")
 
 func autoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
-	_, err := pool.Exec(ctx, `CREATE EXTENSION IF NOT EXISTS pgcrypto`)
-	if err != nil {
-		log.Printf("user-service: extension: %v", err)
-	}
-
-	_, err = pool.Exec(ctx, `
+	_, err := pool.Exec(ctx, `
       CREATE TABLE IF NOT EXISTS user_profiles (
           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
           user_id uuid UNIQUE NOT NULL,
