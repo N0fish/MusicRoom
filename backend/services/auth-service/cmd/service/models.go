@@ -29,27 +29,25 @@ type AuthUser struct {
 var ErrUserNotFound = errors.New("user not found")
 
 func autoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
-	_, err := pool.Exec(ctx, `CREATE EXTENSION IF NOT EXISTS pgcrypto`)
+	_, err := pool.Exec(ctx, `
+      CREATE TABLE IF NOT EXISTS auth_users(
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          email TEXT UNIQUE NOT NULL,
+          password TEXT NOT NULL DEFAULT '',
+          email_verified BOOLEAN NOT NULL DEFAULT FALSE,
+          google_id TEXT UNIQUE,
+          ft_id TEXT UNIQUE,
+          verification_token TEXT,
+          verification_sent_at TIMESTAMPTZ,
+          reset_token TEXT,
+          reset_sent_at TIMESTAMPTZ,
+          reset_expires_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+  `)
 	if err != nil {
-		log.Printf("auth-service: extension: %v", err)
-	}
-	_, err = pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS auth_users(
-        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        email TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL DEFAULT '',
-        email_verified BOOLEAN NOT NULL DEFAULT FALSE,
-        google_id TEXT UNIQUE,
-        ft_id TEXT UNIQUE,
-        verification_token TEXT,
-        verification_sent_at TIMESTAMPTZ,
-        reset_token TEXT,
-        reset_sent_at TIMESTAMPTZ,
-        reset_expires_at TIMESTAMPTZ,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    )`)
-	if err != nil {
-		return err
+		log.Printf("migrate auth-service: %v", err)
 	}
 	return nil
 }
@@ -150,34 +148,40 @@ func (s *Server) createUserWithPassword(ctx context.Context, email, passwordHash
 
 func (s *Server) upsertUserWithGoogle(ctx context.Context, email, googleID string) (AuthUser, error) {
 	user, err := s.findUserByGoogleID(ctx, googleID)
-	if err == nil {
+	if err != nil {
+		if err != ErrUserNotFound {
+			return AuthUser{}, err
+		}
+	} else {
 		if user.Email != email {
 			row := s.db.QueryRow(ctx, `UPDATE auth_users SET email = $1, updated_at = now() WHERE id = $2
-              RETURNING id, email, password, email_verified,
-                        google_id, ft_id,
-                        verification_token, verification_sent_at,
-                        reset_token, reset_sent_at, reset_expires_at,
-                        created_at, updated_at`, email, user.ID)
+						RETURNING id, email, password, email_verified,
+											google_id, ft_id,
+											verification_token, verification_sent_at,
+											reset_token, reset_sent_at, reset_expires_at,
+											created_at, updated_at`,
+				email, user.ID,
+			)
 			return scanAuthUser(row)
 		}
 		return user, nil
 	}
-	if err != nil && err != ErrUserNotFound {
-		return AuthUser{}, err
-	}
 
 	user, err = s.findUserByEmail(ctx, email)
-	if err == nil {
+	if err != nil {
+		if err != ErrUserNotFound {
+			return AuthUser{}, err
+		}
+	} else {
 		row := s.db.QueryRow(ctx, `UPDATE auth_users SET google_id = $1, email_verified = TRUE, updated_at = now() WHERE id = $2
-            RETURNING id, email, password, email_verified,
-                      google_id, ft_id,
-                      verification_token, verification_sent_at,
-                      reset_token, reset_sent_at, reset_expires_at,
-                      created_at, updated_at`, googleID, user.ID)
+					RETURNING id, email, password, email_verified,
+										google_id, ft_id,
+										verification_token, verification_sent_at,
+										reset_token, reset_sent_at, reset_expires_at,
+										created_at, updated_at`,
+			googleID, user.ID,
+		)
 		return scanAuthUser(row)
-	}
-	if err != nil && err != ErrUserNotFound {
-		return AuthUser{}, err
 	}
 
 	row := s.db.QueryRow(ctx, `INSERT INTO auth_users (email, google_id, email_verified)
@@ -186,7 +190,9 @@ func (s *Server) upsertUserWithGoogle(ctx context.Context, email, googleID strin
                   google_id, ft_id,
                   verification_token, verification_sent_at,
                   reset_token, reset_sent_at, reset_expires_at,
-                  created_at, updated_at`, email, googleID)
+                  created_at, updated_at`,
+		email, googleID,
+	)
 	return scanAuthUser(row)
 }
 

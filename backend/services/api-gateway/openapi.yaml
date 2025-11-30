@@ -797,8 +797,311 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
   # --------------------
-  # VOTING
+  # EVENTS & VOTING
   # --------------------
+  /events:
+    get:
+      summary: List events visible to current user
+      description: >
+        Returns events that are visible for the current user:
+        - public events for everyone,
+        - plus events owned by the user,
+        - plus events where the user is invited.
+      tags: [events]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Event'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      summary: Create a new event (voting session)
+      tags: [events]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEventRequest'
+      responses:
+        '200':
+          description: Event created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '400':
+          description: Invalid event data (time window, geo settings, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /events/{id}:
+    get:
+      summary: Get event details
+      tags: [events]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Event ID
+      responses:
+        '200':
+          description: Event details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      summary: Update event settings (visibility, license, geo, voting window)
+      tags: [events]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Event ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateEventRequest'
+      responses:
+        '200':
+          description: Updated event
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '400':
+          description: Invalid data (time window, geo settings, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden (not event owner)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      summary: Delete event
+      tags: [events]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Event ID
+      responses:
+        '204':
+          description: Event deleted
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden (not event owner)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /events/{id}/invites:
+    get:
+      summary: List invites for an event
+      tags: [events]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Event ID
+      responses:
+        '200':
+          description: List of invited users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EventInvite'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden (not event owner)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      summary: Invite a user to an event
+      tags: [events]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Event ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInviteRequest'
+      responses:
+        '204':
+          description: Invitation created (or already exists)
+        '400':
+          description: Invalid userId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden (not event owner)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Event or user not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /events/{id}/invites/{userId}:
+    delete:
+      summary: Remove invite for a user
+      tags: [events]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Event ID
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+          description: Invited user ID
+      responses:
+        '204':
+          description: Invitation removed (or did not exist)
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden (not event owner)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /events/{id}/vote:
     post:
       summary: Vote for a track in an event
@@ -826,7 +1129,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/VoteResponse'
         '400':
-          description: Invalid vote
+          description: Invalid vote (missing trackId, invalid geo/time window, etc.)
           content:
             application/json:
               schema:
@@ -837,8 +1140,60 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden (not invited, outside geo area, voting window closed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
-          description: Event or track not found
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Duplicate vote for this event
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /events/{id}/tally:
+    get:
+      summary: Get tally of votes for an event
+      tags: [votes]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Event ID
+      responses:
+        '200':
+          description: Tally of votes per track
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    track:
+                      type: string
+                    count:
+                      type: integer
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Event not found
           content:
             application/json:
               schema:
@@ -1100,6 +1455,143 @@ components:
         isPublic:
           type: boolean
 
+    # ---------- EVENTS & VOTING ----------
+    EventVisibility:
+      type: string
+      enum: [public, private]
+      default: public
+
+    EventLicenseMode:
+      type: string
+      enum: [everyone, invited_only, geo_time]
+      default: everyone
+
+    Event:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        visibility:
+          $ref: '#/components/schemas/EventVisibility'
+        ownerId:
+          type: string
+        licenseMode:
+          $ref: '#/components/schemas/EventLicenseMode'
+        geoLat:
+          type: number
+          format: double
+          nullable: true
+        geoLng:
+          type: number
+          format: double
+          nullable: true
+        geoRadiusM:
+          type: integer
+          nullable: true
+        voteStart:
+          type: string
+          format: date-time
+          nullable: true
+          description: Voting start time (RFC3339). Must not be in the past.
+        voteEnd:
+          type: string
+          format: date-time
+          nullable: true
+          description: Voting end time (RFC3339). Must not be in the past and not more than 1 year in the future.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, name, visibility, ownerId, licenseMode, createdAt, updatedAt]
+
+    CreateEventRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: Human readable name of the event (e.g. "Friday Party")
+        visibility:
+          $ref: '#/components/schemas/EventVisibility'
+        licenseMode:
+          $ref: '#/components/schemas/EventLicenseMode'
+        geoLat:
+          type: number
+          format: double
+          description: Optional latitude of the event center (for geo_time license)
+        geoLng:
+          type: number
+          format: double
+          description: Optional longitude of the event center (for geo_time license)
+        geoRadiusM:
+          type: integer
+          description: Optional radius in meters for geo_time license
+        voteStart:
+          type: string
+          format: date-time
+          description: >
+            Optional voting start time (RFC3339).
+            Must not be in the past and not more than 1 year in the future.
+        voteEnd:
+          type: string
+          format: date-time
+          description: >
+            Optional voting end time (RFC3339).
+            Must not be in the past, not more than 1 year in the future,
+            and if voteStart is set, the window must be at least 1 hour.
+
+    UpdateEventRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        visibility:
+          $ref: '#/components/schemas/EventVisibility'
+        licenseMode:
+          $ref: '#/components/schemas/EventLicenseMode'
+        geoLat:
+          type: number
+          format: double
+        geoLng:
+          type: number
+          format: double
+        geoRadiusM:
+          type: integer
+        voteStart:
+          type: string
+          format: date-time
+          description: >
+            New voting start time (RFC3339). If empty string is sent,
+            server may reset it to null.
+        voteEnd:
+          type: string
+          format: date-time
+          description: >
+            New voting end time (RFC3339). If empty string is sent,
+            server may reset it to null.
+
+    EventInvite:
+      type: object
+      properties:
+        userId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [userId, createdAt]
+
+    CreateInviteRequest:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          type: string
+          description: User ID to invite (must exist in user-service)
+
     # ---------- VOTES ----------
     VoteRequest:
       type: object
@@ -1107,7 +1599,14 @@ components:
       properties:
         trackId:
           type: string
-
+        lat:
+          type: number
+          format: double
+          description: Optional latitude of the voter for geo-locked events
+        lng:
+          type: number
+          format: double
+          description: Optional longitude of the voter for geo-locked events
     VoteResponse:
       type: object
       properties:

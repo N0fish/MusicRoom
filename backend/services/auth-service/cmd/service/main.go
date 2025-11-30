@@ -62,12 +62,12 @@ func main() {
 		refreshTTL:      refreshTTL,
 		googleCfg:       loadGoogleConfigFromEnv(),
 		ftCfg:           loadFTConfigFromEnv(),
-		frontendURL:     getenv("OAUTH_FRONTEND_REDIRECT", ""),
-		frontendBaseURL: getenv("FRONTEND_BASE_URL", ""),
+		frontendURL:     getenv("OAUTH_FRONTEND_REDIRECT", "http://localhost:5175/auth/callback"),
+		frontendBaseURL: getenv("FRONTEND_BASE_URL", "http://localhost:5175"),
 
 		emailSender:         emailSender,
-		verificationURLBase: getenv("EMAIL_VERIFICATION_URL", ""),
-		resetURLBase:        getenv("PASSWORD_RESET_URL", ""),
+		verificationURLBase: getenv("EMAIL_VERIFICATION_URL", "http://localhost:8080/auth/verify-email"),
+		resetURLBase:        getenv("PASSWORD_RESET_URL", "http://localhost:8080/auth/reset-password"),
 	}
 
 	r := chi.NewRouter()
@@ -79,8 +79,7 @@ func main() {
 	// Health
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		// _, _ = w.Write([]byte(`{"status":"ok","service":"auth-service"}`))
-		_, _ = w.Write([]byte("ok"))
+		_, _ = w.Write([]byte(`{"status":"ok","service":"auth-service"}`))
 	})
 
 	// Email/password auth

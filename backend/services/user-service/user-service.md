@@ -235,3 +235,12 @@ friend_requests
 user_friends
 - user1_id
 - user2_id
+
+## Безопасность
+- User-service не знает ничего о JWT.  
+  Это делает API Gateway.
+- User-service не хранит email, пароль или emailVerified.
+- User-service можно безопасно качать и отдавать публично, так как:
+- - без X-User-Id никто не увидит /users/me
+- - видимость профиля контролируется сервером
+- - приватные поля защищены полностью

@@ -74,6 +74,11 @@ re: down up
 re-v: down-v up
 
 
+.PHONY: db
+
+db: docker compose exec postgres psql -U "$POSTGRES_USER" "$POSTGRES_DB"
+
+
 .PHONY: tidy fmt
 tidy:
 	for s in $(SERVICES); do (cd $$s && go mod tidy); done

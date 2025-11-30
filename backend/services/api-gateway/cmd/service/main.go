@@ -15,8 +15,8 @@ func main() {
 
 	authURL := getenv("AUTH_SERVICE_URL", "http://auth-service:3001")
 	userURL := getenv("USER_SERVICE_URL", "http://user-service:3005")
-	playlistURL := getenv("PLAYLIST_SERVICE_URL", "http://playlist-service:3002")
 	voteURL := getenv("VOTE_SERVICE_URL", "http://vote-service:3003")
+	playlistURL := getenv("PLAYLIST_SERVICE_URL", "http://playlist-service:3002")
 	mockURL := getenv("MOCK_SERVICE_URL", "http://mock-service:3006")
 	realtimeURL := getenv("REALTIME_SERVICE_URL", "http://realtime-service:3004")
 
@@ -51,14 +51,13 @@ func main() {
 	// Proxies
 	authProxy := mustNewReverseProxy(authURL)
 	userProxy := mustNewReverseProxy(userURL)
-	playlistProxy := mustNewReverseProxy(playlistURL)
 	voteProxy := mustNewReverseProxy(voteURL)
+	playlistProxy := mustNewReverseProxy(playlistURL)
 	mockProxy := mustNewReverseProxy(mockURL)
 	realtimeProxy := mustNewReverseProxy(realtimeURL)
 
 	// Auth routes (no JWT required)
 	r.Method(http.MethodPost, "/auth/register", authProxy)
-	// r.Method(http.MethodPost, "/auth/login", authProxy)
 	r.Group(func(r chi.Router) {
 		r.Use(loginRateLimitMiddleware)
 		r.Method(http.MethodPost, "/auth/login", authProxy)
@@ -137,14 +136,35 @@ func main() {
 		r.With(playlistCreateRateLimitMiddleware).
 			Method(http.MethodPost, "/playlists", playlistProxy)
 		r.Method(http.MethodPatch, "/playlists/{id}", playlistProxy)
+		r.Method(http.MethodGet, "/playlists/{id}", playlistProxy)
+
+		r.Method(http.MethodPost, "/playlists/{id}/tracks", playlistProxy)
+		r.Method(http.MethodPatch, "/playlists/{id}/tracks/{trackId}", playlistProxy) // move track
+		r.Method(http.MethodDelete, "/playlists/{id}/tracks/{trackId}", playlistProxy)
+
+		r.Method(http.MethodGet, "/playlists/{id}/invites", playlistProxy)
+		r.Method(http.MethodPost, "/playlists/{id}/invites", playlistProxy)
+		r.Method(http.MethodDelete, "/playlists/{id}/invites/{userId}", playlistProxy)
 	})
 
-	// Voting
+	// Events & Voting
 	r.Group(func(r chi.Router) {
 		if len(jwtSecret) != 0 {
 			r.Use(jwtAuthMiddleware(jwtSecret))
 		}
+		// Event lifecycle and settings
+		r.Method(http.MethodGet, "/events", voteProxy)
+		r.Method(http.MethodPost, "/events", voteProxy)
+		r.Method(http.MethodGet, "/events/{id}", voteProxy)
+		r.Method(http.MethodPatch, "/events/{id}", voteProxy)
+		r.Method(http.MethodDelete, "/events/{id}", voteProxy)
+		// Invites
+		r.Method(http.MethodGet, "/events/{id}/invites", voteProxy)
+		r.Method(http.MethodPost, "/events/{id}/invites", voteProxy)
+		r.Method(http.MethodDelete, "/events/{id}/invites/{userId}", voteProxy)
+		// Voting
 		r.Method(http.MethodPost, "/events/{id}/vote", voteProxy)
+		r.Method(http.MethodGet, "/events/{id}/tally", voteProxy)
 	})
 
 	// Mock routes
