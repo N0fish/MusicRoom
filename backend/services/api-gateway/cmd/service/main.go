@@ -15,8 +15,8 @@ func main() {
 
 	authURL := getenv("AUTH_SERVICE_URL", "http://auth-service:3001")
 	userURL := getenv("USER_SERVICE_URL", "http://user-service:3005")
-	playlistURL := getenv("PLAYLIST_SERVICE_URL", "http://playlist-service:3002")
 	voteURL := getenv("VOTE_SERVICE_URL", "http://vote-service:3003")
+	playlistURL := getenv("PLAYLIST_SERVICE_URL", "http://playlist-service:3002")
 	mockURL := getenv("MOCK_SERVICE_URL", "http://mock-service:3006")
 	realtimeURL := getenv("REALTIME_SERVICE_URL", "http://realtime-service:3004")
 
@@ -51,8 +51,8 @@ func main() {
 	// Proxies
 	authProxy := mustNewReverseProxy(authURL)
 	userProxy := mustNewReverseProxy(userURL)
-	playlistProxy := mustNewReverseProxy(playlistURL)
 	voteProxy := mustNewReverseProxy(voteURL)
+	playlistProxy := mustNewReverseProxy(playlistURL)
 	mockProxy := mustNewReverseProxy(mockURL)
 	realtimeProxy := mustNewReverseProxy(realtimeURL)
 
@@ -136,6 +136,15 @@ func main() {
 		r.With(playlistCreateRateLimitMiddleware).
 			Method(http.MethodPost, "/playlists", playlistProxy)
 		r.Method(http.MethodPatch, "/playlists/{id}", playlistProxy)
+		r.Method(http.MethodGet, "/playlists/{id}", playlistProxy)
+
+		r.Method(http.MethodPost, "/playlists/{id}/tracks", playlistProxy)
+		r.Method(http.MethodPatch, "/playlists/{id}/tracks/{trackId}", playlistProxy) // move track
+		r.Method(http.MethodDelete, "/playlists/{id}/tracks/{trackId}", playlistProxy)
+
+		r.Method(http.MethodGet, "/playlists/{id}/invites", playlistProxy)
+		r.Method(http.MethodPost, "/playlists/{id}/invites", playlistProxy)
+		r.Method(http.MethodDelete, "/playlists/{id}/invites/{userId}", playlistProxy)
 	})
 
 	// Events & Voting
