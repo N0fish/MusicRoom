@@ -2,32 +2,31 @@ package vote
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func AutoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
-	if _, err := pool.Exec(ctx, `CREATE EXTENSION IF NOT EXISTS pgcrypto`); err != nil {
-		return err
-	}
-	if _, err := pool.Exec(ctx, `
-        CREATE TABLE IF NOT EXISTS events(
-            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-            name TEXT NOT NULL,
-            visibility TEXT NOT NULL DEFAULT 'public',
-            owner_id TEXT NOT NULL DEFAULT '',
-            license_mode TEXT NOT NULL DEFAULT 'everyone',
-            geo_lat DOUBLE PRECISION,
-            geo_lng DOUBLE PRECISION,
-            geo_radius_m INT,
-            vote_start TIMESTAMPTZ,
-            vote_end TIMESTAMPTZ,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )
-    `); err != nil {
-		return err
+	_, err := pool.Exec(ctx, `
+      CREATE TABLE IF NOT EXISTS events(
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          name TEXT NOT NULL,
+          visibility TEXT NOT NULL DEFAULT 'public',
+          owner_id TEXT NOT NULL DEFAULT '',
+          license_mode TEXT NOT NULL DEFAULT 'everyone',
+          geo_lat DOUBLE PRECISION,
+          geo_lng DOUBLE PRECISION,
+          geo_radius_m INT,
+          vote_start TIMESTAMPTZ,
+          vote_end TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+  `)
+	if err != nil {
+		log.Printf("migrate vote-service: %v", err)
 	}
 	_, _ = pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS owner_id TEXT NOT NULL DEFAULT ''`)
 	_, _ = pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS license_mode TEXT NOT NULL DEFAULT 'everyone'`)

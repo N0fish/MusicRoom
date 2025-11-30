@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	vote "vote-service/cmd/service/vote"
+	vote "vote-service/cmd/vote"
 )
 
 func main() {
