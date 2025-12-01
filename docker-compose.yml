@@ -37,6 +37,8 @@ services:
       - user-service
       - playlist-service
       - vote-service
+      - realtime-service
+      - music-provider-service
       - mock-service
 
   auth-service:
@@ -92,6 +94,13 @@ services:
     depends_on:
       redis:
         condition: service_started
+
+  music-provider-service:
+    build: ./backend/services/music-provider-service
+    env_file:
+      - ./backend/services/music-provider-service/.env
+    ports:
+      - "3007:3007"
 
   mock-service:
     build: ./backend/services/mock-service

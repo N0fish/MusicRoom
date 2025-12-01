@@ -19,6 +19,7 @@ func main() {
 	playlistURL := getenv("PLAYLIST_SERVICE_URL", "http://playlist-service:3002")
 	mockURL := getenv("MOCK_SERVICE_URL", "http://mock-service:3006")
 	realtimeURL := getenv("REALTIME_SERVICE_URL", "http://realtime-service:3004")
+	musicProviderURL := getenv("MUSIC_PROVIDER_SERVICE_URL", "http://music-provider-service:3007")
 
 	jwtSecret := []byte(getenv("JWT_SECRET", ""))
 	if len(jwtSecret) == 0 {
@@ -59,6 +60,7 @@ func main() {
 	playlistProxy := mustNewReverseProxy(playlistURL)
 	mockProxy := mustNewReverseProxy(mockURL)
 	realtimeProxy := mustNewReverseProxy(realtimeURL)
+	musicProxy := mustNewReverseProxy(musicProviderURL)
 
 	// Auth routes (no JWT required)
 	r.Method(http.MethodPost, "/auth/register", authProxy)
@@ -176,6 +178,14 @@ func main() {
 
 	// Realtime (ws passthrough is handled in realtime-service; here we mostly proxy HTTP control if needed)
 	r.Mount("/realtime", realtimeProxy)
+
+	// Music provider (search for tracks in external SDK)
+	r.Group(func(r chi.Router) {
+		if len(jwtSecret) != 0 {
+			r.Use(jwtAuthMiddleware(jwtSecret))
+		}
+		r.Method(http.MethodGet, "/music/search", musicProxy)
+	})
 
 	log.Printf("api-gateway listening on :%s", port)
 	if err := http.ListenAndServe(":"+port, r); err != nil {

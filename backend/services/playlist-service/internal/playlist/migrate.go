@@ -33,6 +33,15 @@ func AutoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
 	}
 
 	if _, err := pool.Exec(ctx, `
+      ALTER TABLE tracks
+      ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS provider_track_id TEXT NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS thumbnail_url TEXT NOT NULL DEFAULT '';
+    `); err != nil {
+		return err
+	}
+
+	if _, err := pool.Exec(ctx, `
       CREATE TABLE IF NOT EXISTS tracks (
           id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
           playlist_id uuid NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,

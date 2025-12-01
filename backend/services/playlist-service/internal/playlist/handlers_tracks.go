@@ -62,8 +62,11 @@ func (s *Server) handleAddTrack(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Title  string `json:"title"`
-		Artist string `json:"artist"`
+		Title         string `json:"title"`
+		Artist        string `json:"artist"`
+		Provider      string `json:"provider"`
+		ProviderTrack string `json:"providerTrackId"`
+		ThumbnailURL  string `json:"thumbnailUrl"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
@@ -71,6 +74,10 @@ func (s *Server) handleAddTrack(w http.ResponseWriter, r *http.Request) {
 	}
 	body.Title = strings.TrimSpace(body.Title)
 	body.Artist = strings.TrimSpace(body.Artist)
+	body.Provider = strings.TrimSpace(strings.ToLower(body.Provider))
+	body.ProviderTrack = strings.TrimSpace(body.ProviderTrack)
+	body.ThumbnailURL = strings.TrimSpace(body.ThumbnailURL)
+
 	if body.Title == "" || len(body.Title) > 300 {
 		writeError(w, http.StatusBadRequest, "title must be between 1 and 300 characters")
 		return
@@ -80,14 +87,25 @@ func (s *Server) handleAddTrack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if body.Provider != "" {
+		if body.Provider != "youtube" {
+			writeError(w, http.StatusBadRequest, "unsupported provider (only \"youtube\" is allowed)")
+			return
+		}
+		if body.ProviderTrack == "" {
+			writeError(w, http.StatusBadRequest, "providerTrackId is required when provider is set")
+			return
+		}
+	}
+
 	var tr Track
 	err = s.db.QueryRow(ctx, `
-		INSERT INTO tracks (playlist_id, title, artist, position)
+		INSERT INTO tracks (playlist_id, title, artist, position, provider, provider_track_id, thumbnail_url)
 		VALUES ($1,$2,$3, COALESCE(
 			(SELECT MAX(position)+1 FROM tracks WHERE playlist_id = $1),
 			0
-		))
-		RETURNING id, playlist_id, title, artist, position, created_at
+		), $4, $5, $6)
+		RETURNING id, playlist_id, title, artist, position, created_at, provider, provider_track_id, thumbnail_url
 	`, playlistID, body.Title, body.Artist).Scan(
 		&tr.ID,
 		&tr.PlaylistID,
@@ -95,6 +113,9 @@ func (s *Server) handleAddTrack(w http.ResponseWriter, r *http.Request) {
 		&tr.Artist,
 		&tr.Position,
 		&tr.CreatedAt,
+		&tr.Provider,
+		&tr.ProviderTrackID,
+		&tr.ThumbnailURL,
 	)
 	if err != nil {
 		log.Printf("playlist-service: add track insert: %v", err)
