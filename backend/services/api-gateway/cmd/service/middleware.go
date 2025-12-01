@@ -12,8 +12,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// Должно совпадать с тем, что выдаёт auth-service,
-// чтобы корректно парсить токены.
 type TokenClaims struct {
 	UserID        string `json:"uid"`
 	Email         string `json:"email"`
@@ -29,12 +27,12 @@ func jwtAuthMiddleware(secret []byte) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			auth := r.Header.Get("Authorization")
 			if auth == "" {
-				http.Error(w, "missing Authorization header", http.StatusUnauthorized)
+				writeError(w, http.StatusUnauthorized, "missing Authorization header")
 				return
 			}
 			parts := strings.SplitN(auth, " ", 2)
 			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-				http.Error(w, "invalid Authorization header", http.StatusUnauthorized)
+				writeError(w, http.StatusUnauthorized, "invalid Authorization header")
 				return
 			}
 			raw := parts[1]
@@ -44,15 +42,13 @@ func jwtAuthMiddleware(secret []byte) func(http.Handler) http.Handler {
 				return secret, nil
 			})
 			if err != nil || !token.Valid || claims.TokenType != "access" {
-				http.Error(w, "invalid token", http.StatusUnauthorized)
+				writeError(w, http.StatusUnauthorized, "invalid token")
 				return
 			}
 
-			// Прокидываем данные пользователя в заголовки
 			r.Header.Set("X-User-Id", claims.UserID)
 			r.Header.Set("X-User-Email", claims.Email)
 
-			// И в контекст, если дальше вдруг понадобится
 			ctx := context.WithValue(r.Context(), ctxClaimsKey{}, claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -79,7 +75,7 @@ func bodySizeLimitMiddleware(maxBytes int64) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.ContentLength > 0 && r.ContentLength > maxBytes {
-				http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+				writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
 				return
 			}
 			r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
@@ -125,7 +121,8 @@ func rateLimitMiddleware(rps int) func(http.Handler) http.Handler {
 
 			if count > rps {
 				w.Header().Set("Retry-After", strconv.Itoa(int(reset.Sub(now).Seconds())))
-				http.Error(w, "too many requests", http.StatusTooManyRequests)
+				// http.Error(w, "too many requests", http.StatusTooManyRequests)
+				writeError(w, http.StatusTooManyRequests, "too many requests")
 				return
 			}
 
@@ -148,7 +145,8 @@ func loginRateLimitMiddleware(next http.Handler) http.Handler {
 		last, ok := loginLastSeen[ip]
 		if ok && now.Sub(last) < time.Second {
 			loginRateMu.Unlock()
-			http.Error(w, "too many login attempts", http.StatusTooManyRequests)
+			// http.Error(w, "too many login attempts", http.StatusTooManyRequests)
+			writeError(w, http.StatusTooManyRequests, "too many login attempts")
 			return
 		}
 		loginLastSeen[ip] = now
@@ -174,7 +172,8 @@ func playlistCreateRateLimitMiddleware(next http.Handler) http.Handler {
 		last, ok := playlistCreateLastSeen[ip]
 		if ok && now.Sub(last) < window {
 			playlistCreateRateMu.Unlock()
-			http.Error(w, "too many playlist creations", http.StatusTooManyRequests)
+			// http.Error(w, "too many playlist creations", http.StatusTooManyRequests)
+			writeError(w, http.StatusTooManyRequests, "too many playlist creations")
 			return
 		}
 		playlistCreateLastSeen[ip] = now

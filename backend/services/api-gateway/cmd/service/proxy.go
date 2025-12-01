@@ -25,8 +25,7 @@ func mustNewReverseProxy(target string) http.Handler {
 
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		log.Printf("proxy to %s error: %v", target, err)
-		w.WriteHeader(http.StatusBadGateway)
-		_, _ = w.Write([]byte("upstream service unavailable"))
+		writeError(w, http.StatusBadGateway, "upstream service unavailable")
 	}
 
 	return proxy
