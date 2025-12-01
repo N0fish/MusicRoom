@@ -15,28 +15,28 @@ func (s *Server) handleListInvites(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := r.Header.Get("X-User-Id")
 	if userID == "" {
-		http.Error(w, "missing user context", http.StatusUnauthorized)
+		writeError(w, http.StatusUnauthorized, "missing user context")
 		return
 	}
 	playlistID := chi.URLParam(r, "id")
 	if playlistID == "" {
-		http.Error(w, "missing playlist id", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "missing playlist id")
 		return
 	}
 
 	ownerID, _, _, err := s.getPlaylistAccessInfo(ctx, playlistID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		http.Error(w, "playlist not found", http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "playlist not found")
 		return
 	}
 	if err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
 		log.Printf("playlist-service: list invites fetch playlist: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 
 	if userID != ownerID {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
 
@@ -47,8 +47,8 @@ func (s *Server) handleListInvites(w http.ResponseWriter, r *http.Request) {
 		ORDER BY created_at ASC
 	`, playlistID)
 	if err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
 		log.Printf("playlist-service: list invites query: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 	defer rows.Close()
@@ -57,15 +57,15 @@ func (s *Server) handleListInvites(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var inv PlaylistInvite
 		if err := rows.Scan(&inv.UserID, &inv.CreatedAt); err != nil {
-			http.Error(w, "database error", http.StatusInternalServerError)
 			log.Printf("playlist-service: list invites scan: %v", err)
+			writeError(w, http.StatusInternalServerError, "database error")
 			return
 		}
 		invites = append(invites, inv)
 	}
-	if rows.Err() != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
-		log.Printf("playlist-service: list invites rows: %v", rows.Err())
+	if err := rows.Err(); err != nil {
+		log.Printf("playlist-service: list invites rows: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 
@@ -76,12 +76,12 @@ func (s *Server) handleAddInvite(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := r.Header.Get("X-User-Id")
 	if userID == "" {
-		http.Error(w, "missing user context", http.StatusUnauthorized)
+		writeError(w, http.StatusUnauthorized, "missing user context")
 		return
 	}
 	playlistID := chi.URLParam(r, "id")
 	if playlistID == "" {
-		http.Error(w, "missing playlist id", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "missing playlist id")
 		return
 	}
 
@@ -89,27 +89,27 @@ func (s *Server) handleAddInvite(w http.ResponseWriter, r *http.Request) {
 		UserID string `json:"userId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 	body.UserID = strings.TrimSpace(body.UserID)
 	if body.UserID == "" {
-		http.Error(w, "userId is required", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "userId is required")
 		return
 	}
 
 	ownerID, _, _, err := s.getPlaylistAccessInfo(ctx, playlistID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		http.Error(w, "playlist not found", http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "playlist not found")
 		return
 	}
 	if err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
 		log.Printf("playlist-service: add invite fetch playlist: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 	if userID != ownerID {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
 
@@ -119,8 +119,8 @@ func (s *Server) handleAddInvite(w http.ResponseWriter, r *http.Request) {
 		ON CONFLICT (playlist_id, user_id) DO NOTHING
 	`, playlistID, body.UserID)
 	if err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
 		log.Printf("playlist-service: add invite insert: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 
@@ -140,28 +140,28 @@ func (s *Server) handleDeleteInvite(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := r.Header.Get("X-User-Id")
 	if userID == "" {
-		http.Error(w, "missing user context", http.StatusUnauthorized)
+		writeError(w, http.StatusUnauthorized, "missing user context")
 		return
 	}
 	playlistID := chi.URLParam(r, "id")
 	targetUserID := chi.URLParam(r, "userId")
 	if playlistID == "" || targetUserID == "" {
-		http.Error(w, "missing playlist id or user id", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "missing playlist id or user id")
 		return
 	}
 
 	ownerID, _, _, err := s.getPlaylistAccessInfo(ctx, playlistID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		http.Error(w, "playlist not found", http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "playlist not found")
 		return
 	}
 	if err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
 		log.Printf("playlist-service: delete invite fetch playlist: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 	if userID != ownerID {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
 
@@ -169,8 +169,8 @@ func (s *Server) handleDeleteInvite(w http.ResponseWriter, r *http.Request) {
 		DELETE FROM playlist_members
 		WHERE playlist_id = $1 AND user_id = $2
 	`, playlistID, targetUserID); err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
 		log.Printf("playlist-service: delete invite: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 

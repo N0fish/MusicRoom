@@ -18,7 +18,7 @@ func AutoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
           edit_mode   TEXT NOT NULL DEFAULT 'everyone',
           created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
       )
-  `)
+    `)
 	if err != nil {
 		log.Printf("migrate playlists-service: %v", err)
 		return err
@@ -28,7 +28,7 @@ func AutoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
 	if _, err := pool.Exec(ctx, `
       ALTER TABLE playlists
       ADD COLUMN IF NOT EXISTS edit_mode TEXT NOT NULL DEFAULT 'everyone'
-  `); err != nil {
+    `); err != nil {
 		return err
 	}
 
@@ -41,14 +41,14 @@ func AutoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
           position    INT NOT NULL,
           created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
       )
-  `); err != nil {
+    `); err != nil {
 		return err
 	}
 
 	if _, err := pool.Exec(ctx, `
       CREATE UNIQUE INDEX IF NOT EXISTS idx_tracks_playlist_position
       ON tracks(playlist_id, position)
-  `); err != nil {
+    `); err != nil {
 		return err
 	}
 
@@ -59,7 +59,7 @@ func AutoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
           created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
           PRIMARY KEY (playlist_id, user_id)
       )
-  `); err != nil {
+    `); err != nil {
 		return err
 	}
 

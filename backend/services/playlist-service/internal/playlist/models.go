@@ -1,6 +1,8 @@
 package playlist
 
-import "time"
+import (
+	"time"
+)
 
 // Playlist represents a logical playlist used by the Playlist Editor service.
 // It intentionally contains only metadata; tracks are modelled separately.

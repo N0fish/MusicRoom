@@ -15,24 +15,24 @@ func (s *Server) handleAddTrack(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := r.Header.Get("X-User-Id")
 	if userID == "" {
-		http.Error(w, "missing user context", http.StatusUnauthorized)
+		writeError(w, http.StatusUnauthorized, "missing user context")
 		return
 	}
 
 	playlistID := chi.URLParam(r, "id")
 	if playlistID == "" {
-		http.Error(w, "missing playlist id", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "missing playlist id")
 		return
 	}
 
 	ownerID, isPublic, editMode, err := s.getPlaylistAccessInfo(ctx, playlistID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		http.Error(w, "playlist not found", http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "playlist not found")
 		return
 	}
 	if err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
 		log.Printf("playlist-service: add track fetch playlist: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 
@@ -40,22 +40,22 @@ func (s *Server) handleAddTrack(w http.ResponseWriter, r *http.Request) {
 	if userID != "" && userID != ownerID {
 		invited, err = s.userIsInvited(ctx, playlistID, userID)
 		if err != nil {
-			http.Error(w, "database error", http.StatusInternalServerError)
 			log.Printf("playlist-service: add track invited check: %v", err)
+			writeError(w, http.StatusInternalServerError, "database error")
 			return
 		}
 	}
 
 	// Private playlist: only owner or invited can access at all.
 	if !isPublic && userID != ownerID && !invited {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
 
 	// License for edit rights.
 	if userID != ownerID {
 		if editMode == editModeInvited && !invited {
-			http.Error(w, "forbidden", http.StatusForbidden)
+			writeError(w, http.StatusForbidden, "forbidden")
 			return
 		}
 		// editModeEveryone: any authenticated user with access is allowed.
@@ -66,17 +66,17 @@ func (s *Server) handleAddTrack(w http.ResponseWriter, r *http.Request) {
 		Artist string `json:"artist"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 	body.Title = strings.TrimSpace(body.Title)
 	body.Artist = strings.TrimSpace(body.Artist)
 	if body.Title == "" || len(body.Title) > 300 {
-		http.Error(w, "title must be between 1 and 300 characters", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "title must be between 1 and 300 characters")
 		return
 	}
 	if len(body.Artist) > 200 {
-		http.Error(w, "artist is too long", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "artist is too long")
 		return
 	}
 
@@ -89,11 +89,16 @@ func (s *Server) handleAddTrack(w http.ResponseWriter, r *http.Request) {
 		))
 		RETURNING id, playlist_id, title, artist, position, created_at
 	`, playlistID, body.Title, body.Artist).Scan(
-		&tr.ID, &tr.PlaylistID, &tr.Title, &tr.Artist, &tr.Position, &tr.CreatedAt,
+		&tr.ID,
+		&tr.PlaylistID,
+		&tr.Title,
+		&tr.Artist,
+		&tr.Position,
+		&tr.CreatedAt,
 	)
 	if err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
 		log.Printf("playlist-service: add track insert: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 
@@ -114,14 +119,14 @@ func (s *Server) handleMoveTrack(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := r.Header.Get("X-User-Id")
 	if userID == "" {
-		http.Error(w, "missing user context", http.StatusUnauthorized)
+		writeError(w, http.StatusUnauthorized, "missing user context")
 		return
 	}
 
 	playlistID := chi.URLParam(r, "id")
 	trackID := chi.URLParam(r, "trackId")
 	if playlistID == "" || trackID == "" {
-		http.Error(w, "missing playlist or track id", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "missing playlist or track id")
 		return
 	}
 
@@ -129,22 +134,22 @@ func (s *Server) handleMoveTrack(w http.ResponseWriter, r *http.Request) {
 		NewPosition int `json:"newPosition"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 	if body.NewPosition < 0 {
-		http.Error(w, "newPosition must be >= 0", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "newPosition must be >= 0")
 		return
 	}
 
 	ownerID, isPublic, editMode, err := s.getPlaylistAccessInfo(ctx, playlistID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		http.Error(w, "playlist not found", http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "playlist not found")
 		return
 	}
 	if err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
 		log.Printf("playlist-service: move track fetch playlist: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 
@@ -152,27 +157,27 @@ func (s *Server) handleMoveTrack(w http.ResponseWriter, r *http.Request) {
 	if userID != "" && userID != ownerID {
 		invited, err = s.userIsInvited(ctx, playlistID, userID)
 		if err != nil {
-			http.Error(w, "database error", http.StatusInternalServerError)
 			log.Printf("playlist-service: move track invited check: %v", err)
+			writeError(w, http.StatusInternalServerError, "database error")
 			return
 		}
 	}
 
 	if !isPublic && userID != ownerID && !invited {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
 	if userID != ownerID {
 		if editMode == editModeInvited && !invited {
-			http.Error(w, "forbidden", http.StatusForbidden)
+			writeError(w, http.StatusForbidden, "forbidden")
 			return
 		}
 	}
 
 	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
 		log.Printf("playlist-service: move track begin tx: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 	defer tx.Rollback(ctx)
@@ -186,12 +191,12 @@ func (s *Server) handleMoveTrack(w http.ResponseWriter, r *http.Request) {
 		FOR UPDATE
 	`, trackID, playlistID).Scan(&trackPlaylistID, &currentPos)
 	if errors.Is(err, pgx.ErrNoRows) {
-		http.Error(w, "track not found", http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "track not found")
 		return
 	}
 	if err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
 		log.Printf("playlist-service: move track fetch track: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 
@@ -199,12 +204,12 @@ func (s *Server) handleMoveTrack(w http.ResponseWriter, r *http.Request) {
 	if err := tx.QueryRow(ctx, `
 		SELECT COUNT(*) FROM tracks WHERE playlist_id = $1
 	`, playlistID).Scan(&total); err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
 		log.Printf("playlist-service: move track count: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 	if total <= 0 {
-		http.Error(w, "no tracks to move", http.StatusConflict)
+		writeError(w, http.StatusConflict, "no tracks to move")
 		return
 	}
 
@@ -214,8 +219,8 @@ func (s *Server) handleMoveTrack(w http.ResponseWriter, r *http.Request) {
 	}
 	if newPos == currentPos {
 		if err := tx.Commit(ctx); err != nil {
-			http.Error(w, "database error", http.StatusInternalServerError)
 			log.Printf("playlist-service: move track commit noop: %v", err)
+			writeError(w, http.StatusInternalServerError, "database error")
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -244,8 +249,8 @@ func (s *Server) handleMoveTrack(w http.ResponseWriter, r *http.Request) {
 		`, playlistID, currentPos, newPos)
 	}
 	if err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
 		log.Printf("playlist-service: move track shift: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 
@@ -255,14 +260,14 @@ func (s *Server) handleMoveTrack(w http.ResponseWriter, r *http.Request) {
 		WHERE id = $2 AND playlist_id = $1
 	`, playlistID, trackID, newPos)
 	if err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
 		log.Printf("playlist-service: move track set position: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
 		log.Printf("playlist-service: move track commit: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 
@@ -288,25 +293,25 @@ func (s *Server) handleDeleteTrack(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := r.Header.Get("X-User-Id")
 	if userID == "" {
-		http.Error(w, "missing user context", http.StatusUnauthorized)
+		writeError(w, http.StatusUnauthorized, "missing user context")
 		return
 	}
 
 	playlistID := chi.URLParam(r, "id")
 	trackID := chi.URLParam(r, "trackId")
 	if playlistID == "" || trackID == "" {
-		http.Error(w, "missing playlist or track id", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "missing playlist or track id")
 		return
 	}
 
 	ownerID, isPublic, editMode, err := s.getPlaylistAccessInfo(ctx, playlistID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		http.Error(w, "playlist not found", http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "playlist not found")
 		return
 	}
 	if err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
 		log.Printf("playlist-service: delete track fetch playlist: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 
@@ -314,27 +319,27 @@ func (s *Server) handleDeleteTrack(w http.ResponseWriter, r *http.Request) {
 	if userID != "" && userID != ownerID {
 		invited, err = s.userIsInvited(ctx, playlistID, userID)
 		if err != nil {
-			http.Error(w, "database error", http.StatusInternalServerError)
 			log.Printf("playlist-service: delete track invited check: %v", err)
+			writeError(w, http.StatusInternalServerError, "database error")
 			return
 		}
 	}
 
 	if !isPublic && userID != ownerID && !invited {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
 	if userID != ownerID {
 		if editMode == editModeInvited && !invited {
-			http.Error(w, "forbidden", http.StatusForbidden)
+			writeError(w, http.StatusForbidden, "forbidden")
 			return
 		}
 	}
 
 	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
 		log.Printf("playlist-service: delete track begin tx: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 	defer tx.Rollback(ctx)
@@ -347,12 +352,12 @@ func (s *Server) handleDeleteTrack(w http.ResponseWriter, r *http.Request) {
 		FOR UPDATE
 	`, trackID, playlistID).Scan(&pos)
 	if errors.Is(err, pgx.ErrNoRows) {
-		http.Error(w, "track not found", http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "track not found")
 		return
 	}
 	if err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
 		log.Printf("playlist-service: delete track fetch: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 
@@ -360,8 +365,8 @@ func (s *Server) handleDeleteTrack(w http.ResponseWriter, r *http.Request) {
 		DELETE FROM tracks
 		WHERE id = $1 AND playlist_id = $2
 	`, trackID, playlistID); err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
 		log.Printf("playlist-service: delete track delete: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 
@@ -370,14 +375,14 @@ func (s *Server) handleDeleteTrack(w http.ResponseWriter, r *http.Request) {
 		SET position = position - 1
 		WHERE playlist_id = $1 AND position > $2
 	`, playlistID, pos); err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
 		log.Printf("playlist-service: delete track compact: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
 		log.Printf("playlist-service: delete track commit: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 
