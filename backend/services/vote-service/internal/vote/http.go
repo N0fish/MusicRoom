@@ -1,7 +1,6 @@
 package vote
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -27,7 +26,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, userServiceURL string) htt
 	// health
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		writeJSON(w, http.StatusOK, map[string]any{
 			"status":  "ok",
 			"service": "vote-service",
 		})

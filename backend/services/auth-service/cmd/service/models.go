@@ -48,6 +48,7 @@ func autoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
   `)
 	if err != nil {
 		log.Printf("migrate auth-service: %v", err)
+		return err
 	}
 	return nil
 }

@@ -307,3 +307,9 @@ https://profile.intra.42.fr/oauth/applications/new
 ```http
 https://console.cloud.google.com
 ```
+```http
+https://musicroom-auth-service.onrender.com/health
+```
+```http
+https://musicroom-4k3a.onrender.com/health
+```

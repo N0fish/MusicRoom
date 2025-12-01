@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
-	"net/http"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -52,12 +51,6 @@ func (s *Server) publishEvent(ctx context.Context, event map[string]any) {
 	if err := s.rdb.Publish(ctx, "broadcast", string(data)).Err(); err != nil {
 		log.Printf("playlist-service: publish event: %v", err)
 	}
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
 }
 
 type DB = pgxpool.Pool

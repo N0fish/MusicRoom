@@ -16,17 +16,17 @@ func (s *HTTPServer) handleVote(w http.ResponseWriter, r *http.Request) {
 	eventID := chi.URLParam(r, "id")
 	voterID := r.Header.Get("X-User-Id")
 	if voterID == "" {
-		http.Error(w, "missing X-User-Id", http.StatusUnauthorized)
+		writeError(w, http.StatusUnauthorized, "missing X-User-Id")
 		return
 	}
 
 	var body voteRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if body.TrackID == "" {
-		http.Error(w, "trackId is required", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "trackId is required")
 		return
 	}
 	resp, err := registerVote(r.Context(), s.pool, s.rdb, eventID, voterID, body.TrackID, body.Lat, body.Lng)
@@ -34,8 +34,8 @@ func (s *HTTPServer) handleVote(w http.ResponseWriter, r *http.Request) {
 		writeVoteError(w, err)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *HTTPServer) handleTally(w http.ResponseWriter, r *http.Request) {
@@ -48,7 +48,7 @@ func (s *HTTPServer) handleTally(w http.ResponseWriter, r *http.Request) {
         ORDER BY c DESC, track ASC
     `, eventID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	defer rows.Close()
@@ -57,12 +57,15 @@ func (s *HTTPServer) handleTally(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var row Row
 		if err := rows.Scan(&row.Track, &row.Count); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		out = append(out, row)
 	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(out)
+	writeJSON(w, http.StatusOK, out)
 }

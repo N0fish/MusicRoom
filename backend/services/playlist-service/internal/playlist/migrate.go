@@ -21,6 +21,7 @@ func AutoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
   `)
 	if err != nil {
 		log.Printf("migrate playlists-service: %v", err)
+		return err
 	}
 
 	// Ensure edit_mode exists (for older schemas).

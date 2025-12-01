@@ -72,15 +72,6 @@ func registerVote(ctx context.Context, pool *pgxpool.Pool, rdb *redis.Client, ev
 	}, nil
 }
 
-func writeVoteError(w http.ResponseWriter, err error) {
-	var ve *voteError
-	if errors.As(err, &ve) {
-		http.Error(w, ve.msg, ve.status)
-		return
-	}
-	http.Error(w, err.Error(), http.StatusInternalServerError)
-}
-
 func checkUserExists(ctx context.Context, baseURL, userID string) error {
 	u, err := url.Parse(baseURL)
 	if err != nil {

@@ -3,6 +3,7 @@ package vote
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"time"
 
@@ -40,7 +41,7 @@ func (s *HTTPServer) handleListEvents(w http.ResponseWriter, r *http.Request) {
         `, userID, visibilityPublic)
 	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	defer rows.Close()
@@ -56,7 +57,7 @@ func (s *HTTPServer) handleListEvents(w http.ResponseWriter, r *http.Request) {
 			&geoLat, &geoLng, &geoRadius, &voteStart, &voteEnd,
 			&ev.CreatedAt, &ev.UpdatedAt,
 		); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		ev.GeoLat = geoLat
@@ -66,15 +67,18 @@ func (s *HTTPServer) handleListEvents(w http.ResponseWriter, r *http.Request) {
 		ev.VoteEnd = voteEnd
 		events = append(events, ev)
 	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(events)
+	writeJSON(w, http.StatusOK, events)
 }
 
 func (s *HTTPServer) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("X-User-Id")
 	if userID == "" {
-		http.Error(w, "missing X-User-Id", http.StatusUnauthorized)
+		writeError(w, http.StatusUnauthorized, "missing X-User-Id")
 		return
 	}
 
@@ -89,11 +93,11 @@ func (s *HTTPServer) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		VoteEnd     *string  `json:"voteEnd"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if body.Name == "" {
-		http.Error(w, "name is required", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "name is required")
 		return
 	}
 	if body.Visibility == "" {
@@ -107,7 +111,7 @@ func (s *HTTPServer) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 	if body.VoteStart != nil && *body.VoteStart != "" {
 		t, err := time.Parse(time.RFC3339, *body.VoteStart)
 		if err != nil {
-			http.Error(w, "invalid voteStart (must be RFC3339)", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "invalid voteStart (must be RFC3339)")
 			return
 		}
 		voteStart = &t
@@ -115,14 +119,14 @@ func (s *HTTPServer) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 	if body.VoteEnd != nil && *body.VoteEnd != "" {
 		t, err := time.Parse(time.RFC3339, *body.VoteEnd)
 		if err != nil {
-			http.Error(w, "invalid voteEnd (must be RFC3339)", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "invalid voteEnd (must be RFC3339)")
 			return
 		}
 		voteEnd = &t
 	}
 
 	if err := validateVotingWindow(voteStart, voteEnd, time.Now()); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -134,7 +138,7 @@ func (s *HTTPServer) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
         RETURNING id
     `, body.Name, body.Visibility, userID, body.LicenseMode, body.GeoLat, body.GeoLng, body.GeoRadiusM, voteStart, voteEnd).Scan(&id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -148,12 +152,16 @@ func (s *HTTPServer) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 			"licenseMode": body.LicenseMode,
 		},
 	}
-	if b, err := json.Marshal(evt); err == nil {
-		_ = s.rdb.Publish(ctx, "broadcast", string(b)).Err()
+	// if b, err := json.Marshal(evt); err == nil {
+	// 	_ = s.rdb.Publish(ctx, "broadcast", string(b)).Err()
+	// }
+	if b, err := json.Marshal(evt); err != nil {
+		log.Printf("vote-service: marshal event.created: %v", err)
+	} else if err := s.rdb.Publish(ctx, "broadcast", string(b)).Err(); err != nil {
+		log.Printf("vote-service: publish event.created: %v", err)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"id":          id,
 		"name":        body.Name,
 		"visibility":  body.Visibility,
@@ -169,60 +177,59 @@ func (s *HTTPServer) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 	ev, err := loadEvent(r.Context(), s.pool, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			http.Error(w, "event not found", http.StatusNotFound)
+			writeError(w, http.StatusNotFound, "event not found")
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	if ev.Visibility == visibilityPrivate {
 		if userID == "" {
-			http.Error(w, "missing X-User-Id", http.StatusUnauthorized)
+			writeError(w, http.StatusUnauthorized, "missing X-User-Id")
 			return
 		}
 
 		if ev.OwnerID != userID {
 			invited, err := isInvited(r.Context(), s.pool, ev.ID, userID)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				writeError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
 			if !invited {
-				http.Error(w, "event is private, invite required", http.StatusForbidden)
+				writeError(w, http.StatusForbidden, "event is private, invite required")
 				return
 			}
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(ev)
+	writeJSON(w, http.StatusOK, ev)
 }
 
 func (s *HTTPServer) handleDeleteEvent(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	userID := r.Header.Get("X-User-Id")
 	if userID == "" {
-		http.Error(w, "missing X-User-Id", http.StatusUnauthorized)
+		writeError(w, http.StatusUnauthorized, "missing X-User-Id")
 		return
 	}
 
 	ev, err := loadEvent(r.Context(), s.pool, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			http.Error(w, "event not found", http.StatusNotFound)
+			writeError(w, http.StatusNotFound, "event not found")
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if ev.OwnerID != userID {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
 
 	if _, err := s.pool.Exec(r.Context(), `DELETE FROM events WHERE id=$1`, id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -232,25 +239,26 @@ func (s *HTTPServer) handlePatchEvent(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	userID := r.Header.Get("X-User-Id")
 	if userID == "" {
-		http.Error(w, "missing X-User-Id", http.StatusUnauthorized)
+		writeError(w, http.StatusUnauthorized, "missing X-User-Id")
 		return
 	}
 
 	ev, err := loadEvent(r.Context(), s.pool, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			http.Error(w, "event not found", http.StatusNotFound)
+			writeError(w, http.StatusNotFound, "event not found")
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if ev.OwnerID != userID {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
 
 	var body struct {
+		Name        *string  `json:"name"`
 		Visibility  *string  `json:"visibility"`
 		LicenseMode *string  `json:"licenseMode"`
 		GeoLat      *float64 `json:"geoLat"`
@@ -260,7 +268,7 @@ func (s *HTTPServer) handlePatchEvent(w http.ResponseWriter, r *http.Request) {
 		VoteEnd     *string  `json:"voteEnd"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -270,6 +278,13 @@ func (s *HTTPServer) handlePatchEvent(w http.ResponseWriter, r *http.Request) {
 	setParts := []string{}
 	args := []any{}
 	idxArg := 1
+
+	if body.Name != nil && *body.Name != "" {
+		setParts = append(setParts, "name = $"+itoa(idxArg))
+		args = append(args, *body.Name)
+		idxArg++
+		ev.Name = *body.Name
+	}
 
 	if body.Visibility != nil && *body.Visibility != "" {
 		setParts = append(setParts, "visibility = $"+itoa(idxArg))
@@ -308,7 +323,7 @@ func (s *HTTPServer) handlePatchEvent(w http.ResponseWriter, r *http.Request) {
 		} else {
 			t, err := time.Parse(time.RFC3339, *body.VoteStart)
 			if err != nil {
-				http.Error(w, "invalid voteStart", http.StatusBadRequest)
+				writeError(w, http.StatusBadRequest, "invalid voteStart")
 				return
 			}
 			setParts = append(setParts, "vote_start = $"+itoa(idxArg))
@@ -324,7 +339,7 @@ func (s *HTTPServer) handlePatchEvent(w http.ResponseWriter, r *http.Request) {
 		} else {
 			t, err := time.Parse(time.RFC3339, *body.VoteEnd)
 			if err != nil {
-				http.Error(w, "invalid voteEnd", http.StatusBadRequest)
+				writeError(w, http.StatusBadRequest, "invalid voteEnd")
 				return
 			}
 			setParts = append(setParts, "vote_end = $"+itoa(idxArg))
@@ -335,7 +350,7 @@ func (s *HTTPServer) handlePatchEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := validateVotingWindow(newStart, newEnd, time.Now()); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -348,19 +363,19 @@ func (s *HTTPServer) handlePatchEvent(w http.ResponseWriter, r *http.Request) {
 	query := "UPDATE events SET " + join(setParts, ", ") + ", updated_at = now() WHERE id = $" + itoa(idxArg)
 	ct, err := s.pool.Exec(r.Context(), query, args...)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if ct.RowsAffected() == 0 {
-		http.Error(w, "event not found", http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "event not found")
 		return
 	}
 
 	updated, err := loadEvent(r.Context(), s.pool, id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(updated)
+
+	writeJSON(w, http.StatusOK, updated)
 }

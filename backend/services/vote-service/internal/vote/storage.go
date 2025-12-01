@@ -27,6 +27,7 @@ func AutoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
   `)
 	if err != nil {
 		log.Printf("migrate vote-service: %v", err)
+		return err
 	}
 	_, _ = pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS owner_id TEXT NOT NULL DEFAULT ''`)
 	_, _ = pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS license_mode TEXT NOT NULL DEFAULT 'everyone'`)

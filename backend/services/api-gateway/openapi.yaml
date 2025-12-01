@@ -212,31 +212,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  # /auth/verify-email:
-  #   get:
-  #     summary: Verify email using token
-  #     tags: [auth]
-  #     parameters:
-  #       - in: query
-  #         name: token
-  #         required: true
-  #         schema:
-  #           type: string
-  #         description: Verification token from email link
-  #     responses:
-  #       '200':
-  #         description: Email successfully verified
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/VerifyEmailResponse'
-  #       '400':
-  #         description: Invalid or expired token
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/ErrorResponse'
-
   /auth/forgot-password:
     post:
       summary: Request password reset link
@@ -287,7 +262,6 @@ paths:
 
   # --------------------
   # AUTH: OAuth (Google / 42)
-  # Для фронта/mобилки — в основном browser/webview flow.
   # --------------------
   /auth/google/login:
     get:

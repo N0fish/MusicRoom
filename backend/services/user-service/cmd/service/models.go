@@ -57,6 +57,7 @@ func autoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
   `)
 	if err != nil {
 		log.Printf("migrate user_profiles: %v", err)
+		return err
 	}
 
 	_, _ = pool.Exec(ctx, `ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS username TEXT NOT NULL DEFAULT ''`)

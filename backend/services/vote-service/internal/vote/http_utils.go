@@ -1,5 +1,11 @@
 package vote
 
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+)
+
 func join(parts []string, sep string) string {
 	if len(parts) == 0 {
 		return ""
@@ -32,4 +38,27 @@ func itoa(i int) string {
 		digits[pos] = '-'
 	}
 	return string(digits[pos:])
+}
+
+func writeError(w http.ResponseWriter, status int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error": msg,
+	})
+}
+
+func writeVoteError(w http.ResponseWriter, err error) {
+	var ve *voteError
+	if errors.As(err, &ve) {
+		writeError(w, ve.status, ve.msg)
+		return
+	}
+	writeError(w, http.StatusInternalServerError, err.Error())
+}
+
+func writeJSON(w http.ResponseWriter, status int, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
 }
