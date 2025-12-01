@@ -18,6 +18,7 @@ func main() {
 
 	port := getenv("PORT", "3004")
 	redisURL := getenv("REDIS_URL", "redis://redis:6379")
+	frontendBaseURL := getenv("FRONTEND_BASE_URL", "")
 
 	// Redis
 	opt, err := redis.ParseURL(redisURL)
@@ -29,7 +30,7 @@ func main() {
 
 	// Hub + сервер
 	hub := realtime.NewHub()
-	srv := realtime.NewServer(hub, rdb, ctx)
+	srv := realtime.NewServer(hub, rdb, ctx, frontendBaseURL)
 
 	// Запускаем фоновые горутины (hub + подписка на Redis)
 	go hub.Run()

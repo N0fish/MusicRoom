@@ -13,27 +13,27 @@ import (
 )
 
 var upgrader = websocket.Upgrader{
-	// В проде стоит ограничивать origin, но за gateway'ом это ок ??????
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
 }
 
 type Server struct {
-	hub *Hub
-	rdb *redis.Client
-	ctx context.Context
+	hub            *Hub
+	rdb            *redis.Client
+	ctx            context.Context
+	frontendOrigin string
 }
 
-func NewServer(hub *Hub, rdb *redis.Client, ctx context.Context) *Server {
+func NewServer(hub *Hub, rdb *redis.Client, ctx context.Context, frontendOrigin string) *Server {
 	return &Server{
-		hub: hub,
-		rdb: rdb,
-		ctx: ctx,
+		hub:            hub,
+		rdb:            rdb,
+		ctx:            ctx,
+		frontendOrigin: frontendOrigin,
 	}
 }
 
-// Router создаёт chi.Router с нашими маршрутами.
 func (s *Server) Router(middlewares ...func(http.Handler) http.Handler) chi.Router {
 	r := chi.NewRouter()
 
@@ -48,7 +48,6 @@ func (s *Server) Router(middlewares ...func(http.Handler) http.Handler) chi.Rout
 	return r
 }
 
-// RunRedisSubscriber подписывается на канал "broadcast" и шлёт сообщения в hub.
 func (s *Server) RunRedisSubscriber() {
 	sub := s.rdb.Subscribe(s.ctx, "broadcast")
 	defer sub.Close()
@@ -67,6 +66,20 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
+	if !websocket.IsWebSocketUpgrade(r) {
+		writeError(w, http.StatusBadRequest, "websocket upgrade required")
+		return
+	}
+
+	if s.frontendOrigin != "" {
+		origin := r.Header.Get("Origin")
+		if origin != "" && origin != s.frontendOrigin {
+			log.Printf("realtime-service: forbidden origin %q (allowed %q)", origin, s.frontendOrigin)
+			writeError(w, http.StatusForbidden, "origin not allowed")
+			return
+		}
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("realtime-service: ws upgrade: %v", err)
@@ -88,7 +101,6 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		client.send <- b
 	}
 
-	// Запускаем две горутины: читаем и пишем.
 	go client.writePump()
 	go client.readPump()
 }
@@ -98,18 +110,21 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 
 	var payload any
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
+
 	data, err := json.Marshal(payload)
 	if err != nil {
-		http.Error(w, "encode error", http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "encode error")
 		return
 	}
+
 	if err := s.rdb.Publish(s.ctx, "broadcast", string(data)).Err(); err != nil {
-		http.Error(w, "redis error", http.StatusInternalServerError)
 		log.Printf("realtime-service: publish error: %v", err)
+		writeError(w, http.StatusInternalServerError, "redis error")
 		return
 	}
+
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
