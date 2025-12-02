@@ -1,12 +1,26 @@
-.vscode
-/bin
-/dist
-**/vendor
+# OS / Editor files
+.DS_Store
+.vscode/
 **/*.log
+
+# Env files
+.env
 **/.env
-# Tuist generated files
+
+# Build artifacts
+bin/
+dist/
+**/vendor/
+Derived/
+DerivedData/
+
+# Certificates / Security
+certs/
+
+# Tuist (iOS tooling) generated files
 *.xcodeproj
 *.xcworkspace
-DerivedData/
 Tuist/Cache/
-Derived/
+
+# Node / Package managers
+node_modules/
