@@ -69,6 +69,7 @@ PLAYLIST_SERVICE_URL=http://playlist-service:3002
 VOTE_SERVICE_URL=http://vote-service:3003
 MOCK_SERVICE_URL=http://mock-service:3006
 REALTIME_SERVICE_URL=http://realtime-service:3004
+MUSIC_PROVIDER_SERVICE_URL=http://music-provider-service:3007
 
 # JWT secret must be the same as in auth-service
 JWT_SECRET=${JWT_SECRET}
@@ -151,6 +152,17 @@ EENV
       cat > "$ENV_FILE" <<EENV
 PORT=3004
 REDIS_URL=${REDIS_URL}
+FRONTEND_BASE_URL=http://localhost:${FRONTEND_PORT}
+EENV
+      ;;
+
+    # MUSIC PROVIDER SERVICE
+    "backend/services/music-provider-service")
+      cat > "$ENV_FILE" <<EENV
+PORT=3007
+YOUTUBE_API_KEY=
+REDIS_URL=${REDIS_URL}
+YOUTUBE_SEARCH_URL=https://www.googleapis.com/youtube/v3/search
 EENV
       ;;
 
