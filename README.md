@@ -282,6 +282,16 @@ Ex : GET /users/me
 
 ---
 
+## Создать самоподписаные сертификаты
+```bash
+openssl req -x509 -newkey rsa:4096 -sha256 -days 365 \
+  -nodes -keyout key.pem -out cert.pem \
+  -subj "/CN=localhost" \
+  -addext "subjectAltName=DNS:localhost"
+```
+
+---
+
 ## Нужно сделать:
 Дохуя всего надо сделать
 

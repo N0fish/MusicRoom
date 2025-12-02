@@ -32,6 +32,9 @@ services:
       - ./backend/services/api-gateway/.env
     ports:
       - "8080:8080"
+    # volumes:
+    #   - ./certs/cert.pem:/certs/cert.pem:ro
+    #   - ./certs/key.pem:/certs/key.pem:ro
     depends_on:
       - auth-service
       - user-service
@@ -119,6 +122,9 @@ services:
       - ./frontend/.env
     ports:
       - "5175:5175"
+    # volumes:
+    #   - ./certs/cert.pem:/certs/cert.pem:ro
+    #   - ./certs/key.pem:/certs/key.pem:ro
     depends_on:
       - api-gateway
       - realtime-service
