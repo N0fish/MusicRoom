@@ -1,13 +1,21 @@
 package provider
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/redis/go-redis/v9"
+)
 
 type Server struct {
-	yt *YouTubeClient
+	yt  *YouTubeClient
+	rdb *redis.Client
 }
 
-func NewServer(yt *YouTubeClient) *Server {
-	return &Server{yt: yt}
+func NewServer(yt *YouTubeClient, rdb *redis.Client) *Server {
+	return &Server{
+		yt:  yt,
+		rdb: rdb,
+	}
 }
 
 func (s *Server) HandleHealth(w http.ResponseWriter, r *http.Request) {

@@ -24,23 +24,6 @@ func AutoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
 		return err
 	}
 
-	// Ensure edit_mode exists (for older schemas).
-	if _, err := pool.Exec(ctx, `
-      ALTER TABLE playlists
-      ADD COLUMN IF NOT EXISTS edit_mode TEXT NOT NULL DEFAULT 'everyone'
-    `); err != nil {
-		return err
-	}
-
-	if _, err := pool.Exec(ctx, `
-      ALTER TABLE tracks
-      ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT '',
-      ADD COLUMN IF NOT EXISTS provider_track_id TEXT NOT NULL DEFAULT '',
-      ADD COLUMN IF NOT EXISTS thumbnail_url TEXT NOT NULL DEFAULT '';
-    `); err != nil {
-		return err
-	}
-
 	if _, err := pool.Exec(ctx, `
       CREATE TABLE IF NOT EXISTS tracks (
           id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -48,6 +31,9 @@ func AutoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
           title       TEXT NOT NULL,
           artist      TEXT NOT NULL,
           position    INT NOT NULL,
+          provider    TEXT NOT NULL DEFAULT '',
+          provider_track_id TEXT NOT NULL DEFAULT '',
+          thumbnail_url TEXT NOT NULL DEFAULT '',
           created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
       )
     `); err != nil {

@@ -60,11 +60,15 @@ func autoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
 		return err
 	}
 
-	_, _ = pool.Exec(ctx, `ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS username TEXT NOT NULL DEFAULT ''`)
-	_, _ = pool.Exec(ctx, `ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS has_custom_avatar BOOLEAN NOT NULL DEFAULT FALSE`)
-
-	_, _ = pool.Exec(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profiles_username ON user_profiles (LOWER(username)) WHERE username <> ''`)
-	_, _ = pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_user_profiles_display_name ON user_profiles (LOWER(display_name))`)
+	_, _ = pool.Exec(ctx, `
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profiles_username
+      ON user_profiles (LOWER(username))
+      WHERE username <> ''
+  `)
+	_, _ = pool.Exec(ctx, `
+      CREATE INDEX IF NOT EXISTS idx_user_profiles_display_name
+      ON user_profiles (LOWER(display_name))
+  `)
 
 	_, err = pool.Exec(ctx, `
       CREATE TABLE IF NOT EXISTS friend_requests (

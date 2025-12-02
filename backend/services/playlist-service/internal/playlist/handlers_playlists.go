@@ -307,11 +307,12 @@ func (s *Server) handleGetPlaylist(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := s.db.Query(ctx, `
-		SELECT id, playlist_id, title, artist, position, created_at
-		FROM tracks
-		WHERE playlist_id = $1
-		ORDER BY position ASC
-	`, playlistID)
+    SELECT id, playlist_id, title, artist, position, created_at,
+           provider, provider_track_id, thumbnail_url
+    FROM tracks
+    WHERE playlist_id = $1
+    ORDER BY position ASC
+  `, playlistID)
 	if err != nil {
 		log.Printf("playlist-service: list tracks: %v", err)
 		writeError(w, http.StatusInternalServerError, "database error")
@@ -329,6 +330,9 @@ func (s *Server) handleGetPlaylist(w http.ResponseWriter, r *http.Request) {
 			&tr.Artist,
 			&tr.Position,
 			&tr.CreatedAt,
+			&tr.Provider,
+			&tr.ProviderTrackID,
+			&tr.ThumbnailURL,
 		); err != nil {
 			log.Printf("playlist-service: list tracks scan: %v", err)
 			writeError(w, http.StatusInternalServerError, "database error")

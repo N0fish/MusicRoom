@@ -72,6 +72,7 @@ func (s *Server) handleAddTrack(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
+
 	body.Title = strings.TrimSpace(body.Title)
 	body.Artist = strings.TrimSpace(body.Artist)
 	body.Provider = strings.TrimSpace(strings.ToLower(body.Provider))
@@ -100,13 +101,33 @@ func (s *Server) handleAddTrack(w http.ResponseWriter, r *http.Request) {
 
 	var tr Track
 	err = s.db.QueryRow(ctx, `
-		INSERT INTO tracks (playlist_id, title, artist, position, provider, provider_track_id, thumbnail_url)
-		VALUES ($1,$2,$3, COALESCE(
-			(SELECT MAX(position)+1 FROM tracks WHERE playlist_id = $1),
-			0
-		), $4, $5, $6)
-		RETURNING id, playlist_id, title, artist, position, created_at, provider, provider_track_id, thumbnail_url
-	`, playlistID, body.Title, body.Artist).Scan(
+      INSERT INTO tracks (
+          playlist_id,
+          title,
+          artist,
+          position,
+          provider,
+          provider_track_id,
+          thumbnail_url
+      )
+      VALUES (
+          $1, $2, $3,
+          COALESCE(
+            (SELECT MAX(position)+1 FROM tracks WHERE playlist_id = $1),
+            0
+          ),
+          $4, $5, $6
+      )
+      RETURNING id, playlist_id, title, artist, position, created_at,
+                provider, provider_track_id, thumbnail_url
+  `,
+		playlistID,
+		body.Title,
+		body.Artist,
+		body.Provider,
+		body.ProviderTrack,
+		body.ThumbnailURL,
+	).Scan(
 		&tr.ID,
 		&tr.PlaylistID,
 		&tr.Title,

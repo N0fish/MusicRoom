@@ -101,6 +101,9 @@ services:
       - ./backend/services/music-provider-service/.env
     ports:
       - "3007:3007"
+    depends_on:
+      redis:
+        condition: service_started
 
   mock-service:
     build: ./backend/services/mock-service
