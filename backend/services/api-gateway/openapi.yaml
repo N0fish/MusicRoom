@@ -16,10 +16,17 @@ paths:
         '200':
           description: Gateway is healthy
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
-                example: ok
+                type: object
+                properties:
+                  status:
+                    type: string
+                  service:
+                    type: string
+                example:
+                  status: ok
+                  service: api-gateway
 
   # --------------------
   # AUTH: email + password, tokens
@@ -79,6 +86,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
           description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many login attempts from this IP (rate limited by API Gateway)
           content:
             application/json:
               schema:
@@ -390,7 +403,7 @@ paths:
       summary: Get current user's profile
       tags: [users]
       security:
-        - bearerAuth: []   # Фронт/мобилка должны передавать токен(обязателен JWT-эндпоинт), иначе API Gateway ответит 401
+        - bearerAuth: []   # Frontend and mobile clients must send a JWT access token; otherwise the API Gateway returns 401
       responses:
         '200':
           description: Current user profile
@@ -409,7 +422,7 @@ paths:
       summary: Update current user's profile
       tags: [users]
       security:
-        - bearerAuth: []   # обязательный JWT
+        - bearerAuth: []   # JWT is required
       requestBody:
         required: true
         content:
@@ -722,15 +735,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many playlist creations from this IP (rate limited by API Gateway)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /playlists/{id}:
     get:
       summary: Get playlist details with tracks
       description: >
         Returns playlist metadata and all its tracks.
-        Public playlists are visible to everyone.
-        Private playlists are only visible to the owner and invited users.
+        For authenticated users:
+        - public playlists are visible to any user,
+        - private playlists are visible only to the owner and invited users.
       tags: [playlists]
+      security:
+        - bearerAuth: []
       parameters:
         - in: path
           name: id
@@ -1728,28 +1750,28 @@ components:
           description: Profile ID
         userId:
           type: string
-          description: ID пользователя из auth-service (auth_users.id)
+          description: ID of the user from auth-service (auth_users.id)
         username:
           type: string
-          description: Уникальный читаемый ник пользователя (sleepy-strawberry и т.п.)
+          description: Human-readable unique username (e.g. "sleepy-strawberry")
         displayName:
           type: string
-          description: Отображаемое имя пользователя
+          description: Display name visible to other users
         avatarUrl:
           type: string
           format: uri
         hasCustomAvatar:
           type: boolean
-          description: Показывает, сгенерировал ли пользователь кастомный аватар
+          description: Indicates whether the user has generated a custom avatar
         publicBio:
           type: string
-          description: Публичная информация (видна всем)
+          description: Public bio, visible to everyone
         friendsBio:
           type: string
-          description: Информация, которая в будущем будет видна только друзьям
+          description: Bio that will be visible only to friends in the future
         privateBio:
           type: string
-          description: Приватная информация (видит только владелец)
+          description: Private bio, visible only to the owner
         visibility:
           $ref: '#/components/schemas/UserVisibility'
         preferences:
@@ -1767,10 +1789,10 @@ components:
       properties:
         userId:
           type: string
-          description: ID пользователя (как в auth / auth_me)
+          description: User ID (same as in auth / auth_me)
         username:
           type: string
-          description: Уникальный читаемый ник пользователя
+          description: Human-readable unique username
         displayName:
           type: string
         avatarUrl:

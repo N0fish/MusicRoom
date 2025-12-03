@@ -23,7 +23,8 @@ func main() {
 
 	jwtSecret := []byte(getenv("JWT_SECRET", ""))
 	if len(jwtSecret) == 0 {
-		log.Println("api-gateway: WARNING: JWT_SECRET is empty, JWT validation disabled")
+		// log.Println("api-gateway: WARNING: JWT_SECRET is empty, JWT validation disabled")
+		log.Fatal("api-gateway: JWT_SECRET is empty, cannot start without JWT validation")
 	}
 
 	rps := getenvInt("RATE_LIMIT_RPS", 20)
