@@ -19,10 +19,12 @@ func main() {
 	playlistURL := getenv("PLAYLIST_SERVICE_URL", "http://playlist-service:3002")
 	mockURL := getenv("MOCK_SERVICE_URL", "http://mock-service:3006")
 	realtimeURL := getenv("REALTIME_SERVICE_URL", "http://realtime-service:3004")
+	musicProviderURL := getenv("MUSIC_PROVIDER_SERVICE_URL", "http://music-provider-service:3007")
 
 	jwtSecret := []byte(getenv("JWT_SECRET", ""))
 	if len(jwtSecret) == 0 {
-		log.Println("api-gateway: WARNING: JWT_SECRET is empty, JWT validation disabled")
+		// log.Println("api-gateway: WARNING: JWT_SECRET is empty, JWT validation disabled")
+		log.Fatal("api-gateway: JWT_SECRET is empty, cannot start without JWT validation")
 	}
 
 	rps := getenvInt("RATE_LIMIT_RPS", 20)
@@ -38,13 +40,13 @@ func main() {
 
 	// health
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		// writeJSON(w, http.StatusOK, map[string]any{
-		// 	"status":  "ok",
-		// 	"service": "api-gateway",
-		// })
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":  "ok",
+			"service": "api-gateway",
+		})
+		// w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		// w.WriteHeader(http.StatusOK)
+		// _, _ = w.Write([]byte("ok"))
 	})
 
 	// openapi.yaml
@@ -59,6 +61,7 @@ func main() {
 	playlistProxy := mustNewReverseProxy(playlistURL)
 	mockProxy := mustNewReverseProxy(mockURL)
 	realtimeProxy := mustNewReverseProxy(realtimeURL)
+	musicProxy := mustNewReverseProxy(musicProviderURL)
 
 	// Auth routes (no JWT required)
 	r.Method(http.MethodPost, "/auth/register", authProxy)
@@ -177,10 +180,33 @@ func main() {
 	// Realtime (ws passthrough is handled in realtime-service; here we mostly proxy HTTP control if needed)
 	r.Mount("/realtime", realtimeProxy)
 
+	// Music provider (search for tracks in external SDK)
+	r.Group(func(r chi.Router) {
+		if len(jwtSecret) != 0 {
+			r.Use(jwtAuthMiddleware(jwtSecret))
+		}
+		r.Method(http.MethodGet, "/music/search", musicProxy)
+	})
+
 	log.Printf("api-gateway listening on :%s", port)
 	if err := http.ListenAndServe(":"+port, r); err != nil {
 		log.Fatalf("api-gateway: %v", err)
 	}
+
+	// tlsEnabled := getenv("TLS_ENABLED", "false") == "true"
+	// if tlsEnabled {
+	// 	certFile := getenv("TLS_CERT_FILE", "/certs/cert.pem")
+	// 	keyFile := getenv("TLS_KEY_FILE", "/certs/key.pem")
+	// 	log.Printf("api-gateway listening on HTTPS :%s", port)
+	// 	if err := http.ListenAndServeTLS(":"+port, certFile, keyFile, r); err != nil {
+	// 		log.Fatalf("api-gateway (TLS): %v", err)
+	// 	}
+	// } else {
+	// 	log.Printf("api-gateway listening on HTTP :%s", port)
+	// 	if err := http.ListenAndServe(":"+port, r); err != nil {
+	// 		log.Fatalf("api-gateway: %v", err)
+	// 	}
+	// }
 }
 
 func getenv(k, def string) string {

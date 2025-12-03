@@ -92,3 +92,9 @@ start:
 	@$(MAKE) env
 	@$(MAKE) up
 	@echo "The site is available at: http://$(LOCAL_IP):5175"
+
+
+.PHONY: test-gateway
+test-gateway:
+	docker compose -f docker-compose.gateway-test.yaml up --build --abort-on-container-exit
+	docker compose -f docker-compose.gateway-test.yaml down --remove-orphans

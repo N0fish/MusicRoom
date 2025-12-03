@@ -24,6 +24,10 @@ type Track struct {
 	Artist     string    `json:"artist"`
 	Position   int       `json:"position"`
 	CreatedAt  time.Time `json:"createdAt"`
+
+	Provider        string `json:"provider,omitempty"`        // "youtube"
+	ProviderTrackID string `json:"providerTrackId,omitempty"` // ID ролика/трека у провайдера
+	ThumbnailURL    string `json:"thumbnailUrl,omitempty"`    // постер с YouTube
 }
 
 // PlaylistInvite represents an invited user to a playlist.

@@ -32,11 +32,16 @@ services:
       - ./backend/services/api-gateway/.env
     ports:
       - "8080:8080"
+    # volumes:
+    #   - ./certs/cert.pem:/certs/cert.pem:ro
+    #   - ./certs/key.pem:/certs/key.pem:ro
     depends_on:
       - auth-service
       - user-service
       - playlist-service
       - vote-service
+      - realtime-service
+      - music-provider-service
       - mock-service
 
   auth-service:
@@ -93,6 +98,16 @@ services:
       redis:
         condition: service_started
 
+  music-provider-service:
+    build: ./backend/services/music-provider-service
+    env_file:
+      - ./backend/services/music-provider-service/.env
+    ports:
+      - "3007:3007"
+    depends_on:
+      redis:
+        condition: service_started
+
   mock-service:
     build: ./backend/services/mock-service
     # нам нужен этот порт их .env, если мы будем использовать этот сервис
@@ -107,6 +122,9 @@ services:
       - ./frontend/.env
     ports:
       - "5175:5175"
+    # volumes:
+    #   - ./certs/cert.pem:/certs/cert.pem:ro
+    #   - ./certs/key.pem:/certs/key.pem:ro
     depends_on:
       - api-gateway
       - realtime-service

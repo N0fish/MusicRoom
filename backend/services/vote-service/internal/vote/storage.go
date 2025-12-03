@@ -29,15 +29,6 @@ func AutoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
 		log.Printf("migrate vote-service: %v", err)
 		return err
 	}
-	_, _ = pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS owner_id TEXT NOT NULL DEFAULT ''`)
-	_, _ = pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS license_mode TEXT NOT NULL DEFAULT 'everyone'`)
-	_, _ = pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS geo_lat DOUBLE PRECISION`)
-	_, _ = pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS geo_lng DOUBLE PRECISION`)
-	_, _ = pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS geo_radius_m INT`)
-	_, _ = pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS vote_start TIMESTAMPTZ`)
-	_, _ = pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS vote_end TIMESTAMPTZ`)
-	_, _ = pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now()`)
-	_, _ = pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`)
 
 	if _, err := pool.Exec(ctx, `
         CREATE TABLE IF NOT EXISTS votes(

@@ -57,11 +57,20 @@ func jwtAuthMiddleware(secret []byte) func(http.Handler) http.Handler {
 
 func corsMiddleware(next http.Handler) http.Handler {
 	allowedOrigin := getenv("CORS_ALLOWED_ORIGIN", "*")
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+		origin := r.Header.Get("Origin")
+
+		if allowedOrigin == "*" {
+			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+		} else {
+			if origin == allowedOrigin {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+			}
+		}
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
 
 		if strings.ToUpper(r.Method) == "OPTIONS" {
 			w.WriteHeader(http.StatusNoContent)
@@ -98,7 +107,12 @@ func requestLogMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-var rateMu sync.Mutex
+// Generic per-IP rate limiting
+var (
+	rateMu              sync.Mutex
+	rateLastCleanup     time.Time
+	rateCleanupInterval = 5 * time.Minute
+)
 
 func rateLimitMiddleware(rps int) func(http.Handler) http.Handler {
 	window := time.Second
@@ -109,6 +123,16 @@ func rateLimitMiddleware(rps int) func(http.Handler) http.Handler {
 			now := time.Now()
 
 			rateMu.Lock()
+
+			if rateLastCleanup.IsZero() || now.Sub(rateLastCleanup) > rateCleanupInterval {
+				for k, info := range rateData {
+					if now.After(info.resetAt.Add(rateCleanupInterval)) {
+						delete(rateData, k)
+					}
+				}
+				rateLastCleanup = now
+			}
+
 			ri, ok := rateData[ip]
 			if !ok || now.After(ri.resetAt) {
 				ri = &rateInfo{count: 0, resetAt: now.Add(window)}
@@ -121,7 +145,6 @@ func rateLimitMiddleware(rps int) func(http.Handler) http.Handler {
 
 			if count > rps {
 				w.Header().Set("Retry-After", strconv.Itoa(int(reset.Sub(now).Seconds())))
-				// http.Error(w, "too many requests", http.StatusTooManyRequests)
 				writeError(w, http.StatusTooManyRequests, "too many requests")
 				return
 			}
@@ -131,9 +154,12 @@ func rateLimitMiddleware(rps int) func(http.Handler) http.Handler {
 	}
 }
 
+// Login rate limit
 var (
-	loginRateMu   sync.Mutex
-	loginLastSeen = map[string]time.Time{}
+	loginRateMu          sync.Mutex
+	loginLastSeen        = map[string]time.Time{}
+	loginLastCleanup     time.Time
+	loginCleanupInterval = 10 * time.Minute
 )
 
 func loginRateLimitMiddleware(next http.Handler) http.Handler {
@@ -142,10 +168,19 @@ func loginRateLimitMiddleware(next http.Handler) http.Handler {
 		now := time.Now()
 
 		loginRateMu.Lock()
+
+		if loginLastCleanup.IsZero() || now.Sub(loginLastCleanup) > loginCleanupInterval {
+			for k, t := range loginLastSeen {
+				if now.Sub(t) > loginCleanupInterval {
+					delete(loginLastSeen, k)
+				}
+			}
+			loginLastCleanup = now
+		}
+
 		last, ok := loginLastSeen[ip]
 		if ok && now.Sub(last) < time.Second {
 			loginRateMu.Unlock()
-			// http.Error(w, "too many login attempts", http.StatusTooManyRequests)
 			writeError(w, http.StatusTooManyRequests, "too many login attempts")
 			return
 		}
@@ -156,9 +191,12 @@ func loginRateLimitMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// Playlist creation rate limit
 var (
-	playlistCreateRateMu   sync.Mutex
-	playlistCreateLastSeen = map[string]time.Time{}
+	playlistCreateRateMu          sync.Mutex
+	playlistCreateLastSeen        = map[string]time.Time{}
+	playlistCreateLastCleanup     time.Time
+	playlistCreateCleanupInterval = 10 * time.Minute
 )
 
 func playlistCreateRateLimitMiddleware(next http.Handler) http.Handler {
@@ -169,10 +207,19 @@ func playlistCreateRateLimitMiddleware(next http.Handler) http.Handler {
 		now := time.Now()
 
 		playlistCreateRateMu.Lock()
+
+		if playlistCreateLastCleanup.IsZero() || now.Sub(playlistCreateLastCleanup) > playlistCreateCleanupInterval {
+			for k, t := range playlistCreateLastSeen {
+				if now.Sub(t) > playlistCreateCleanupInterval {
+					delete(playlistCreateLastSeen, k)
+				}
+			}
+			playlistCreateLastCleanup = now
+		}
+
 		last, ok := playlistCreateLastSeen[ip]
 		if ok && now.Sub(last) < window {
 			playlistCreateRateMu.Unlock()
-			// http.Error(w, "too many playlist creations", http.StatusTooManyRequests)
 			writeError(w, http.StatusTooManyRequests, "too many playlist creations")
 			return
 		}
