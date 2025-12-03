@@ -57,11 +57,20 @@ func jwtAuthMiddleware(secret []byte) func(http.Handler) http.Handler {
 
 func corsMiddleware(next http.Handler) http.Handler {
 	allowedOrigin := getenv("CORS_ALLOWED_ORIGIN", "*")
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+		origin := r.Header.Get("Origin")
+
+		if allowedOrigin == "*" {
+			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+		} else {
+			if origin == allowedOrigin {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+			}
+		}
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
 
 		if strings.ToUpper(r.Method) == "OPTIONS" {
 			w.WriteHeader(http.StatusNoContent)

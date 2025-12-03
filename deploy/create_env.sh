@@ -79,6 +79,7 @@ RATE_LIMIT_RPS=20
 
 # CORS
 CORS_ALLOWED_ORIGIN=*
+# CORS_ALLOWED_ORIGIN=http://localhost:5175
 EENV
       ;;
 
