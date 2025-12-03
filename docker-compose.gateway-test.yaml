@@ -1,0 +1,8 @@
+services:
+  api-gateway-tests:
+    build:
+      context: ./backend/services/api-gateway
+      dockerfile: Dockerfile.test
+    env_file:
+      - ./backend/services/api-gateway/.env.test
+    command: ["go", "test", "./..."]
