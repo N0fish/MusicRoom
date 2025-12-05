@@ -45,7 +45,7 @@ input:-webkit-autofill:active {
   }
 
   .card {
-    @apply bg-card-bg rounded-2xl shadow p-6;
+    @apply bg-card-bg rounded-lg shadow;
   }
 
   .btn-small {
