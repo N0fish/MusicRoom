@@ -15,7 +15,7 @@ import (
 //go:embed templates/*.gohtml
 var tplFS embed.FS
 
-//go:embed static/*
+//go:embed all:static
 var staticFS embed.FS
 
 type App struct {
@@ -52,6 +52,9 @@ func main() {
 		}
 		if strings.HasSuffix(p, ".css") {
 			w.Header().Set("content-type", "text/css")
+		}
+		if strings.HasSuffix(p, ".svg") {
+			w.Header().Set("content-type", "image/svg+xml")
 		}
 		w.Write(b)
 	})

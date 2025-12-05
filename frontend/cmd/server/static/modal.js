@@ -4,7 +4,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const modalContent = document.getElementById('modal-content');
     const modalInput = document.getElementById('modal-input');
     const modalActions = document.getElementById('modal-actions');
-    const modalCloseBtn = document.getElementById('modal-close-btn');
+
+    const toast = document.getElementById('toast');
+    const toastTitle = document.getElementById('toast-title');
+    const toastContent = document.getElementById('toast-content');
 
     function showModal() {
         modal.classList.remove('hidden');
@@ -14,22 +17,14 @@ document.addEventListener('DOMContentLoaded', () => {
         modal.classList.add('hidden');
     }
 
-    if(modalCloseBtn) {
-        modalCloseBtn.addEventListener('click', hideModal);
-    }
-
-
     window.showAlert = ({ title, content }) => {
-        modalTitle.textContent = title;
-        modalContent.textContent = content;
-        modalInput.classList.add('hidden');
-        modalActions.innerHTML = '';
-        const closeButton = document.createElement('button');
-        closeButton.textContent = 'Close';
-        closeButton.className = 'px-4 py-2 bg-gray-700 text-text text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-600 focus:outline-none';
-        closeButton.addEventListener('click', hideModal);
-        modalActions.appendChild(closeButton);
-        showModal();
+        toastTitle.textContent = title;
+        toastContent.textContent = content;
+        toast.classList.remove('hidden');
+
+        setTimeout(() => {
+            toast.classList.add('hidden');
+        }, 3000);
     }
 
     window.showPrompt = ({ title, content, onConfirm }) => {
@@ -49,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const cancelButton = document.createElement('button');
         cancelButton.textContent = 'Cancel';
-        cancelButton.className = 'mt-2 px-4 py-2 bg-gray-700 text-text text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-600 focus:outline-none';
+        cancelButton.className = 'btn-modal mt-2';
         cancelButton.addEventListener('click', hideModal);
 
         modalActions.appendChild(confirmButton);

@@ -115,6 +115,14 @@ var (
 )
 
 func rateLimitMiddleware(rps int) func(http.Handler) http.Handler {
+	type rateInfo struct {
+		count   int
+		resetAt time.Time
+	}
+	var (
+		mu       sync.Mutex
+		rateData = make(map[string]*rateInfo)
+	)
 	window := time.Second
 
 	return func(next http.Handler) http.Handler {
@@ -122,6 +130,7 @@ func rateLimitMiddleware(rps int) func(http.Handler) http.Handler {
 			ip := clientIP(r)
 			now := time.Now()
 
+<<<<<<< HEAD
 			rateMu.Lock()
 
 			if rateLastCleanup.IsZero() || now.Sub(rateLastCleanup) > rateCleanupInterval {
@@ -133,6 +142,9 @@ func rateLimitMiddleware(rps int) func(http.Handler) http.Handler {
 				rateLastCleanup = now
 			}
 
+=======
+			mu.Lock()
+>>>>>>> feat(frontend): improve avatar and modal styling, fix rate limit
 			ri, ok := rateData[ip]
 			if !ok || now.After(ri.resetAt) {
 				ri = &rateInfo{count: 0, resetAt: now.Add(window)}
@@ -141,7 +153,7 @@ func rateLimitMiddleware(rps int) func(http.Handler) http.Handler {
 			ri.count++
 			count := ri.count
 			reset := ri.resetAt
-			rateMu.Unlock()
+			mu.Unlock()
 
 			if count > rps {
 				w.Header().Set("Retry-After", strconv.Itoa(int(reset.Sub(now).Seconds())))

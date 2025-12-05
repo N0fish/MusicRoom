@@ -1,108 +1,272 @@
 {{define "content"}}
-<div class="grid md:grid-cols-2 gap-6">
-  <div class="card">
-    <h1 class="text-2xl font-bold mb-4">My Profile</h1>
-    <div id="profile" class="space-y-2 text-text-muted">
-      <p><strong>Email:</strong> <span id="email"></span></p>
-      <p><strong>Email Verified:</strong> <span id="email-verified"></span></p>
-      <p><strong>Display name:</strong> <span id="displayName"></span></p>
-      <p><strong>Bio:</strong> <span id="bio"></span></p>
-      <p><strong>Visibility:</strong> <span id="visibility"></span></p>
-    </div>
-  </div>
+<div class="flex justify-center items-start pt-10">
+  <div class="card w-full max-w-2xl">
+    <h1 class="text-2xl font-bold mb-6 text-center">My Profile</h1>
 
-  <div class="card">
-    <h2 class="text-2xl font-bold mb-4">Edit Profile</h2>
-    <form id="profile-form" class="space-y-4">
-      <div>
-        <label for="input-displayName" class="block text-sm font-medium text-text-muted">Display name:</label>
-        <input type="text" name="displayName" id="input-displayName" class="mt-1 w-full bg-input-bg border-input-border rounded-md px-3 py-2 focus:outline-none">
+    <div class="flex flex-col items-center space-y-4">
+      <div class="relative group">
+        <img id="avatar" class="w-32 h-32 rounded-full shadow-lg" alt="User avatar">
+        <button id="randomize-avatar" class="absolute bottom-0 right-0 bg-primary hover:bg-primary-hover text-white p-2 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h5M20 20v-5h-5M4 20h5v-5M20 4h-5v5" />
+          </svg>
+        </button>
       </div>
-      <div>
-        <label for="input-bio" class="block text-sm font-medium text-text-muted">Bio:</label>
-        <textarea name="bio" id="input-bio" rows="3" class="mt-1 w-full bg-input-bg border-input-border rounded-md px-3 py-2 focus:outline-none"></textarea>
+    </div>
+
+    <div id="profile-details" class="mt-8 space-y-4">
+      <div class="flex items-center justify-between py-2 border-b border-gray-700">
+        <span class="font-semibold text-text-muted">Username</span>
+        <span id="username" class="text-text"></span>
       </div>
-      <div>
-        <label for="input-visibility" class="block text-sm font-medium text-text-muted">Visibility:</label>
-        <select name="visibility" id="input-visibility" class="mt-1 w-full bg-input-bg border-input-border rounded-md px-3 py-2 focus:outline-none">
-          <option value="public">public</option>
-          <option value="friends">friends</option>
-          <option value="private">private</option>
-        </select>
+      <div class="flex items-center justify-between py-2 border-b border-gray-700">
+        <span class="font-semibold text-text-muted">Display Name</span>
+        <div id="displayName-view" class="flex items-center gap-2">
+          <span id="displayName" class="text-text"></span>
+          <button id="edit-displayName-btn" class="text-primary hover:text-primary-hover">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+            </svg>
+          </button>
+        </div>
+        <div id="displayName-edit" class="hidden">
+          <input type="text" id="input-displayName" class="bg-input-bg border-input-border rounded-md px-2 py-1 focus:outline-none">
+          <button id="save-displayName-btn" class="btn-small ml-2">Save</button>
+          <button id="cancel-displayName-btn" class="btn-small-secondary ml-2">Cancel</button>
+        </div>
       </div>
-      <div>
-        <label for="input-genres" class="block text-sm font-medium text-text-muted">Favorite genres (comma separated):</label>
-        <input type="text" name="genres" id="input-genres" class="mt-1 w-full bg-input-bg border-input-border rounded-md px-3 py-2 focus:outline-none">
+       <div class="flex items-center justify-between py-2 border-b border-gray-700">
+        <span class="font-semibold text-text-muted">Email</span>
+        <div class="flex items-center gap-2">
+            <span id="email" class="text-text"></span>
+            <span id="email-verified-status" class="relative group">
+                <!-- Icon will be inserted here by JavaScript -->
+                <div id="email-verified-tooltip" class="absolute z-10 hidden px-3 py-2 text-sm font-medium text-white bg-card-bg rounded-lg shadow-sm -mt-10 left-1/2 -translate-x-1/2 group-hover:block whitespace-nowrap">
+                    <!-- Tooltip text will be inserted here by JavaScript -->
+                </div>
+            </span>
+        </div>
       </div>
-      <button type="submit" class="btn">Save</button>
-    </form>
+      <!-- Music Preferences -->
+      <div class="flex items-center justify-between py-2 border-b border-gray-700">
+        <span class="font-semibold text-text-muted">Genres</span>
+        <div id="genres-view" class="flex items-center gap-2">
+          <span id="genres" class="text-text"></span>
+          <button id="edit-genres-btn" class="text-primary hover:text-primary-hover">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+            </svg>
+          </button>
+        </div>
+        <div id="genres-edit" class="hidden">
+          <input type="text" id="input-genres" class="bg-input-bg border-input-border rounded-md px-2 py-1 focus:outline-none" placeholder="Comma-separated">
+          <button id="save-genres-btn" class="btn-small ml-2">Save</button>
+          <button id="cancel-genres-btn" class="btn-small-secondary ml-2">Cancel</button>
+        </div>
+      </div>
+      <div class="flex items-center justify-between py-2 border-b border-gray-700">
+        <span class="font-semibold text-text-muted">Artists</span>
+        <div id="artists-view" class="flex items-center gap-2">
+          <span id="artists" class="text-text"></span>
+          <button id="edit-artists-btn" class="text-primary hover:text-primary-hover">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+            </svg>
+          </button>
+        </div>
+        <div id="artists-edit" class="hidden">
+          <input type="text" id="input-artists" class="bg-input-bg border-input-border rounded-md px-2 py-1 focus:outline-none" placeholder="Comma-separated">
+          <button id="save-artists-btn" class="btn-small ml-2">Save</button>
+          <button id="cancel-artists-btn" class="btn-small-secondary ml-2">Cancel</button>
+        </div>
+      </div>
+      <div class="flex items-center justify-between py-2 border-b border-gray-700">
+        <span class="font-semibold text-text-muted">Moods</span>
+        <div id="moods-view" class="flex items-center gap-2">
+          <span id="moods" class="text-text"></span>
+          <button id="edit-moods-btn" class="text-primary hover:text-primary-hover">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+            </svg>
+          </button>
+        </div>
+        <div id="moods-edit" class="hidden">
+          <input type="text" id="input-moods" class="bg-input-bg border-input-border rounded-md px-2 py-1 focus:outline-none" placeholder="Comma-separated">
+          <button id="save-moods-btn" class="btn-small ml-2">Save</button>
+          <button id="cancel-moods-btn" class="btn-small-secondary ml-2">Cancel</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
 <script>
   const API = "{{.API}}";
+  let userProfile = {};
 
   async function loadProfile() {
-    const resUsers = await authService.fetchWithAuth(API + "/users/me");
-    if (!resUsers.ok) {
-      console.error("failed to load profile", await resUsers.text());
+    try {
+      const resUsers = await authService.fetchWithAuth(API + "/users/me");
+      if (!resUsers.ok) throw new Error("Failed to load user profile");
+      userProfile = await resUsers.json();
+
+      const resAuth = await authService.fetchWithAuth(API + "/auth/me");
+      if (!resAuth.ok) throw new Error("Failed to load auth data");
+      const dataAuth = await resAuth.json();
+
+      document.getElementById("email").textContent = dataAuth.email || "N/A";
+      const emailVerifiedStatusEl = document.getElementById("email-verified-status");
+      const emailVerifiedTooltipEl = document.getElementById("email-verified-tooltip");
+      
+      // Clear previous icon
+      const currentIcon = emailVerifiedStatusEl.querySelector('svg');
+      if (currentIcon) {
+          currentIcon.remove();
+      }
+
+      const iconSpan = document.createElement('span');
+      if (dataAuth.emailVerified) {
+        iconSpan.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-500" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+          </svg>
+        `;
+        emailVerifiedTooltipEl.textContent = "Email Verified";
+      } else {
+        iconSpan.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+          </svg>
+        `;
+        emailVerifiedTooltipEl.textContent = "Email Not Verified";
+      }
+      emailVerifiedStatusEl.prepend(iconSpan);
+      
+      document.getElementById("username").textContent = userProfile.username || "Not set";
+      document.getElementById("displayName").textContent = userProfile.displayName || "Set a display name";
+      document.getElementById("input-displayName").value = userProfile.displayName || "";
+      document.getElementById("avatar").src = '/static/avatars/default.svg';
+
+      const preferences = userProfile.preferences || {};
+      document.getElementById("genres").textContent = (preferences.genres || []).join(', ') || "Add your favorite genres";
+      document.getElementById("input-genres").value = (preferences.genres || []).join(', ');
+      document.getElementById("artists").textContent = (preferences.artists || []).join(', ') || "Add your favorite artists";
+      document.getElementById("input-artists").value = (preferences.artists || []).join(', ');
+      document.getElementById("moods").textContent = (preferences.moods || []).join(', ') || "Add your favorite moods";
+      document.getElementById("input-moods").value = (preferences.moods || []).join(', ');
+
+    } catch (error) {
+      console.error(error.message);
+      showAlert({ title: 'Error', content: error.message });
       authService.logout();
-      return;
     }
-    const dataUsers = await resUsers.json();
-
-    const resAuth = await authService.fetchWithAuth(API + "/auth/me");
-    if (!resAuth.ok) {
-        console.error("failed to load auth data", await resAuth.text());
-        authService.logout();
-        return;
-    }
-    const dataAuth = await resAuth.json();
-
-    document.getElementById("email").textContent = dataAuth.email || "";
-    document.getElementById("email-verified").textContent = dataAuth.emailVerified ? "Yes" : "No";
-
-    document.getElementById("displayName").textContent = dataUsers.displayName || "";
-    document.getElementById("bio").textContent = dataUsers.bio || "";
-    document.getElementById("visibility").textContent = dataUsers.visibility || "";
-
-    const genres = (dataUsers.preferences && dataUsers.preferences.genres) || [];
-    document.getElementById("input-displayName").value = dataUsers.displayName || "";
-    document.getElementById("input-bio").value = dataUsers.bio || "";
-    document.getElementById("input-visibility").value = dataUsers.visibility || "public";
-    document.getElementById("input-genres").value = genres.join(", ");
   }
 
-  document.getElementById("profile-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const displayName = document.getElementById("input-displayName").value;
-    const bio = document.getElementById("input-bio").value;
-    const visibility = document.getElementById("input-visibility").value;
-    const genresStr = document.getElementById("input-genres").value;
-    const genres = genresStr.split(",").map(s => s.trim()).filter(Boolean);
+  function toggleEdit(field, isEditing) {
+    document.getElementById(`${field}-view`).classList.toggle('hidden', isEditing);
+    document.getElementById(`${field}-edit`).classList.toggle('hidden', !isEditing);
+    if (isEditing) {
+        const currentVal = document.getElementById(field).textContent;
+        if (currentVal !== 'N/A') {
+            document.getElementById(`input-${field}`).value = currentVal;
+        } else {
+            document.getElementById(`input-${field}`).value = '';
+        }
+    }
+  }
 
-    const body = {
-      displayName,
-      bio,
-      visibility,
-      preferences: {
-        genres: genres
-      }
-    };
+  async function saveField(field, value) {
+    const body = {};
+    body[field] = value;
 
-    const res = await authService.fetchWithAuth(API + "/users/me/profile", {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
+    const res = await authService.fetchWithAuth(API + "/users/me", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     });
+
     if (!res.ok) {
-      showAlert({ title: 'Error', content: "Failed to save profile: " + await res.text() });
+      showAlert({ title: 'Error', content: `Failed to update ${field}.` });
       return;
     }
-    await loadProfile();
-    showAlert({ title: 'Success', content: "Profile updated" });
+    
+    const data = await res.json();
+    userProfile[field] = data[field]; // Update local userProfile object
+    document.getElementById(field).textContent = data[field] || "N/A";
+    toggleEdit(field, false);
+    showAlert({ title: 'Success', content: `${field.charAt(0).toUpperCase() + field.slice(1)} updated.` });
+  }
+  
+  async function savePreferencesField(field, value) {
+    const values = value.split(',').map(s => s.trim()).filter(Boolean);
+    const body = {
+        preferences: {
+            ...userProfile.preferences,
+        }
+    };
+    body.preferences[field] = values;
+
+
+    const res = await authService.fetchWithAuth(API + "/users/me", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      showAlert({ title: 'Error', content: `Failed to update ${field}.` });
+      return;
+    }
+    
+    const data = await res.json();
+    userProfile.preferences = data.preferences; // Update local profile copy
+    const prefValue = (data.preferences[field] || []).join(', ');
+    document.getElementById(field).textContent = prefValue || "N/A";
+    toggleEdit(field, false);
+    showAlert({ title: 'Success', content: `${field.charAt(0).toUpperCase() + field.slice(1)} updated.` });
+  }
+
+  // --- Event Listeners ---
+  document.getElementById('edit-displayName-btn').addEventListener('click', () => toggleEdit('displayName', true));
+  document.getElementById('cancel-displayName-btn').addEventListener('click', () => toggleEdit('displayName', false));
+  document.getElementById('save-displayName-btn').addEventListener('click', () => saveField('displayName', document.getElementById('input-displayName').value));
+
+  document.getElementById('edit-genres-btn').addEventListener('click', () => toggleEdit('genres', true));
+  document.getElementById('cancel-genres-btn').addEventListener('click', () => toggleEdit('genres', false));
+  document.getElementById('save-genres-btn').addEventListener('click', () => savePreferencesField('genres', document.getElementById('input-genres').value));
+
+  document.getElementById('edit-artists-btn').addEventListener('click', () => toggleEdit('artists', true));
+  document.getElementById('cancel-artists-btn').addEventListener('click', () => toggleEdit('artists', false));
+  document.getElementById('save-artists-btn').addEventListener('click', () => savePreferencesField('artists', document.getElementById('input-artists').value));
+
+  document.getElementById('edit-moods-btn').addEventListener('click', () => toggleEdit('moods', true));
+  document.getElementById('cancel-moods-btn').addEventListener('click', () => toggleEdit('moods', false));
+  document.getElementById('save-moods-btn').addEventListener('click', () => savePreferencesField('moods', document.getElementById('input-moods').value));
+  
+  document.getElementById('randomize-avatar').addEventListener('click', async () => {
+    const randomizeBtn = document.getElementById('randomize-avatar');
+    randomizeBtn.disabled = true;
+
+    const res = await authService.fetchWithAuth(API + "/users/me/avatar/random", {
+      method: "POST"
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      let errorMessage = "Failed to generate new avatar.";
+      if (res.status === 429) {
+        errorMessage = "You are generating avatars too quickly. Please wait a moment.";
+      }
+      showAlert({ title: 'Error', content: errorMessage });
+      setTimeout(() => { randomizeBtn.disabled = false; }, 3000);
+      return;
+    }
+
+    const data = await res.json();
+    document.getElementById('avatar').src = data.avatarUrl;
+    showAlert({ title: 'Success', content: "New avatar generated!" });
+
+    setTimeout(() => { randomizeBtn.disabled = false; }, 3000);
   });
 
   loadProfile();

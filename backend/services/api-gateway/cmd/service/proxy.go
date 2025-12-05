@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"time"
 )
 
 func mustNewReverseProxy(target string) http.Handler {
@@ -44,12 +43,3 @@ func clientIP(r *http.Request) string {
 	}
 	return host
 }
-
-type rateInfo struct {
-	count   int
-	resetAt time.Time
-}
-
-var (
-	rateData = map[string]*rateInfo{}
-)

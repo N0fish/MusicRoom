@@ -47,4 +47,27 @@ input:-webkit-autofill:active {
   .card {
     @apply bg-card-bg rounded-2xl shadow p-6;
   }
+
+  .btn-small {
+    @apply bg-primary hover:bg-primary-hover text-white font-semibold py-1 px-3 rounded-md text-sm;
+  }
+
+  .btn-small-secondary {
+    @apply bg-gray-600 hover:bg-gray-700 text-white font-semibold py-1 px-3 rounded-md text-sm;
+  }
+
+  .btn-modal {
+    @apply px-4 py-2 text-primary text-base font-medium rounded-md w-full shadow-sm focus:outline-none;
+  }
+}
+
+.hidden {
+  display: none;
+}
+
+#avatar {
+  color: white;
+  text-align: center;
+  font-size: 0.75rem; /* text-xs */
+  line-height: 8rem; /* h-32 */
 }
