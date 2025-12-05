@@ -22,7 +22,7 @@ func (s *Server) handleSearchUsers(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.Query(r.Context(), `
       SELECT id, user_id, display_name, username,
              avatar_url, has_custom_avatar,
-             public_bio, friends_bio, private_bio,
+             bio,
              visibility, preferences,
              created_at, updated_at
       FROM user_profiles

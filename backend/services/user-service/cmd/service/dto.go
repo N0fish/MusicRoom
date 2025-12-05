@@ -19,9 +19,7 @@ type UserProfileResponse struct {
 	DisplayName     string         `json:"displayName"`
 	AvatarURL       string         `json:"avatarUrl,omitempty"`
 	HasCustomAvatar bool           `json:"hasCustomAvatar"`
-	PublicBio       string         `json:"publicBio,omitempty"`
-	FriendsBio      string         `json:"friendsBio,omitempty"`
-	PrivateBio      string         `json:"privateBio,omitempty"`
+	Bio             string         `json:"bio,omitempty"`
 	Visibility      string         `json:"visibility"`
 	Preferences     PreferencesDTO `json:"preferences"`
 	CreatedAt       time.Time      `json:"createdAt"`
@@ -33,6 +31,7 @@ type PublicUserProfileResponse struct {
 	Username    string         `json:"username"`
 	DisplayName string         `json:"displayName"`
 	AvatarURL   string         `json:"avatarUrl,omitempty"`
+	Bio         string         `json:"bio,omitempty"`
 	Visibility  string         `json:"visibility"`
 	Preferences PreferencesDTO `json:"preferences"`
 }
@@ -40,9 +39,7 @@ type PublicUserProfileResponse struct {
 type UpdateUserProfileRequest struct {
 	DisplayName *string         `json:"displayName,omitempty"`
 	AvatarURL   *string         `json:"avatarUrl,omitempty"`
-	PublicBio   *string         `json:"publicBio,omitempty"`
-	FriendsBio  *string         `json:"friendsBio,omitempty"`
-	PrivateBio  *string         `json:"privateBio,omitempty"`
+	Bio         *string         `json:"bio,omitempty"`
 	Visibility  *string         `json:"visibility,omitempty"`
 	Preferences *PreferencesDTO `json:"preferences,omitempty"`
 }
@@ -76,9 +73,7 @@ func (r *UpdateUserProfileRequest) Validate() error {
 	}
 
 	trimPtr(r.DisplayName, maxShort)
-	trimPtr(r.PublicBio, maxLong)
-	trimPtr(r.FriendsBio, maxLong)
-	trimPtr(r.PrivateBio, maxLong)
+	trimPtr(r.Bio, maxLong)
 
 	return nil
 }
@@ -125,9 +120,7 @@ func UserProfileResponseFromModel(p UserProfile) UserProfileResponse {
 		DisplayName:     p.DisplayName,
 		AvatarURL:       p.AvatarURL,
 		HasCustomAvatar: p.HasCustomAvatar,
-		PublicBio:       p.PublicBio,
-		FriendsBio:      p.FriendsBio,
-		PrivateBio:      p.PrivateBio,
+		Bio:             p.Bio,
 		Visibility:      p.Visibility,
 		Preferences: PreferencesDTO{
 			Genres:  append([]string{}, p.Preferences.Genres...),
@@ -145,6 +138,7 @@ func PublicUserProfileFromModel(p UserProfile) PublicUserProfileResponse {
 		Username:    p.Username,
 		DisplayName: p.DisplayName,
 		AvatarURL:   p.AvatarURL,
+		Bio:         p.Bio,
 		Visibility:  p.Visibility,
 		Preferences: PreferencesDTO{
 			Genres:  append([]string{}, p.Preferences.Genres...),

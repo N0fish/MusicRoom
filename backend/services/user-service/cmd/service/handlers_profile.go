@@ -63,14 +63,8 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request) {
 	if req.DisplayName != nil {
 		prof.DisplayName = strings.TrimSpace(*req.DisplayName)
 	}
-	if req.PublicBio != nil {
-		prof.PublicBio = strings.TrimSpace(*req.PublicBio)
-	}
-	if req.FriendsBio != nil {
-		prof.FriendsBio = strings.TrimSpace(*req.FriendsBio)
-	}
-	if req.PrivateBio != nil {
-		prof.PrivateBio = strings.TrimSpace(*req.PrivateBio)
+	if req.Bio != nil {
+		prof.Bio = strings.TrimSpace(*req.Bio)
 	}
 	if req.Visibility != nil {
 		prof.Visibility = *req.Visibility
@@ -117,34 +111,35 @@ func (s *Server) handleGetPublicProfile(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	resp := PublicUserProfileFromModel(prof)
+
+	isOwner := viewerID == targetUserID
 	isFriend := false
-	if viewerID != "" && viewerID != targetUserID {
+	if viewerID != "" && !isOwner {
 		isFriend, _ = s.areFriends(r.Context(), viewerID, targetUserID)
 	}
-	isOwner := viewerID == targetUserID
-
-	resp := PublicUserProfileFromModel(prof)
 
 	switch prof.Visibility {
 	case "private":
-		if !isOwner {
-			resp.DisplayName = ""
-			resp.Preferences = PreferencesDTO{}
-			resp.AvatarURL = defaultAvatarURL()
-		} else {
+		if isOwner {
+			resp.Bio = prof.Bio
 			resp.AvatarURL = resolveAvatarForViewer(prof, isFriend, isOwner)
+		} else {
+			resp.Bio = ""
+			resp.AvatarURL = defaultAvatarURL()
 		}
+
 	case "friends":
-		if !isFriend && !isOwner {
-			resp.DisplayName = ""
-			resp.Preferences = PreferencesDTO{}
-			resp.AvatarURL = defaultAvatarURL()
-		} else {
+		if isOwner || isFriend {
+			resp.Bio = prof.Bio
 			resp.AvatarURL = resolveAvatarForViewer(prof, isFriend, isOwner)
+		} else {
+			resp.Bio = ""
+			resp.AvatarURL = defaultAvatarURL()
 		}
+
 	case "public":
-		resp.AvatarURL = resolveAvatarForViewer(prof, isFriend, isOwner)
-	default:
+		resp.Bio = prof.Bio
 		resp.AvatarURL = resolveAvatarForViewer(prof, isFriend, isOwner)
 	}
 

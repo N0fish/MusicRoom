@@ -20,9 +20,7 @@ type UserProfile struct {
 	Username        string
 	AvatarURL       string
 	HasCustomAvatar bool
-	PublicBio       string
-	FriendsBio      string
-	PrivateBio      string
+	Bio             string
 	Visibility      string
 	Preferences     Preferences
 	CreatedAt       time.Time
@@ -46,9 +44,7 @@ func autoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
           username TEXT NOT NULL DEFAULT '',
           avatar_url TEXT NOT NULL DEFAULT '',
           has_custom_avatar BOOLEAN NOT NULL DEFAULT FALSE,
-          public_bio TEXT NOT NULL DEFAULT '',
-          friends_bio TEXT NOT NULL DEFAULT '',
-          private_bio TEXT NOT NULL DEFAULT '',
+					bio TEXT NOT NULL DEFAULT '',
           visibility TEXT NOT NULL DEFAULT 'public',
           preferences JSONB NOT NULL DEFAULT '{}'::jsonb,
           created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -59,6 +55,26 @@ func autoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
 		log.Printf("migrate user_profiles: %v", err)
 		return err
 	}
+
+	// TODO: удалить после запуска новой версии клиента
+	_, err = pool.Exec(ctx, `
+      ALTER TABLE user_profiles
+          ADD COLUMN IF NOT EXISTS bio TEXT NOT NULL DEFAULT '';
+  `)
+	if err != nil {
+		log.Printf("migrate add bio: %v", err)
+	}
+
+	_, err = pool.Exec(ctx, `
+      ALTER TABLE user_profiles
+          DROP COLUMN IF EXISTS public_bio,
+          DROP COLUMN IF EXISTS friends_bio,
+          DROP COLUMN IF EXISTS private_bio;
+  `)
+	if err != nil {
+		log.Printf("migrate drop old bio columns: %v", err)
+	}
+	// TODO: до сюда
 
 	_, _ = pool.Exec(ctx, `
       CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profiles_username
@@ -108,7 +124,7 @@ func (s *Server) findProfileByUserID(ctx context.Context, userID string) (UserPr
 	row := s.db.QueryRow(ctx, `
       SELECT id, user_id, display_name, username,
              avatar_url, has_custom_avatar,
-             public_bio, friends_bio, private_bio,
+             bio,
              visibility, preferences,
              created_at, updated_at
       FROM user_profiles
@@ -132,7 +148,7 @@ func (s *Server) getOrCreateProfile(ctx context.Context, userID string) (UserPro
       ON CONFLICT (user_id) DO NOTHING
       RETURNING id, user_id, display_name, username,
                 avatar_url, has_custom_avatar,
-                public_bio, friends_bio, private_bio,
+                bio,
                 visibility, preferences,
                 created_at, updated_at
   `, userID)
@@ -159,21 +175,17 @@ func (s *Server) saveProfile(ctx context.Context, prof UserProfile) error {
             username = $2,
             avatar_url = $3,
             has_custom_avatar = $4,
-            public_bio = $5,
-            friends_bio = $6,
-            private_bio = $7,
-            visibility = $8,
-            preferences = $9,
-            updated_at = $10
-        WHERE user_id = $11
+            bio = $5,
+            visibility = $6,
+            preferences = $7,
+            updated_at = $8
+        WHERE user_id = $9
   `,
 		prof.DisplayName,
 		prof.Username,
 		prof.AvatarURL,
 		prof.HasCustomAvatar,
-		prof.PublicBio,
-		prof.FriendsBio,
-		prof.PrivateBio,
+		prof.Bio,
 		prof.Visibility,
 		prefJSON,
 		prof.UpdatedAt,
@@ -195,9 +207,7 @@ func scanUserProfile(row pgx.Row) (UserProfile, error) {
 		&p.Username,
 		&p.AvatarURL,
 		&p.HasCustomAvatar,
-		&p.PublicBio,
-		&p.FriendsBio,
-		&p.PrivateBio,
+		&p.Bio,
 		&p.Visibility,
 		&prefBytes,
 		&p.CreatedAt,

@@ -139,9 +139,7 @@ Authorization: Bearer <accessToken>
   "userId": "uuid-пользователя",
   "displayName": "Alla",
   "avatarUrl": "https://example.com/avatar.png",
-  "publicBio": "DJ from Paris",
-  "friendsBio": "Текст, который потом будет только для друзей",
-  "privateBio": "Мои личные заметки",
+  "bio": "DJ from Paris",
   "visibility": "public",            // "public" | "friends" | "private"
   "preferences": {
     "genres": ["techno", "house"],
@@ -167,9 +165,7 @@ Content-Type: application/json
 ```json
 {
   "displayName": "DJ Alla",
-  "publicBio": "I play techno & lofi.",
-  "friendsBio": "С друзьями тусим по пятницам",
-  "privateBio": "Внутренние заметки",
+  "bio": "I play techno & lofi.",
   "avatarUrl": "https://example.com/new-avatar.png",
   "visibility": "friends",
   "preferences": {
@@ -186,9 +182,7 @@ Content-Type: application/json
   "userId": "uuid-пользователя",
   "displayName": "DJ Alla",
   "avatarUrl": "https://example.com/new-avatar.png",
-  "publicBio": "I play techno & lofi.",
-  "friendsBio": "С друзьями тусим по пятницам",
-  "privateBio": "Внутренние заметки",
+  "bio": "I play techno & lofi.",
   "visibility": "friends",
   "preferences": {
     "genres": ["techno", "lofi"],
@@ -215,7 +209,7 @@ GET /users/{id}
   "userId": "uuid-пользователя",
   "displayName": "DJ Lilo",
   "avatarUrl": "https://example.com/alice.png",
-  "publicBio": "Loves house music",
+  "bio": "Loves house music",
   "visibility": "public",
   "preferences": {
     "genres": ["house"],

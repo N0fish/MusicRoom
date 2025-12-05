@@ -208,9 +208,7 @@ Ex : GET /users/me
 	"displayName": "Alla",
 	"avatarUrl": "/static/avatars/default.svg",
 	"hasCustomAvatar": false,
-	"publicBio": "DJ from Paris",
-	"friendsBio": "Только для друзей",
-	"privateBio": "Личные заметки",
+	"bio": "DJ from Paris",
 	"visibility": "private",
 	"preferences": {
 		"genres": [

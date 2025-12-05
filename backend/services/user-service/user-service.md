@@ -10,7 +10,7 @@
 - username (уникальный читаемый ник, генерируется автоматически: sleepy-strawberry, angry-coffee…)
 - avatarUrl (стандартный SVG или сгенерированный пользователем)
 - публичное/друзьям/приватное отображение
-- bio (public / friends / private)
+- bio
 - предпочтения: жанры, артисты, настроение (массивы строк)
 
 🔹 Приватность
@@ -46,9 +46,7 @@ Ex :
   "displayName": "Alla",
   "avatarUrl": "data:image/svg+xml;utf8,...",
   "hasCustomAvatar": true,
-  "publicBio": "Hi!",
-  "friendsBio": "My close friends know...",
-  "privateBio": "Very private info",
+  "bio": "Hi!",
   "visibility": "friends",
   "preferences": {
     "genres": ["rock", "pop"],
@@ -67,9 +65,7 @@ Ex :
 изменить свой профиль
 Можно изменить:
 - displayName
-- publicBio
-- friendsBio
-- privateBio
+- bio
 - visibility (public | friends | private)
 - preferences (жанры, артисты, настроение)
 
@@ -81,9 +77,7 @@ ex :
 ```json
 {
 	"displayName": "lofafa",
-	"publicBio": "DJ from Russia",
-  "friendsBio": "Только для моих",
-  "privateBio": "For mee",
+	"bio": "DJ from Russia",
 	"visibility": "friends",
 	"preferences": {
     "genres": ["techno", "house"],
@@ -226,7 +220,7 @@ user_profiles
 - username
 - avatar_url
 - visibility
-- public_bio / friends_bio / private_bio
+- bio
 - preferences (JSONB)
 friend_requests
 - from_user_id
