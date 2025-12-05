@@ -8,7 +8,7 @@
           <img id="avatar" class="w-32 h-32 rounded-full shadow-lg" alt="User avatar">
           <button id="randomize-avatar" class="absolute bottom-0 right-0 bg-primary hover:bg-primary-hover text-white p-2 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h5M20 20v-5h-5M4 20h5v-5M20 4h-5v5" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
             </svg>
           </button>
         </div>
@@ -34,9 +34,19 @@
             <button id="cancel-displayName-btn" class="btn-small-secondary ml-2">Cancel</button>
           </div>
         </div>
-<div class="flex justify-between items-center py-2 border-b border-gray-700">
-          <div>
+<div class="py-2 border-b border-gray-700">
+          <div class="flex justify-between items-center">
             <span class="font-semibold text-text-muted">Bio</span>
+            <div class="text-right">
+              <span class="font-semibold text-text-muted text-sm">Visibility</span>
+              <select id="input-visibility" class="bg-input-bg border-input-border rounded-md px-2 py-1 focus:outline-none">
+                <option value="public">Public</option>
+                <option value="friends">Friends</option>
+                <option value="private">Private</option>
+              </select>
+            </div>
+          </div>
+          <div class="mt-2">
             <div id="publicBio-view" class="flex items-center gap-2">
               <span id="publicBio" class="text-text block break-words overflow-hidden max-w-[calc(100%-3rem)]"></span>
               <button id="edit-publicBio-btn" class="text-primary hover:text-primary-hover">
@@ -46,18 +56,10 @@
               </button>
             </div>
             <div id="publicBio-edit" class="hidden">
-              <textarea id="input-publicBio" class="bg-input-bg border-input-border rounded-md px-2 py-1 focus:outline-none" placeholder="Tell us about yourself..." maxlength="150"></textarea>
+              <textarea id="input-publicBio" class="bg-input-bg border-input-border rounded-md px-2 py-1 focus:outline-none w-full" placeholder="Tell us about yourself..." maxlength="150"></textarea>
               <button id="save-publicBio-btn" class="btn-small ml-2">Save</button>
               <button id="cancel-publicBio-btn" class="btn-small-secondary ml-2">Cancel</button>
             </div>
-          </div>
-          <div class="text-right">
-            <span class="font-semibold text-text-muted">Visibility</span>
-            <select id="input-visibility" class="bg-input-bg border-input-border rounded-md px-2 py-1 focus:outline-none">
-              <option value="public">Public</option>
-              <option value="friends">Friends</option>
-              <option value="private">Private</option>
-            </select>
           </div>
         </div>
          <div class="flex items-center justify-between py-2 border-b border-gray-700">

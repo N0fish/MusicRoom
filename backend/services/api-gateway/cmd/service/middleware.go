@@ -130,21 +130,7 @@ func rateLimitMiddleware(rps int) func(http.Handler) http.Handler {
 			ip := clientIP(r)
 			now := time.Now()
 
-<<<<<<< HEAD
-			rateMu.Lock()
-
-			if rateLastCleanup.IsZero() || now.Sub(rateLastCleanup) > rateCleanupInterval {
-				for k, info := range rateData {
-					if now.After(info.resetAt.Add(rateCleanupInterval)) {
-						delete(rateData, k)
-					}
-				}
-				rateLastCleanup = now
-			}
-
-=======
 			mu.Lock()
->>>>>>> feat(frontend): improve avatar and modal styling, fix rate limit
 			ri, ok := rateData[ip]
 			if !ok || now.After(ri.resetAt) {
 				ri = &rateInfo{count: 0, resetAt: now.Add(window)}
