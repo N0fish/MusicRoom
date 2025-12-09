@@ -138,6 +138,13 @@
       if (!resUsers.ok) throw new Error("Failed to load user profile");
       userProfile = await resUsers.json();
 
+      const avatarEl = document.getElementById("avatar");
+      if (userProfile.avatarUrl && userProfile.hasCustomAvatar) {
+          avatarEl.src = userProfile.avatarUrl;
+      } else {
+          avatarEl.src = '/static/avatars/default.svg';
+      }
+
       const resAuth = await authService.fetchWithAuth(API + "/auth/me");
       if (!resAuth.ok) throw new Error("Failed to load auth data");
       const dataAuth = await resAuth.json();
@@ -176,7 +183,6 @@
       document.getElementById("publicBio").textContent = userProfile.publicBio;
       document.getElementById("input-publicBio").value = userProfile.publicBio || "";
       document.getElementById("input-visibility").value = userProfile.visibility || "public";
-      document.getElementById("avatar").src = localStorage.getItem('selectedAvatar') || '/static/avatars/default.svg';
 
       const preferences = userProfile.preferences || {};
       document.getElementById("genres").textContent = (preferences.genres || []).join(', ');
@@ -192,6 +198,32 @@
       authService.logout();
     }
   }
+
+  async function saveAvatar(avatarUrl) {
+      try {
+          const body = {
+              avatarUrl: avatarUrl,
+          };
+
+          const res = await authService.fetchWithAuth(API + "/users/me", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body)
+          });
+
+          if (!res.ok) throw new Error("Failed to save avatar");
+
+          const data = await res.json();
+          userProfile.avatarUrl = data.avatarUrl;
+          userProfile.hasCustomAvatar = data.hasCustomAvatar;
+
+          showAlert({ title: "Success", content: "Avatar updated!" });
+      } catch (err) {
+          console.error(err);
+          showAlert({ title: "Error", content: "Could not update avatar." });
+      }
+  }
+
 
   function toggleEdit(field, isEditing) {
     document.getElementById(`${field}-view`).classList.toggle('hidden', isEditing);
@@ -289,17 +321,21 @@
     '/static/avatars/avatar2.svg',
     '/static/avatars/avatar3.svg',
     '/static/avatars/avatar4.svg',
-    '/static/avatars/avatar5.svg'
+    '/static/avatars/avatar5.svg',
+    '/static/avatars/avatar6.svg',
+    '/static/avatars/avatar7.svg',
+    '/static/avatars/avatar8.svg',
+    '/static/avatars/avatar9.svg'
   ];
   const avatarEl = document.getElementById('avatar');
 
-  document.getElementById('randomize-avatar').addEventListener('click', () => {
+  document.getElementById('randomize-avatar').addEventListener('click', async () => {
     let newAvatar;
     do {
       newAvatar = avatars[Math.floor(Math.random() * avatars.length)];
     } while (newAvatar === avatarEl.src);
     avatarEl.src = newAvatar;
-    localStorage.setItem('selectedAvatar', newAvatar);
+    await saveAvatar(newAvatar); // Save to backend
     showAlert({ title: 'Success', content: "New avatar selected!" });
   });
 

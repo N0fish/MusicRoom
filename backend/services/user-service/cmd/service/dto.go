@@ -48,9 +48,6 @@ type UpdateUserProfileRequest struct {
 }
 
 func (r *UpdateUserProfileRequest) Validate() error {
-	if r.AvatarURL != nil {
-		return errors.New("avatarUrl cannot be updated directly; use /users/me/avatar/random")
-	}
 	if r.Visibility != nil {
 		v := strings.ToLower(strings.TrimSpace(*r.Visibility))
 		switch v {

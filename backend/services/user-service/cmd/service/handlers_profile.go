@@ -83,6 +83,11 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if req.AvatarURL != nil {
+		prof.AvatarURL = *req.AvatarURL
+		prof.HasCustomAvatar = true
+	}
+
 	prof.UpdatedAt = now
 
 	if err := s.saveProfile(r.Context(), prof); err != nil {
