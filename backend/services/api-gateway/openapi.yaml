@@ -499,7 +499,7 @@ paths:
                   items:
                     type: array
                     items:
-                      $ref: '#/components/schemas/PublicUserProfile'
+                      $ref: '#/components/schemas/UserListItem'
         '400':
           description: Invalid query
           content:
@@ -530,7 +530,7 @@ paths:
                   items:
                     type: array
                     items:
-                      $ref: '#/components/schemas/PublicUserProfile'
+                      $ref: '#/components/schemas/UserListItem'
         '401':
           description: Unauthorized
           content:
@@ -1763,15 +1763,9 @@ components:
         hasCustomAvatar:
           type: boolean
           description: Indicates whether the user has generated a custom avatar
-        publicBio:
+        bio:
           type: string
-          description: Public bio, visible to everyone
-        friendsBio:
-          type: string
-          description: Bio that will be visible only to friends in the future
-        privateBio:
-          type: string
-          description: Private bio, visible only to the owner
+          description: User biography / about me section
         visibility:
           $ref: '#/components/schemas/UserVisibility'
         preferences:
@@ -1798,24 +1792,35 @@ components:
         avatarUrl:
           type: string
           format: uri
-        publicBio:
+        bio:
           type: string
         visibility:
           $ref: '#/components/schemas/UserVisibility'
         preferences:
           $ref: '#/components/schemas/MusicPreferences'
       required: [userId, displayName, visibility]
+    
+    UserListItem:
+      type: object
+      description: Lightweight user representation for lists (search, friends)
+      properties:
+        userId:
+          type: string
+        username:
+          type: string
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+      required: [userId, displayName]
 
     UpdateUserProfileRequest:
       type: object
       properties:
         displayName:
           type: string
-        publicBio:
-          type: string
-        friendsBio:
-          type: string
-        privateBio:
+        bio:
           type: string
         visibility:
           $ref: '#/components/schemas/UserVisibility'
