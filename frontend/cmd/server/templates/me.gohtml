@@ -5,7 +5,7 @@
       <h1 class="text-xl font-bold leading-tight tracking-tight text-text md:text-2xl text-center">My Profile</h1>
       <div class="flex flex-col items-center">
         <div class="relative group">
-          <img id="avatar" class="w-32 h-32 rounded-full shadow-lg" alt="User avatar">
+          <img id="avatar" class="w-32 h-32 rounded-full shadow-lg" alt="User avatar" src="/static/avatars/default.svg">
           <button id="randomize-avatar" class="absolute bottom-0 right-0 bg-primary hover:bg-primary-hover text-white p-2 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -176,7 +176,7 @@
       document.getElementById("publicBio").textContent = userProfile.publicBio;
       document.getElementById("input-publicBio").value = userProfile.publicBio || "";
       document.getElementById("input-visibility").value = userProfile.visibility || "public";
-      document.getElementById("avatar").src = '/static/avatars/default.svg';
+      document.getElementById("avatar").src = localStorage.getItem('selectedAvatar') || '/static/avatars/default.svg';
 
       const preferences = userProfile.preferences || {};
       document.getElementById("genres").textContent = (preferences.genres || []).join(', ');
@@ -284,30 +284,23 @@
 
   document.getElementById('input-visibility').addEventListener('change', (e) => saveField('visibility', e.target.value));
 
-  document.getElementById('randomize-avatar').addEventListener('click', async () => {
-    const randomizeBtn = document.getElementById('randomize-avatar');
-    randomizeBtn.disabled = true;
+  const avatars = [
+    '/static/avatars/avatar1.svg',
+    '/static/avatars/avatar2.svg',
+    '/static/avatars/avatar3.svg',
+    '/static/avatars/avatar4.svg',
+    '/static/avatars/avatar5.svg'
+  ];
+  const avatarEl = document.getElementById('avatar');
 
-    const res = await authService.fetchWithAuth(API + "/users/me/avatar/random", {
-      method: "POST"
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      let errorMessage = "Failed to generate new avatar.";
-      if (res.status === 429) {
-        errorMessage = "You are generating avatars too quickly. Please wait a moment.";
-      }
-      showAlert({ title: 'Error', content: errorMessage });
-      setTimeout(() => { randomizeBtn.disabled = false; }, 3000);
-      return;
-    }
-
-    const data = await res.json();
-    document.getElementById('avatar').src = data.avatarUrl;
-    showAlert({ title: 'Success', content: "New avatar generated!" });
-
-    setTimeout(() => { randomizeBtn.disabled = false; }, 3000);
+  document.getElementById('randomize-avatar').addEventListener('click', () => {
+    let newAvatar;
+    do {
+      newAvatar = avatars[Math.floor(Math.random() * avatars.length)];
+    } while (newAvatar === avatarEl.src);
+    avatarEl.src = newAvatar;
+    localStorage.setItem('selectedAvatar', newAvatar);
+    showAlert({ title: 'Success', content: "New avatar selected!" });
   });
 
   loadProfile();
