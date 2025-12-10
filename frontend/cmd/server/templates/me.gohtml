@@ -47,18 +47,18 @@
             </div>
           </div>
           <div class="mt-2">
-            <div id="publicBio-view" class="flex items-center gap-2">
-              <span id="publicBio" class="text-text block break-words overflow-hidden max-w-[calc(100%-3rem)]"></span>
-              <button id="edit-publicBio-btn" class="text-primary hover:text-primary-hover">
+            <div id="bio-view" class="flex items-center gap-2">
+              <span id="bio" class="text-text block break-words overflow-hidden max-w-[calc(100%-3rem)]"></span>
+              <button id="edit-bio-btn" class="text-primary hover:text-primary-hover">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                   <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
                 </svg>
               </button>
             </div>
-            <div id="publicBio-edit" class="hidden">
-              <textarea id="input-publicBio" class="bg-input-bg border-input-border rounded-md px-2 py-1 focus:outline-none w-full" placeholder="Tell us about yourself..." maxlength="150"></textarea>
-              <button id="save-publicBio-btn" class="btn-small ml-2">Save</button>
-              <button id="cancel-publicBio-btn" class="btn-small-secondary ml-2">Cancel</button>
+            <div id="bio-edit" class="hidden">
+              <textarea id="input-bio" class="bg-input-bg border-input-border rounded-md px-2 py-1 focus:outline-none w-full" placeholder="Tell us about yourself..." maxlength="150"></textarea>
+              <button id="save-bio-btn" class="btn-small ml-2">Save</button>
+              <button id="cancel-bio-btn" class="btn-small-secondary ml-2">Cancel</button>
             </div>
           </div>
         </div>
@@ -179,8 +179,8 @@
       document.getElementById("username").textContent = userProfile.username || "Not set";
       document.getElementById("displayName").textContent = userProfile.displayName;
       document.getElementById("input-displayName").value = userProfile.displayName || "";
-      document.getElementById("publicBio").textContent = userProfile.publicBio;
-      document.getElementById("input-publicBio").value = userProfile.publicBio || "";
+      document.getElementById("bio").textContent = userProfile.bio;
+      document.getElementById("input-bio").value = userProfile.bio || "";
       document.getElementById("input-visibility").value = userProfile.visibility || "public";
 
       const preferences = userProfile.preferences || {};
@@ -284,9 +284,9 @@
   document.getElementById('cancel-moods-btn').addEventListener('click', () => toggleEdit('moods', false));
   document.getElementById('save-moods-btn').addEventListener('click', () => savePreferencesField('moods', document.getElementById('input-moods').value));
   
-  document.getElementById('edit-publicBio-btn').addEventListener('click', () => toggleEdit('publicBio', true));
-  document.getElementById('cancel-publicBio-btn').addEventListener('click', () => toggleEdit('publicBio', false));
-  document.getElementById('save-publicBio-btn').addEventListener('click', () => saveField('publicBio', document.getElementById('input-publicBio').value));
+  document.getElementById('edit-bio-btn').addEventListener('click', () => toggleEdit('bio', true));
+  document.getElementById('cancel-bio-btn').addEventListener('click', () => toggleEdit('bio', false));
+  document.getElementById('save-bio-btn').addEventListener('click', () => saveField('bio', document.getElementById('input-bio').value));
 
   document.getElementById('input-visibility').addEventListener('change', (e) => saveField('visibility', e.target.value));
 
