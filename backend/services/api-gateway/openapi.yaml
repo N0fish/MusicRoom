@@ -666,17 +666,62 @@ paths:
 
   /users/me/avatar/random:
     post:
-      summary: Generate a new random SVG avatar for current user
+      summary: Assign a random preset avatar to current user
+      description: >
+        Picks a random avatar from the server-side preset avatar library
+        and assigns it to the current user profile.
       tags: [users]
       security:
         - bearerAuth: []
       responses:
         '200':
-          description: Avatar generated and profile updated
+          description: Avatar updated and profile returned
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserProfile'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/me/avatar/upload:
+    post:
+      summary: Upload a custom avatar image for current user
+      description: >
+        Uploads a custom avatar image for the current user.
+        Supported formats: PNG, JPG, JPEG, WEBP.
+        Maximum size: 5 MB.
+      tags: [users]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Avatar image file to upload
+      responses:
+        '200':
+          description: Avatar uploaded and profile updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '400':
+          description: Invalid file (type or size)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           description: Unauthorized
           content:

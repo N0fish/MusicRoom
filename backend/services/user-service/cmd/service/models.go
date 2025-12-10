@@ -347,7 +347,7 @@ func (s *Server) ensureUsername(ctx context.Context, p UserProfile) (UserProfile
 }
 
 func generateRandomUsername() string {
-	rand.Seed(time.Now().UnixNano())
+	// rand.Seed(time.Now().UnixNano())
 	a := adjectives[rand.Intn(len(adjectives))]
 	n := nouns[rand.Intn(len(nouns))]
 	return a + "-" + n

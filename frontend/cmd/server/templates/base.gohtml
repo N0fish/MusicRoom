@@ -53,7 +53,6 @@
             <a id="nav-auth" class="{{if eq .Path "/auth" }}text-primary{{end}} hover:underline" href="/auth">Auth</a>
             <a class="{{if eq .Path "/playlists" }}text-primary{{end}} hover:underline" href="/playlists">Playlists</a>
             <a class="{{if eq .Path "/event" }}text-primary{{end}} hover:underline" href="/event">Event</a>
-            <a class="{{if eq .Path "/realtime" }}text-primary{{end}} hover:underline" href="/realtime">Realtime</a>
             <a id="nav-me" class="{{if eq .Path "/me" }}text-primary{{end}} hover:underline" href="/me" style="display: none;">Me</a>
             <a id="nav-logout" class="hover:underline" href="#" style="display: none;">Logout</a>
           </nav>
@@ -100,12 +99,15 @@
             <input type="text" id="modal-input" class="hidden mt-2 w-full bg-input-bg border-input-border text-text rounded-md px-3 py-2 focus:outline-none" />
           </div>
           <div class="items-center px-4 py-3" id="modal-actions">
-            <button id="modal-close-btn" class="px-4 py-2 bg-gray-700 text-text text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-300">
-              Close
-            </button>
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="hidden fixed top-5 left-5 z-20 w-auto max-w-sm p-4 rounded-lg shadow-lg bg-card-bg text-white">
+      <h3 class="text-lg leading-6 font-medium" id="toast-title"></h3>
+      <p class="text-sm text-text-muted" id="toast-content"></p>
     </div>
   </body>
 </html>
