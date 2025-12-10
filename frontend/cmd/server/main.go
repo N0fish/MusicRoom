@@ -38,6 +38,7 @@ func main() {
 	r.Get("/event", app.page("event.gohtml"))
 	r.Get("/realtime", app.page("realtime.gohtml"))
 	r.Get("/me", app.page("me.gohtml"))
+	r.Get("/friends", app.page("friends.gohtml"))
 
 	// static assets (из embed FS)
 	r.Get("/static/*", func(w http.ResponseWriter, r *http.Request) {

@@ -1,0 +1,83 @@
+{{define "content"}}
+<div class="flex flex-col items-center justify-center px-6 py-8 mx-auto lg:py-0">
+  <div class="w-full bg-card-bg rounded-lg shadow md:mt-0 sm:max-w-xl xl:p-0">
+    <div class="p-6 space-y-4 md:space-y-6 sm:p-8">
+      <h1 class="text-xl font-bold leading-tight tracking-tight text-text md:text-2xl text-center">Find Friends</h1>
+      <div class="space-y-4">
+        <div>
+          <label for="search-input" class="block mb-2 text-sm font-medium text-text">Search for users</label>
+          <input type="text" id="search-input" class="bg-input-bg border border-input-border text-text sm:text-sm rounded-lg focus:ring-primary focus:border-primary block w-full p-2.5" placeholder="Enter username or display name">
+        </div>
+        <div id="search-results" class="space-y-2">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const searchInput = document.getElementById('search-input');
+  const searchResults = document.getElementById('search-results');
+  const API = "{{.API}}";
+
+  async function searchUsers(query) {
+    if (query.length < 3) {
+      searchResults.innerHTML = '';
+      return;
+    }
+
+    try {
+      const res = await authService.fetchWithAuth(`${API}/users/search?query=${query}`);
+      if (!res.ok) {
+        throw new Error('Failed to search for users');
+      }
+      const data = await res.json();
+      displayResults(data.items);
+    } catch (error) {
+      console.error(error.message);
+      showAlert({ title: 'Error', content: error.message });
+    }
+  }
+
+  function displayResults(users) {
+    if (users.length === 0) {
+      searchResults.innerHTML = '<p class="text-text-muted">No users found.</p>';
+      return;
+    }
+
+    searchResults.innerHTML = users.map(user => `
+      <div class="flex items-center justify-between p-2 bg-card-bg-hover rounded-lg">
+        <div class="flex items-center space-x-4">
+          <img src="${user.avatarUrl || '/avatars/default.svg'}" alt="Avatar" class="w-10 h-10 rounded-full">
+          <div>
+            <p class="font-semibold text-text">${user.displayName}</p>
+            <p class="text-sm text-text-muted">@${user.username}</p>
+          </div>
+        </div>
+        <button class="btn-small" onclick="sendFriendRequest('${user.userId}')">Add Friend</button>
+      </div>
+    `).join('');
+  }
+
+  async function sendFriendRequest(userId) {
+    try {
+      const res = await authService.fetchWithAuth(`${API}/users/me/friends/${userId}/request`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to send friend request');
+      }
+      showAlert({ title: 'Success', content: 'Friend request sent.' });
+    } catch (error) {
+      console.error(error.message);
+      showAlert({ title: 'Error', content: error.message });
+    }
+  }
+
+  searchInput.addEventListener('input', (e) => {
+    searchUsers(e.target.value);
+  });
+</script>
+{{end}}
+{{ template "base" . }}
