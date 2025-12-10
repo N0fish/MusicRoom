@@ -43,6 +43,12 @@ func main() {
 		_, _ = w.Write([]byte(`{"status":"ok","service":"user-service"}`))
 	})
 
+	avatarDir := getenv("AVATAR_DIR", "./avatars")
+	fileServer := http.StripPrefix("/avatars/", http.FileServer(http.Dir(avatarDir)))
+	r.Get("/avatars/*", func(w http.ResponseWriter, r *http.Request) {
+		fileServer.ServeHTTP(w, r)
+	})
+
 	// Authenticated user routes (gateway must set X-User-Id)
 	// internal service-to-service endpoints
 	r.Group(func(r chi.Router) {
@@ -59,6 +65,7 @@ func main() {
 
 		// avatar
 		r.Post("/users/me/avatar/random", srv.handleGenerateRandomAvatar)
+		r.Post("/users/me/avatar/upload", srv.handleUploadAvatar)
 
 		// search
 		r.Get("/users/search", srv.handleSearchUsers)

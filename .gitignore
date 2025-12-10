@@ -24,3 +24,9 @@ Tuist/Cache/
 
 # Node / Package managers
 node_modules/
+
+# Avatars user
+/backend/services/user-service/avatars/custom/*
+
+# other files
+*.txt

@@ -84,6 +84,7 @@ func main() {
 	r.Method(http.MethodGet, "/auth/me", authProxy)
 
 	// User-service (JWT required)
+	r.Method(http.MethodGet, "/avatars/*", userProxy)
 	r.Group(func(r chi.Router) {
 		if len(jwtSecret) != 0 {
 			r.Use(jwtAuthMiddleware(jwtSecret))
@@ -97,12 +98,12 @@ func main() {
 		).
 			Method(http.MethodPatch, "/users/me", userProxy)
 
-		// avatar
+		r.Method(http.MethodPost, "/users/me/avatar/random", userProxy)
 		r.With(
-			bodySizeLimitMiddleware(4096),
-			rateLimitMiddleware(getenvInt("AVATAR_RPS", 2)),
+			bodySizeLimitMiddleware(6*1024*1024),
+			rateLimitMiddleware(getenvInt("AVATAR_UPLOAD_RPS", 1)),
 		).
-			Method(http.MethodPost, "/users/me/avatar/random", userProxy)
+			Method(http.MethodPost, "/users/me/avatar/upload", userProxy)
 
 		// search
 		r.Method(http.MethodGet, "/users/search", userProxy)

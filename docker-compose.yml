@@ -60,6 +60,8 @@ services:
       - ./backend/services/user-service/.env
     ports:
       - "3005:3005"
+    volumes:
+      - ./backend/services/user-service/avatars:/app/avatars:rw
     depends_on:
       postgres:
         condition: service_healthy

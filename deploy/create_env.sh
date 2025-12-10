@@ -80,6 +80,8 @@ RATE_LIMIT_RPS=20
 # CORS
 CORS_ALLOWED_ORIGIN=*
 # CORS_ALLOWED_ORIGIN=http://localhost:5175
+
+AVATAR_UPLOAD_RPS=5
 EENV
       ;;
 
@@ -126,6 +128,8 @@ EENV
       cat > "$ENV_FILE" <<EENV
 PORT=3005
 DATABASE_URL=${DB_URL}
+AVATAR_DIR=./avatars
+DEFAULT_AVATAR_URL=/avatars/default.svg
 EENV
       ;;
 

@@ -3,10 +3,8 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -77,11 +75,6 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if req.AvatarURL != nil {
-		prof.AvatarURL = *req.AvatarURL
-		prof.HasCustomAvatar = true
-	}
-
 	prof.UpdatedAt = now
 
 	if err := s.saveProfile(r.Context(), prof); err != nil {
@@ -147,40 +140,6 @@ func (s *Server) handleGetPublicProfile(w http.ResponseWriter, r *http.Request) 
 		resp.Bio = prof.Bio
 		resp.AvatarURL = resolveAvatarForViewer(prof, isFriend, isOwner)
 	}
-
-	writeJSON(w, http.StatusOK, resp)
-}
-
-func (s *Server) handleGenerateRandomAvatar(w http.ResponseWriter, r *http.Request) {
-	userID, ok := userIDFromContext(r)
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	prof, err := s.getOrCreateProfile(r.Context(), userID)
-	if err != nil {
-		log.Printf("user-service: getOrCreateProfile: %v", err)
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-
-	seed := fmt.Sprintf("%s-%d", userID, time.Now().UnixNano())
-	svg := generateIdenticonSVG(seed)
-	dataURL := "data:image/svg+xml;utf8," + url.QueryEscape(svg)
-
-	prof.AvatarURL = dataURL
-	prof.HasCustomAvatar = true
-	prof.UpdatedAt = time.Now().UTC()
-
-	if err := s.saveProfile(r.Context(), prof); err != nil {
-		log.Printf("user-service: saveProfile avatar: %v", err)
-		writeError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-
-	resp := UserProfileResponseFromModel(prof)
-	resp.AvatarURL = resolveAvatarForViewer(prof, false, true)
 
 	writeJSON(w, http.StatusOK, resp)
 }
