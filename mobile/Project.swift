@@ -101,6 +101,7 @@ let project = Project(
             sources: ["Targets/AppFeature/Sources/**"],
             dependencies: [
                 .target(name: "SettingsFeature"),
+                .target(name: "AuthenticationFeature"),
                 .target(name: "AppSettingsClient"),
                 .target(name: "MusicRoomDomain"),
                 .target(name: "MusicRoomAPI"),
@@ -119,6 +120,18 @@ let project = Project(
             sources: ["Targets/SettingsFeature/Sources/**"],
             dependencies: [
                 .target(name: "AppSettingsClient"),
+                .target(name: "AppSupportClients"),
+                .package(product: "ComposableArchitecture"),
+            ]
+        ),
+        Target.target(
+            name: "AuthenticationFeature",
+            destinations: .iOS,
+            product: .staticLibrary,
+            bundleId: "com.musicroom.authenticationfeature",
+            deploymentTargets: deploymentTargets,
+            sources: ["Targets/AuthenticationFeature/Sources/**"],
+            dependencies: [
                 .target(name: "AppSupportClients"),
                 .package(product: "ComposableArchitecture"),
             ]
