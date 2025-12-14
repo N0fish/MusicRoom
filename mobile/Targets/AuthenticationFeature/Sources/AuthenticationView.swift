@@ -1,4 +1,5 @@
 import ComposableArchitecture
+import MusicRoomUI
 import SwiftUI
 
 public struct AuthenticationView: View {
@@ -10,181 +11,186 @@ public struct AuthenticationView: View {
 
     public var body: some View {
         ZStack {
-            // Background Gradient
-            LinearGradient(
-                gradient: Gradient(colors: [Color(hex: "1A1A2E"), Color(hex: "16213E")]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            // New "Liquid Glass" Background
+            LiquidBackground()
 
             ScrollView {
-                VStack(spacing: 30) {
-                    // Logo / Title
-                    VStack(spacing: 10) {
-                        Image(systemName: "music.note.house.fill")
-                            .font(.system(size: 60))
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [.pink, .purple],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .shadow(color: .purple.opacity(0.5), radius: 10, x: 0, y: 5)
-
-                        Text("Music Room")
-                            .font(.system(size: 32, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                            .shadow(radius: 2)
-                    }
-                    .padding(.top, 50)
-
-                    // Form Container
-                    VStack(spacing: 20) {
-                        Text(store.isRegistering ? "Create Account" : "Welcome Back")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white.opacity(0.9))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                        // Email Field
-                        HStack {
-                            Image(systemName: "envelope.fill")
-                                .foregroundColor(.gray)
-                            TextField("Email", text: $store.email)
-                                .textContentType(.emailAddress)
-                                .keyboardType(.emailAddress)
-                                .autocapitalization(.none)
-                                .foregroundColor(.white)
-                        }
-                        .padding()
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(12)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                        )
-
-                        // Password Field
-                        HStack {
-                            Image(systemName: "lock.fill")
-                                .foregroundColor(.gray)
-                            SecureField("Password", text: $store.password)
-                                .textContentType(store.isRegistering ? .newPassword : .password)
-                                .foregroundColor(.white)
-                        }
-                        .padding()
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(12)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                        )
-
-                        if let error = store.errorMessage {
-                            Text(error)
-                                .foregroundColor(.red)
-                                .font(.caption)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .transition(.opacity)
-                        }
-
-                        // Submit Button
-                        Button(action: {
-                            store.send(.submitButtonTapped)
-                        }) {
-                            if store.isLoading {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            } else {
-                                Text(store.isRegistering ? "Sign Up" : "Log In")
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                            }
-                        }
-                        .padding()
-                        .background(
-                            LinearGradient(
-                                colors: [.pink, .purple],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .cornerRadius(12)
-                        .shadow(color: .purple.opacity(0.4), radius: 8, x: 0, y: 4)
-                        .disabled(store.isLoading)
-                    }
-                    .padding(24)
-                    .background(
-                        VisualEffectBlur(blurStyle: .systemUltraThinMaterialDark)
-                            .cornerRadius(24)
-                    )
-                    .padding(.horizontal)
-
-                    // Toggle Mode Button
-                    Button(action: {
-                        store.send(.toggleModeButtonTapped)
-                    }) {
-                        Text(
-                            store.isRegistering
-                                ? "Already have an account? Log In"
-                                : "Don't have an account? Sign Up"
-                        )
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.7))
-                    }
-
-                    Spacer()
-                }
-                .padding(.bottom, 20)
+                scrollViewContent
             }
             .scrollIndicators(.hidden)
         }
     }
-}
 
-// Helper for Blur Effect
-struct VisualEffectBlur: UIViewRepresentable {
-    var blurStyle: UIBlurEffect.Style
+    private var scrollViewContent: some View {
+        VStack(spacing: 30) {
+            // MARK: - Logo / Title
+            VStack(spacing: 12) {
+                Image(systemName: "music.note.house.fill")
+                    .font(.system(size: 80))
+                    .symbolEffect(.bounce, value: store.isRegistering)  // iOS 17+ animation
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.liquidPrimary, .liquidSecondary],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .shadow(color: .liquidSecondary.opacity(0.6), radius: 25, x: 0, y: 10)
 
-    func makeUIView(context: Context) -> UIVisualEffectView {
-        return UIVisualEffectView(effect: UIBlurEffect(style: blurStyle))
-    }
+                Text("Music Room")
+                    .font(.liquidTitle)
+                    .foregroundColor(.white)
+                    .shadow(color: .liquidPrimary.opacity(0.5), radius: 10)
+            }
+            .padding(.top, 60)
 
-    func updateUIView(_ uiView: UIVisualEffectView, context: Context) {
-        uiView.effect = UIBlurEffect(style: blurStyle)
-    }
-}
+            // MARK: - Form Container (Glass)
+            GlassView(cornerRadius: 32) {
+                VStack(spacing: 24) {
+                    Text(store.isRegistering ? "Create Account" : "Access Terminal")
+                        .font(.liquidH2)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .shadow(radius: 5)
 
-// Helper for Hex Color
-extension Color {
-    init(hex: String) {
-        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-        var int: UInt64 = 0
-        Scanner(string: hex).scanHexInt64(&int)
-        let a: UInt64
-        let r: UInt64
-        let g: UInt64
-        let b: UInt64
-        switch hex.count {
-        case 3:  // RGB (12-bit)
-            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
-        case 6:  // RGB (24-bit)
-            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
-        case 8:  // ARGB (32-bit)
-            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
-        default:
-            (a, r, g, b) = (1, 1, 1, 0)
+                    // Email Field
+                    HStack {
+                        Image(systemName: "envelope.fill")
+                            .foregroundColor(.liquidPrimary)
+                        TextField("Email Credentials", text: $store.email)
+                            .textContentType(.emailAddress)
+                            .keyboardType(.emailAddress)
+                            .autocapitalization(.none)
+                            .foregroundColor(.white)
+                            .font(.liquidBody)
+                    }
+                    .padding()
+                    .background(Color.black.opacity(0.3))
+                    .cornerRadius(16)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(
+                                Color.liquidPrimary.opacity(
+                                    store.email.isEmpty ? 0.3 : 0.8), lineWidth: 1)
+                    )
+
+                    // Password Field
+                    HStack {
+                        Image(systemName: "lock.fill")
+                            .foregroundColor(.liquidAccent)
+                        SecureField("Passcode", text: $store.password)
+                            .textContentType(store.isRegistering ? .newPassword : .password)
+                            .foregroundColor(.white)
+                            .font(.liquidBody)
+                    }
+                    .padding()
+                    .background(Color.black.opacity(0.3))
+                    .cornerRadius(16)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(
+                                Color.liquidAccent.opacity(
+                                    store.password.isEmpty ? 0.3 : 0.8), lineWidth: 1)
+                    )
+
+                    if let error = store.errorMessage {
+                        Text(error)
+                            .foregroundColor(.red)
+                            .font(.liquidCaption)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .transition(.opacity)
+                    }
+
+                    // Submit Button
+                    Button(action: {
+                        store.send(.submitButtonTapped)
+                    }) {
+                        ZStack {
+                            if store.isLoading {
+                                ProgressView()
+                                    .progressViewStyle(
+                                        CircularProgressViewStyle(tint: .white))
+                            } else {
+                                Text(store.isRegistering ? "INITIATE SEQUENCE" : "CONNECT")
+                                    .font(.liquidButton)
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(
+                            LinearGradient(
+                                colors: [.liquidSecondary, .liquidPrimary],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(16)
+                        .shadow(
+                            color: .liquidSecondary.opacity(0.5), radius: 15, x: 0, y: 5)
+                    }
+                    .disabled(store.isLoading)
+                }
+                .padding(24)
+            }
+            .padding(.horizontal, 24)
+
+            // MARK: - Social Login
+            if !store.isLoading {
+                VStack(spacing: 16) {
+                    HStack {
+                        Rectangle().frame(height: 1).foregroundColor(.glassBorder)
+                        Text("OR LINK IDENTITY").font(.liquidCaption).foregroundColor(
+                            .white.opacity(0.6))
+                        Rectangle().frame(height: 1).foregroundColor(.glassBorder)
+                    }
+                    .padding(.horizontal, 40)
+
+                    HStack(spacing: 16) {
+                        // Google
+                        Button(action: {
+                            store.send(.socialLoginButtonTapped(.google))
+                        }) {
+                            Image(systemName: "globe")
+                                .font(.system(size: 24))
+                                .foregroundColor(.white)
+                                .frame(width: 60, height: 60)
+                                .background(Color.white.opacity(0.1))
+                                .clipShape(Circle())
+                                .overlay(Circle().stroke(Color.glassBorder, lineWidth: 1))
+                        }
+
+                        // 42
+                        Button(action: {
+                            store.send(.socialLoginButtonTapped(.intra42))
+                        }) {
+                            Image(systemName: "building.2.fill")
+                                .font(.system(size: 24))
+                                .foregroundColor(.white)
+                                .frame(width: 60, height: 60)
+                                .background(Color.white.opacity(0.1))
+                                .clipShape(Circle())
+                                .overlay(Circle().stroke(Color.glassBorder, lineWidth: 1))
+                        }
+                    }
+                }
+            }
+
+            // MARK: - Toggle Mode
+            Button(action: {
+                _ = withAnimation(.spring()) {
+                    store.send(.toggleModeButtonTapped)
+                }
+            }) {
+                Text(
+                    store.isRegistering
+                        ? "Existing User? Connect"
+                        : "New Identity? Initialize"
+                )
+                .font(.liquidCaption)
+                .foregroundColor(.liquidPrimary)
+                .padding(.bottom, 40)
+            }
         }
-
-        self.init(
-            .sRGB,
-            red: Double(r) / 255,
-            green: Double(g) / 255,
-            blue: Double(b) / 255,
-            opacity: Double(a) / 255
-        )
     }
 }

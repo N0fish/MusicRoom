@@ -5,7 +5,7 @@ Summary: Creation of a complete mobile solution focused on music and user
 experience.
 Version: 5.3
 
-Contents
+Contents
 I
 I.1
 II

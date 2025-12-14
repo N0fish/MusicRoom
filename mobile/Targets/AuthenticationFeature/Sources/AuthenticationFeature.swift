@@ -1,3 +1,4 @@
+import AppSettingsClient
 import AppSupportClients
 import ComposableArchitecture
 import Foundation
@@ -19,10 +20,18 @@ public struct AuthenticationFeature: Sendable {
         case binding(BindingAction<State>)
         case toggleModeButtonTapped
         case submitButtonTapped
+        case socialLoginButtonTapped(SocialProvider)
         case authResponse(Result<Bool, AuthenticationError>)
     }
 
+    public enum SocialProvider: String, Sendable {
+        case google
+        case intra42 = "42"
+    }
+
     @Dependency(\.authentication) var authentication
+    @Dependency(\.openURL) var openURL
+    @Dependency(\.appSettings) var appSettings
 
     public init() {}
 
@@ -37,6 +46,18 @@ public struct AuthenticationFeature: Sendable {
                 state.isRegistering.toggle()
                 state.errorMessage = nil
                 return .none
+
+            case .socialLoginButtonTapped(let provider):
+                return .run { [appSettings = self.appSettings, openURL = self.openURL] _ in
+                    let settings = appSettings.load()
+                    // Construct URL: e.g. http://localhost:8080/auth/google/login
+                    let authURL = settings.backendURL
+                        .appendingPathComponent("auth")
+                        .appendingPathComponent(provider.rawValue)
+                        .appendingPathComponent("login")
+
+                    await openURL(authURL)
+                }
 
             case .submitButtonTapped:
                 guard !state.email.isEmpty, !state.password.isEmpty else {

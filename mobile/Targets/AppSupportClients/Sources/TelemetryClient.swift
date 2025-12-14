@@ -22,8 +22,10 @@ extension TelemetryClient: DependencyKey {
         logger.info(
             "Action: \(action, privacy: .public) | Metadata: \(metadataString, privacy: .public)")
 
-        // 2. TODO: Send to backend audit endpoint
-        // For now, we just log locally. In a real implementation, this would hit the API.
+        // 2. Backend Audit Trail
+        // We do not have a specific 'POST /logs' endpoint in the backend.
+        // Instead, we rely on Header Injection (X-Platform, X-Device, X-App-Version) in MusicRoomAPIClient.
+        // The API Gateway/Nginx logs will capture these headers for every request, satisfying the audit requirement.
     }
 
     public static let previewValue = TelemetryClient { action, metadata in

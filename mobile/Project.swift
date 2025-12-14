@@ -29,6 +29,16 @@ let project = Project(
     ]),
     targets: [
         Target.target(
+            name: "MusicRoomUI",
+            destinations: .iOS,
+            product: .staticLibrary,
+            bundleId: "com.musicroom.ui",
+            deploymentTargets: deploymentTargets,
+            sources: ["Targets/MusicRoomUI/Sources/**"],
+            resources: ["Targets/MusicRoomUI/Resources/**"],
+            dependencies: []
+        ),
+        Target.target(
             name: "MusicRoomDomain",
             destinations: .iOS,
             product: .staticLibrary,
@@ -46,6 +56,7 @@ let project = Project(
             sources: ["Targets/MusicRoomAPI/Sources/**"],
             dependencies: [
                 .target(name: "MusicRoomDomain"),
+                .target(name: "AppSettingsClient"),
                 .package(product: "Dependencies"),
             ]
         ),
@@ -80,12 +91,20 @@ let project = Project(
             bundleId: "com.musicroom.mobile",
             deploymentTargets: deploymentTargets,
             infoPlist: .extendingDefault(with: [
-                "UILaunchScreen": [:]
+                "UILaunchScreen": [:],
+                "CFBundleURLTypes": [
+                    [
+                        "CFBundleTypeRole": "Editor",
+                        "CFBundleURLName": "com.musicroom.mobile",
+                        "CFBundleURLSchemes": ["musicroom"],
+                    ]
+                ],
             ]),
             sources: ["Targets/MusicRoomMobile/Sources/**"],
             resources: ["Targets/MusicRoomMobile/Resources/**"],
             dependencies: [
                 .target(name: "AppFeature"),
+                .target(name: "EventFeature"),
                 .package(product: "ComposableArchitecture"),
                 .package(product: "Dependencies"),
                 .package(product: "CasePaths"),
@@ -102,6 +121,7 @@ let project = Project(
             dependencies: [
                 .target(name: "SettingsFeature"),
                 .target(name: "AuthenticationFeature"),
+                .target(name: "EventFeature"),
                 .target(name: "AppSettingsClient"),
                 .target(name: "MusicRoomDomain"),
                 .target(name: "MusicRoomAPI"),
@@ -133,6 +153,23 @@ let project = Project(
             sources: ["Targets/AuthenticationFeature/Sources/**"],
             dependencies: [
                 .target(name: "AppSupportClients"),
+                .target(name: "AppSettingsClient"),
+                .target(name: "MusicRoomUI"),
+                .package(product: "ComposableArchitecture"),
+            ]
+        ),
+        Target.target(
+            name: "EventFeature",
+            destinations: .iOS,
+            product: .staticLibrary,
+            bundleId: "com.musicroom.eventfeature",
+            deploymentTargets: deploymentTargets,
+            sources: ["Targets/EventFeature/Sources/**"],
+            dependencies: [
+                .target(name: "AppSupportClients"),
+                .target(name: "MusicRoomUI"),
+                .target(name: "MusicRoomDomain"),
+                .target(name: "MusicRoomAPI"),
                 .package(product: "ComposableArchitecture"),
             ]
         ),

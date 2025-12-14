@@ -8,6 +8,7 @@ public struct AuthenticationClient: Sendable {
     public var logout: @Sendable () async -> Void
     public var isAuthenticated: @Sendable () -> Bool
     public var getAccessToken: @Sendable () -> String?
+    public var saveTokens: @Sendable (_ accessToken: String, _ refreshToken: String) async -> Void
 }
 
 public enum AuthenticationError: Error, Equatable {
@@ -26,7 +27,8 @@ extension AuthenticationClient: DependencyKey {
         register: { _, _ in },
         logout: {},
         isAuthenticated: { true },
-        getAccessToken: { "mock_token" }
+        getAccessToken: { "mock_token" },
+        saveTokens: { _, _ in }
     )
 
     public static let testValue = AuthenticationClient(
@@ -34,7 +36,8 @@ extension AuthenticationClient: DependencyKey {
         register: { _, _ in },
         logout: {},
         isAuthenticated: { false },
-        getAccessToken: { nil }
+        getAccessToken: { nil },
+        saveTokens: { _, _ in }
     )
 }
 
@@ -125,6 +128,10 @@ extension AuthenticationClient {
             },
             getAccessToken: {
                 return keychain.read("accessToken")
+            },
+            saveTokens: { accessToken, refreshToken in
+                keychain.save(accessToken, for: "accessToken")
+                keychain.save(refreshToken, for: "refreshToken")
             }
         )
     }
