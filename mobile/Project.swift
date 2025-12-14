@@ -95,6 +95,8 @@ let project = Project(
             deploymentTargets: deploymentTargets,
             infoPlist: .extendingDefault(with: [
                 "UILaunchScreen": [:],
+                "NSLocationWhenInUseUsageDescription":
+                    "Music Room needs your location to verify your eligibility to vote on geo-restricted events.",
                 "CFBundleURLTypes": [
                     [
                         "CFBundleTypeRole": "Editor",
@@ -184,7 +186,8 @@ let project = Project(
             deploymentTargets: deploymentTargets,
             sources: ["Targets/AppSupportClients/Sources/**"],
             dependencies: [
-                .package(product: "Dependencies")
+                .package(product: "Dependencies"),
+                .target(name: "MusicRoomDomain"),
             ]
         ),
         Target.target(

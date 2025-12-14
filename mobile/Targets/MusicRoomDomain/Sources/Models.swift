@@ -197,13 +197,13 @@ public struct PlaylistUpdate: Sendable, Equatable {
     }
 }
 
-public struct PlaylistResponse: Decodable, Sendable, Equatable {
+public struct PlaylistResponse: Codable, Sendable, Equatable {
     // We can add the Playlist metadata struct if needed, but for now we might just want tracks
     // Backend returns { "playlist": ..., "tracks": ... }
     // Let's define a minimal Playlist struct inside or reuse if we had one.
     // We don't have a Playlist struct in Models.swift yet.
 
-    public struct PlaylistMetadata: Decodable, Sendable, Equatable {
+    public struct PlaylistMetadata: Codable, Sendable, Equatable {
         public let id: String
         public let ownerId: String
         public let name: String

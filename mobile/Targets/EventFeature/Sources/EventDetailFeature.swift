@@ -13,8 +13,7 @@ public struct EventDetailFeature: Sendable {
         public var tracks: [Track] = []
         public var isLoading: Bool = false
         public var isVoting: Bool = false
-        public var errorMessage: String?
-        public var successMessage: String?
+        public var userAlert: UserAlert?
 
         // Navigation / Presentation
         @Presents public var musicSearch: MusicSearchFeature.State?
@@ -48,7 +47,21 @@ public struct EventDetailFeature: Sendable {
 
     @Dependency(\.musicRoomAPI) var musicRoomAPI
     @Dependency(\.telemetry) var telemetry
+    @Dependency(\.locationClient) var locationClient
+    @Dependency(\.persistence) var persistence
     @Dependency(\.continuousClock) var clock
+
+    public struct UserAlert: Equatable, Sendable {
+        public var title: String
+        public var message: String
+        public var type: AlertType
+
+        public enum AlertType: Equatable, Sendable {
+            case error
+            case success
+            case info
+        }
+    }
 
     private enum CancelID { case realtime }
 
@@ -75,9 +88,6 @@ public struct EventDetailFeature: Sendable {
                 state.isLoading = true
                 return .run { [eventId = state.event.id] send in
                     // Fetch both tally and playlist tracks
-                    // We can do this in parallel or sequence.
-                    // For now, let's fetch playlist to get full track list.
-                    // Assuming event.id == playlist.id
                     async let tallyResult = Result { try await musicRoomAPI.tally(eventId) }
                     async let playlistResult = Result {
                         try await musicRoomAPI.getPlaylist(eventId.uuidString)
@@ -85,9 +95,24 @@ public struct EventDetailFeature: Sendable {
 
                     let (tally, playlist) = await (tallyResult, playlistResult)
 
-                    if let tracks = try? playlist.get().tracks {
-                        await send(.playlistLoaded(tracks))
+                    // Handle Playlist
+                    switch playlist {
+                    case .success(let response):
+                        try? await persistence.savePlaylist(response)
+                        await send(.playlistLoaded(response.tracks))
+                    case .failure:
+                        // Fallback to cache
+                        if let cached = try? await persistence.loadPlaylist() {
+                            // Only use cache if it matches this event?
+                            // MVP limitation: "playlist_cache.json" is single slot.
+                            // We should check ID if possible, but PlaylistResponse has ID.
+                            // Assuming checking cached.playlist.id == eventId (string check)
+                            if cached.playlist.id.lowercased() == eventId.uuidString.lowercased() {
+                                await send(.playlistLoaded(cached.tracks))
+                            }
+                        }
                     }
+
                     await send(.tallyLoaded(tally))
                 }
 
@@ -107,8 +132,28 @@ public struct EventDetailFeature: Sendable {
 
             case .voteButtonTapped(let trackId):
                 state.isVoting = true
-                state.errorMessage = nil
-                state.successMessage = nil
+                state.userAlert = nil
+
+                // Time Check
+                let now = Date()
+                if let start = state.event.voteStart, now < start {
+                    state.isVoting = false
+                    state.userAlert = UserAlert(
+                        title: "Voting Not Started",
+                        message: "Voting will begin at \(start.formatted()).",
+                        type: .info
+                    )
+                    return .none
+                }
+                if let end = state.event.voteEnd, now > end {
+                    state.isVoting = false
+                    state.userAlert = UserAlert(
+                        title: "Voting Ended",
+                        message: "Voting closed at \(end.formatted()).",
+                        type: .error
+                    )
+                    return .none
+                }
 
                 // Optimistic Update
                 if let index = state.tally.firstIndex(where: { $0.track == trackId }) {
@@ -123,20 +168,38 @@ public struct EventDetailFeature: Sendable {
                     state.tally.sort { $0.count > $1.count }
                 }
 
-                // Also update local track vote count if we have it?
-                // For MVP, tally list is separate.
+                return .run { [event = state.event, locationClient] send in
+                    var lat: Double?
+                    var lng: Double?
 
-                return .run { [eventId = state.event.id] send in
+                    // Geo Check
+                    if event.licenseMode == .geoTime {
+                        await locationClient.requestWhenInUseAuthorization()
+                        // We could check status here, but let's try getting location
+                        do {
+                            let loc = try await locationClient.getCurrentLocation()
+                            lat = loc.latitude
+                            lng = loc.longitude
+                        } catch {
+                            await send(.voteResponse(.failure(error)))  // Location error
+                            return
+                        }
+                    }
+
                     await send(
                         .voteResponse(
                             Result {
-                                try await musicRoomAPI.vote(eventId, trackId, nil, nil)
+                                try await musicRoomAPI.vote(event.id, trackId, lat, lng)
                             }))
                 }
 
             case .voteResponse(.success(let response)):
                 state.isVoting = false
-                state.successMessage = "Voted for \(response.trackId)!"
+                state.userAlert = UserAlert(
+                    title: "Success",
+                    message: "Voted for \(response.trackId)!",
+                    type: .success
+                )
                 return .run { send in
                     try await clock.sleep(for: .seconds(1))
                     await send(.loadTally)
@@ -146,16 +209,27 @@ public struct EventDetailFeature: Sendable {
 
             case .voteResponse(.failure(let error)):
                 state.isVoting = false
+                let message: String
                 if let apiError = error as? MusicRoomAPIError {
-                    state.errorMessage = apiError.errorDescription
+                    message = apiError.errorDescription ?? "Unknown generic error"
                 } else {
-                    state.errorMessage = error.localizedDescription
+                    message = error.localizedDescription
+                }
+
+                // Detailed Map for user-friendly errors
+                if message.contains("403") {
+                    state.userAlert = UserAlert(
+                        title: "Permission Denied",
+                        message: "You are not allowed to vote on this event (License restriction).",
+                        type: .error)
+                } else {
+                    state.userAlert = UserAlert(
+                        title: "Vote Failed", message: message, type: .error)
                 }
                 return .none
 
             case .dismissInfo:
-                state.errorMessage = nil
-                state.successMessage = nil
+                state.userAlert = nil
                 return .none
 
             case .addTrackButtonTapped:
@@ -231,7 +305,9 @@ public struct EventDetailFeature: Sendable {
                 return .none
 
             case .removeTrackResponse(.failure(let error)):
-                state.errorMessage = "Failed to remove track: \(error.localizedDescription)"
+                state.userAlert = UserAlert(
+                    title: "Error",
+                    message: "Failed to remove track: \(error.localizedDescription)", type: .error)
                 return .send(.loadTally)  // Revert state by reloading
             }
         }

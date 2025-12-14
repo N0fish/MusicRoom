@@ -14,6 +14,8 @@ public struct EventListFeature: Sendable {
         public var path = StackState<EventDetailFeature.State>()
         @Presents public var createEvent: CreateEventFeature.State?
 
+        public var isOffline: Bool = false
+
         public init() {}
     }
 
@@ -21,16 +23,20 @@ public struct EventListFeature: Sendable {
         case onAppear
         case loadEvents
         case eventsLoaded(Result<[Event], Error>)
+        case eventsLoadedFromCache(Result<[Event], Error>)  // Distinct action for cache
         case eventTapped(Event)
         case createEventButtonTapped
         case retryButtonTapped
         case createEvent(PresentationAction<CreateEventFeature.Action>)
         case path(StackAction<EventDetailFeature.State, EventDetailFeature.Action>)
+        case networkStatusChanged(NetworkStatus)
     }
 
     // Dependencies
     @Dependency(\.musicRoomAPI) var musicRoomAPI
     @Dependency(\.telemetry) var telemetry
+    @Dependency(\.persistence) var persistence
+    @Dependency(\.networkMonitor) var networkMonitor
 
     public init() {}
 
@@ -38,9 +44,20 @@ public struct EventListFeature: Sendable {
         Reduce { state, action in
             switch action {
             case .onAppear:
-                // Only load if empty or if we want aggressive refresh
-                if state.events.isEmpty {
-                    return .send(.loadEvents)
+                // Start network monitor
+                return .merge(
+                    .run { send in
+                        for await status in networkMonitor.start() {
+                            await send(.networkStatusChanged(status))
+                        }
+                    },
+                    .send(.loadEvents)
+                )
+
+            case .networkStatusChanged(let status):
+                state.isOffline = (status == .unsatisfied || status == .requiresConnection)
+                if !state.isOffline && state.events.isEmpty {
+                    return .send(.loadEvents)  // Auto-retry when coming back online
                 }
                 return .none
 
@@ -50,12 +67,28 @@ public struct EventListFeature: Sendable {
             case .loadEvents:
                 state.isLoading = true
                 state.errorMessage = nil
+
+                if state.isOffline {
+                    // Load from cache immediately
+                    return .run { send in
+                        do {
+                            let events = try await persistence.loadEvents()
+                            await send(.eventsLoadedFromCache(.success(events)))
+                        } catch {
+                            await send(.eventsLoadedFromCache(.failure(error)))
+                        }
+                    }
+                }
+
                 return .run { send in
                     await telemetry.log("Fetching Events", [:])
                     do {
                         let events = try await musicRoomAPI.listEvents()
+                        // Save to cache on success
+                        try? await persistence.saveEvents(events)
                         await send(.eventsLoaded(.success(events)))
                     } catch {
+                        // Fallback to cache on error
                         await send(.eventsLoaded(.failure(error)))
                     }
                 }
@@ -63,16 +96,38 @@ public struct EventListFeature: Sendable {
             case .eventsLoaded(.success(let events)):
                 state.isLoading = false
                 state.events = events
+                state.errorMessage = nil
                 return .none
 
             case .eventsLoaded(.failure(let error)):
-                state.isLoading = false
-                state.errorMessage = error.localizedDescription
-                state.events = []  // or keep old ones? Clear for now.
-                return .run { _ in
+                // Try loading from cache as fallback
+                return .run { send in
                     await telemetry.log(
-                        "Fetch Events Failed", ["Error": error.localizedDescription])
+                        "Fetch Events Failed, trying cache", ["Error": error.localizedDescription])
+                    do {
+                        let events = try await persistence.loadEvents()
+                        await send(.eventsLoadedFromCache(.success(events)))
+                    } catch {
+                        // Both failed
+                        await send(.eventsLoadedFromCache(.failure(error)))
+                    }
                 }
+
+            case .eventsLoadedFromCache(.success(let events)):
+                state.isLoading = false
+                state.events = events
+                if state.isOffline {
+                    state.errorMessage = nil  // clean UI in offline mode
+                } else {
+                    state.errorMessage = "Loaded from cache (Offline)"
+                }
+                return .none
+
+            case .eventsLoadedFromCache(.failure(let error)):
+                state.isLoading = false
+                state.errorMessage = "Failed to load events: \(error.localizedDescription)"
+                state.events = []
+                return .none
 
             case .eventTapped(let event):
                 state.path.append(EventDetailFeature.State(event: event))
@@ -127,6 +182,17 @@ extension EventListFeature.Action {
             return lhsEvent == rhsEvent
         case (.createEvent(let lhsAction), .createEvent(let rhsAction)):
             return lhsAction == rhsAction
+        case (.eventsLoadedFromCache(let lhsResult), .eventsLoadedFromCache(let rhsResult)):
+            switch (lhsResult, rhsResult) {
+            case (.success(let lhsEvents), .success(let rhsEvents)):
+                return lhsEvents == rhsEvents
+            case (.failure(let lhsError), .failure(let rhsError)):
+                return lhsError.localizedDescription == rhsError.localizedDescription
+            default:
+                return false
+            }
+        case (.networkStatusChanged(let lStatus), .networkStatusChanged(let rStatus)):
+            return lStatus == rStatus
         default:
             return false
         }

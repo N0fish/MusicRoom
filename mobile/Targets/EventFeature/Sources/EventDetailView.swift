@@ -35,23 +35,35 @@ public struct EventDetailView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
 
-                        // Error/Success Messages
-                        if let error = store.errorMessage {
-                            Text(error)
-                                .foregroundStyle(.white)
-                                .padding()
-                                .background(Color.liquidAccent.opacity(0.8))
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .padding(.horizontal)
-                        }
-
-                        if let success = store.successMessage {
-                            Text(success)
-                                .foregroundStyle(.white)
-                                .padding()
-                                .background(Color.green.opacity(0.8))
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .padding(.horizontal)
+                        // Alert Overlay
+                        if let alert = store.userAlert {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Image(
+                                        systemName: alert.type == .error
+                                            ? "exclamationmark.triangle.fill"
+                                            : (alert.type == .success
+                                                ? "checkmark.circle.fill" : "info.circle.fill")
+                                    )
+                                    .foregroundStyle(.white)
+                                    Text(alert.title)
+                                        .font(.liquidBody.bold())
+                                        .foregroundStyle(.white)
+                                }
+                                Text(alert.message)
+                                    .font(.liquidCaption)
+                                    .foregroundStyle(.white.opacity(0.8))
+                            }
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                alert.type == .error
+                                    ? Color.red.opacity(0.8)
+                                    : alert.type == .success
+                                        ? Color.green.opacity(0.8) : Color.blue.opacity(0.8)
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .padding(.horizontal)
                         }
 
                         // Leaderboard / Playlist
