@@ -26,9 +26,9 @@ public struct EventDetailFeature: Sendable {
     public enum Action: Equatable, Sendable, BindableAction {
         case onAppear
         case loadTally
-        case tallyLoaded(Result<[MusicRoomAPIClient.TallyItem], Error>)
+        case tallyLoaded(TaskResult<[MusicRoomAPIClient.TallyItem]>)
         case voteButtonTapped(trackId: String)
-        case voteResponse(Result<VoteResponse, Error>)
+        case voteResponse(TaskResult<VoteResponse>)
         case dismissInfo
         case binding(BindingAction<State>)
 
@@ -40,8 +40,8 @@ public struct EventDetailFeature: Sendable {
         // Playlist
         // Playlist
         case removeTrackButtonTapped(trackId: String)
-        case removeTrackResponse(Result<Void, Error>)
-        case addTrackResponse(Result<Track, Error>)
+        case removeTrackResponse(TaskResult<String>)
+        case addTrackResponse(TaskResult<Track>)
         case playlistLoaded([Track])
 
         // Realtime
@@ -96,8 +96,8 @@ public struct EventDetailFeature: Sendable {
                 state.isLoading = true
                 return .run { [eventId = state.event.id] send in
                     // Fetch both tally and playlist tracks
-                    async let tallyResult = Result { try await musicRoomAPI.tally(eventId) }
-                    async let playlistResult = Result {
+                    async let tallyResult = TaskResult { try await musicRoomAPI.tally(eventId) }
+                    async let playlistResult = TaskResult {
                         try await musicRoomAPI.getPlaylist(eventId.uuidString)
                     }
 
@@ -194,10 +194,13 @@ public struct EventDetailFeature: Sendable {
                         }
                     }
 
+                    let finalLat = lat
+                    let finalLng = lng
+
                     await send(
                         .voteResponse(
-                            Result {
-                                try await musicRoomAPI.vote(event.id, trackId, lat, lng)
+                            TaskResult {
+                                try await musicRoomAPI.vote(event.id, trackId, finalLat, finalLng)
                             }))
                 }
 
@@ -268,7 +271,7 @@ public struct EventDetailFeature: Sendable {
                         // Add track after dismissing
                         await send(
                             .addTrackResponse(
-                                Result {
+                                TaskResult {
                                     try await musicRoomAPI.addTrack(eventId.uuidString, request)
                                 }))
                     }
@@ -315,8 +318,9 @@ public struct EventDetailFeature: Sendable {
                 return .run { [eventId = state.event.id] send in
                     await send(
                         .removeTrackResponse(
-                            Result {
+                            TaskResult {
                                 try await musicRoomAPI.removeTrack(eventId.uuidString, trackId)
+                                return trackId
                             }))
                 }
 
@@ -353,73 +357,5 @@ public struct EventDetailFeature: Sendable {
         .ifLet(\.$musicSearch, action: \.musicSearch) {
             MusicSearchFeature()
         }
-    }
-}
-
-extension EventDetailFeature.Action {
-    public static func == (lhs: EventDetailFeature.Action, rhs: EventDetailFeature.Action) -> Bool {
-        switch lhs {
-        case .onAppear:
-            if case .onAppear = rhs { return true }
-        case .loadTally:
-            if case .loadTally = rhs { return true }
-        case .dismissInfo:
-            if case .dismissInfo = rhs { return true }
-        case .addTrackButtonTapped:
-            if case .addTrackButtonTapped = rhs { return true }
-        case .realtimeConnected:
-            if case .realtimeConnected = rhs { return true }
-        case .dismissMusicSearch:
-            if case .dismissMusicSearch = rhs { return true }
-
-        case .voteButtonTapped(let lId):
-            if case .voteButtonTapped(let rId) = rhs { return lId == rId }
-        case .tallyLoaded(.success(let lItems)):
-            if case .tallyLoaded(.success(let rItems)) = rhs { return lItems == rItems }
-        case .tallyLoaded(.failure(let lError)):
-            if case .tallyLoaded(.failure(let rError)) = rhs {
-                return lError.localizedDescription == rError.localizedDescription
-            }
-        case .voteResponse(.success(let lResp)):
-            if case .voteResponse(.success(let rResp)) = rhs { return lResp == rResp }
-        case .voteResponse(.failure(let lError)):
-            if case .voteResponse(.failure(let rError)) = rhs {
-                return lError.localizedDescription == rError.localizedDescription
-            }
-
-        case .musicSearch(let lAction):
-            if case .musicSearch(let rAction) = rhs { return lAction == rAction }
-
-        case .realtimeMessageReceived(let lMsg):
-            if case .realtimeMessageReceived(let rMsg) = rhs { return lMsg == rMsg }
-
-        case .removeTrackButtonTapped(let lId):
-            if case .removeTrackButtonTapped(let rId) = rhs { return lId == rId }
-
-        case .playlistLoaded(let lTracks):
-            if case .playlistLoaded(let rTracks) = rhs { return lTracks == rTracks }
-
-        case .removeTrackResponse(.success):
-            if case .removeTrackResponse(.success) = rhs { return true }
-        case .removeTrackResponse(.failure(let lError)):
-            if case .removeTrackResponse(.failure(let rError)) = rhs {
-                return lError.localizedDescription == rError.localizedDescription
-            }
-
-        case .addTrackResponse(.success(let lTrack)):
-            if case .addTrackResponse(.success(let rTrack)) = rhs { return lTrack == rTrack }
-        case .addTrackResponse(.failure(let lError)):
-            if case .addTrackResponse(.failure(let rError)) = rhs {
-                return lError.localizedDescription == rError.localizedDescription
-            }
-
-        case .binding(let lBinding):
-            if case .binding(let rBinding) = rhs { return lBinding == rBinding }
-
-        // Catch-all for mix-matched cases handled by falling through
-        case .tallyLoaded, .voteResponse, .removeTrackResponse, .addTrackResponse:
-            return false
-        }
-        return false
     }
 }

@@ -84,7 +84,7 @@ final class EventDetailFeatureTests: XCTestCase {
             state.tracks = []  // Optimistic removal
         }
 
-        await store.receive(.removeTrackResponse(.success(())))
+        await store.receive(.removeTrackResponse(.success("t1")))
     }
 
     func testVoteWithLocation_Success() async {
