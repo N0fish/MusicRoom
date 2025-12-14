@@ -15,6 +15,8 @@ public struct MusicRoomAPIClient: Sendable {
     public var search: @Sendable (_ query: String) async throws -> [MusicSearchItem]
     public var createEvent: @Sendable (CreateEventRequest) async throws -> Event
     public var connectToRealtime: @Sendable () -> AsyncStream<RealtimeMessage>
+    public var removeTrack: @Sendable (_ playlistId: String, _ trackId: String) async throws -> Void
+    public var getPlaylist: @Sendable (_ playlistId: String) async throws -> PlaylistResponse
 
     public struct TallyItem: Codable, Sendable, Equatable {
         public let track: String
@@ -167,46 +169,85 @@ extension MusicRoomAPIClient: DependencyKey {
 
                     receive()
 
-                    // Keep alive handling if needed...
-
                     continuation.onTermination = { _ in
                         task.cancel(with: .normalClosure, reason: nil)
                     }
                 }
+            },
+            removeTrack: { playlistId, trackId in
+                let url = settings.load().backendURL.appendingPathComponent(
+                    "playlists/\(playlistId)/tracks/\(trackId)")
+                var request = URLRequest(url: url)
+                request.httpMethod = "DELETE"
+                request.addCommonHeaders()
+
+                let (_, response) = try await URLSession.shared.data(for: request)
+                if let httpResponse = response as? HTTPURLResponse,
+                    !(200...299).contains(httpResponse.statusCode)
+                {
+                    throw MusicRoomAPIError.serverError(statusCode: httpResponse.statusCode)
+                }
+            },
+            getPlaylist: { playlistId in
+                let url = settings.load().backendURL.appendingPathComponent(
+                    "playlists/\(playlistId)")
+                var request = URLRequest(url: url)
+                request.addCommonHeaders()
+                let (data, _) = try await URLSession.shared.data(for: request)
+                return try JSONDecoder.iso8601.decode(PlaylistResponse.self, from: data)
             }
         )
     }
 
-    public static let previewValue = MusicRoomAPIClient(
-        fetchSampleEvents: { [] },
-        listEvents: { MockDataFactory.sampleEvents() },
-        getEvent: { _ in MockDataFactory.sampleEvents().first! },
-        vote: { _, _, _, _ in VoteResponse(status: "ok", trackId: "1", totalVotes: 5) },
-        tally: { _ in [] },
-        search: { _ in
-            [
-                MusicSearchItem(
-                    title: "Get Lucky", artist: "Daft Punk", provider: "deezer",
-                    providerTrackId: "1", thumbnailUrl: nil),
-                MusicSearchItem(
-                    title: "Instant Crush", artist: "Daft Punk", provider: "deezer",
-                    providerTrackId: "2", thumbnailUrl: nil),
-            ]
-        },
-        createEvent: { _ in MockDataFactory.sampleEvents().first! },
-        connectToRealtime: { AsyncStream { $0.finish() } }
-    )
+    public static var previewValue: MusicRoomAPIClient {
+        MusicRoomAPIClient(
+            fetchSampleEvents: { [] },
+            listEvents: { MockDataFactory.sampleEvents() },
+            getEvent: { _ in MockDataFactory.sampleEvents().first! },
+            vote: { _, _, _, _ in VoteResponse(status: "ok", trackId: "1", totalVotes: 5) },
+            tally: { _ in [] },
+            search: { _ in
+                [
+                    MusicSearchItem(
+                        title: "Get Lucky", artist: "Daft Punk", provider: "deezer",
+                        providerTrackId: "1", thumbnailUrl: nil),
+                    MusicSearchItem(
+                        title: "Instant Crush", artist: "Daft Punk", provider: "deezer",
+                        providerTrackId: "2", thumbnailUrl: nil),
+                ]
+            },
+            createEvent: { _ in MockDataFactory.sampleEvents().first! },
+            connectToRealtime: { AsyncStream { $0.finish() } },
+            removeTrack: { _, _ in },
+            getPlaylist: { _ in
+                PlaylistResponse(
+                    playlist: PlaylistResponse.PlaylistMetadata(
+                        id: "1", ownerId: "user1", name: "Mock Playlist", isPublic: true,
+                        editMode: "everyone"),
+                    tracks: [
+                        Track(
+                            id: "1", title: "Get Lucky", artist: "Daft Punk", provider: "deezer",
+                            providerTrackId: "1", thumbnailUrl: nil)
+                    ]
+                )
+            }
+        )
+    }
 
-    public static let testValue = MusicRoomAPIClient(
-        fetchSampleEvents: { [] },
-        listEvents: { [] },
-        getEvent: { _ in throw MusicRoomAPIError.networkError("Test unimplemented") },
-        vote: { _, _, _, _ in VoteResponse(status: "ok", trackId: "1", totalVotes: 1) },
-        tally: { _ in [] },
-        search: { _ in [] },
-        createEvent: { _ in throw MusicRoomAPIError.networkError("Test unimplemented") },
-        connectToRealtime: { AsyncStream { $0.finish() } }
-    )
+    public static var testValue: MusicRoomAPIClient {
+        MusicRoomAPIClient(
+            fetchSampleEvents: { [] },
+            listEvents: { [] },
+            getEvent: { _ in throw MusicRoomAPIError.networkError("Test unimplemented") },
+            vote: { _, _, _, _ in VoteResponse(status: "ok", trackId: "1", totalVotes: 1) },
+            tally: { _ in [] },
+            search: { _ in [] },
+            createEvent: { _ in throw MusicRoomAPIError.networkError("Test unimplemented") },
+            connectToRealtime: { AsyncStream { $0.finish() } },
+            removeTrack: { _, _ in },
+            getPlaylist: { _ in throw MusicRoomAPIError.networkError("Test unimplemented") }
+        )
+    }
 }
 
 public enum MusicRoomAPIError: Error, Equatable, LocalizedError {

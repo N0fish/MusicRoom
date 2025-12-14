@@ -1,4 +1,5 @@
 import Foundation
+import MusicRoomDomain
 
 public struct RealtimeMessage: Decodable, Sendable, Equatable {
     public let type: String
@@ -46,4 +47,42 @@ public struct VoteCastPayload: Decodable, Sendable, Equatable {
     public let trackId: String
     public let voterId: String
     public let totalVotes: Int
+}
+
+public struct TrackAddedPayload: Decodable, Sendable, Equatable {
+    public let playlistId: String
+    // Backend sends key "track" containing the Track object
+    public let track: MusicRoomDomain.Track
+}
+
+public struct TrackDeletedPayload: Decodable, Sendable, Equatable {
+    public let playlistId: String
+    public let trackId: String
+    public let position: Int
+}
+
+public struct TrackMovedPayload: Decodable, Sendable, Equatable {
+    public let playlistId: String
+    public let trackId: String
+    public let from: Int
+    public let to: Int
+}
+
+public struct PlaylistUpdatedPayload: Decodable, Sendable, Equatable {
+    // Backend sends "playlist" object
+    // We can decode minimally or fully depending on what we need.
+    // For now, let's assuming we might want to refresh metadata.
+    // However, the event payload structure from backend is:
+    // payload: { "playlist": { ... } }
+    // So we need a container or custom decoding if we want the nested object directly.
+    // Let's mirror the backend structure:
+    public let playlist: PlaylistMetadata
+}
+
+// Minimal playlist representation for updates
+public struct PlaylistMetadata: Decodable, Sendable, Equatable {
+    public let id: String
+    public let name: String
+    public let description: String
+    public let isPublic: Bool
 }

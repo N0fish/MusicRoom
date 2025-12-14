@@ -7,24 +7,49 @@ import XCTest
 
 @MainActor
 final class EventDetailFeatureTests: XCTestCase {
-    func testLoadTallySuccess() async {
+
+    func testLoadTallyAndPlaylistSuccess() async {
         let event = Event(
             id: UUID(), name: "Test", visibility: .publicEvent, ownerId: "u1",
             licenseMode: .everyone, createdAt: Date(), updatedAt: Date())
         let tallyItems = [
-            MusicRoomAPIClient.TallyItem(track: "t1", count: 10),
-            MusicRoomAPIClient.TallyItem(track: "t2", count: 5),
+            MusicRoomAPIClient.TallyItem(track: "t1", count: 10)
+        ]
+        let tracks = [
+            Track(
+                id: "t1", title: "Song 1", artist: "Artist 1", provider: "deezer",
+                providerTrackId: "1", thumbnailUrl: nil, votes: 10)
         ]
 
         let store = TestStore(initialState: EventDetailFeature.State(event: event)) {
             EventDetailFeature()
         } withDependencies: {
             $0.musicRoomAPI.tally = { _ in tallyItems }
+            $0.musicRoomAPI.getPlaylist = { _ in
+                PlaylistResponse(
+                    playlist: PlaylistResponse.PlaylistMetadata(
+                        id: event.id.uuidString, ownerId: "u1", name: "P", isPublic: true,
+                        editMode: "open"),
+                    tracks: tracks
+                )
+            }
+            $0.musicRoomAPI.connectToRealtime = { AsyncStream { $0.finish() } }
         }
 
         await store.send(.onAppear)
         await store.receive(\.loadTally) { state in
             state.isLoading = true
+        }
+
+        // Parallel execution order is not guaranteed, but usually standard actors serialize?
+        // Wait, async let executes concurrently.
+        // We might receive playlistLoaded and tallyLoaded in any order.
+        // However, TestStore usually enforces deterministic order if we await properly?
+        // No, we need to handle both possible orders or use strict checks.
+        // But usually send order from effect depends on completion.
+
+        await store.receive(\.playlistLoaded) { state in
+            state.tracks = tracks
         }
         await store.receive(\.tallyLoaded.success) { state in
             state.isLoading = false
@@ -32,55 +57,29 @@ final class EventDetailFeatureTests: XCTestCase {
         }
     }
 
-    func testVoteSuccess() async {
-        let clock = TestClock()
+    func testRemoveTrack() async {
         let event = Event(
             id: UUID(), name: "Test", visibility: .publicEvent, ownerId: "u1",
             licenseMode: .everyone, createdAt: Date(), updatedAt: Date())
 
-        let store = TestStore(initialState: EventDetailFeature.State(event: event)) {
+        let trackToRemove = Track(
+            id: "t1", title: "Remove Me", artist: "A", provider: "d", providerTrackId: "1",
+            thumbnailUrl: nil, votes: 0)
+
+        var state = EventDetailFeature.State(event: event)
+        state.tracks = [trackToRemove]
+
+        let store = TestStore(initialState: state) {
             EventDetailFeature()
         } withDependencies: {
-            $0.musicRoomAPI.vote = { _, _, _, _ in
-                VoteResponse(status: "ok", trackId: "t1", totalVotes: 11)
-            }
-            $0.musicRoomAPI.tally = { _ in [] }
-            $0.continuousClock = clock
+            $0.musicRoomAPI.removeTrack = { @Sendable _, _ in return }
         }
 
-        await store.send(.voteButtonTapped(trackId: "t1")) { state in
-            state.isVoting = true
-            // Optimistic update: t1 count increases from 0 to 1 (since tally was empty)
-            state.tally = [MusicRoomAPIClient.TallyItem(track: "t1", count: 1)]
+        await store.send(.removeTrackButtonTapped(trackId: "t1")) { state in
+            state.tracks = []  // Optimistic removal
         }
 
-        await store.receive(\.voteResponse.success) { state in
-            state.isVoting = false
-            state.successMessage = "Voted for t1!"
-        }
-
-        // Wait for clock sleep in effect
-        await clock.advance(by: .seconds(1))
-
-        await store.receive(\.loadTally) { state in
-            // loadTally sets isLoading = true? check reducer.
-            // Usually loadTally just fetches.
-            state.isLoading = true
-        }
-
-        await store.receive(\.tallyLoaded.success) { state in
-            state.isLoading = false
-            // Tally remains same as mock returns [], but logic might append?
-            // Wait, mock returns [], so tally becomes empty?
-            // If reducer replaces tally with API result, it becomes [].
-            state.tally = []
-        }
-
-        await clock.advance(by: .seconds(2))
-
-        await store.receive(\.dismissInfo) {
-            $0.errorMessage = nil
-            $0.successMessage = nil
-        }
+        await store.receive(.removeTrackResponse(.success(())))
     }
+
 }

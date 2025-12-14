@@ -54,33 +54,49 @@ public struct EventDetailView: View {
                                 .padding(.horizontal)
                         }
 
-                        // Leaderboard
-                        Text("Leaderboard")
+                        // Leaderboard / Playlist
+                        Text("Playlist")
                             .font(.liquidTitle)
                             .foregroundStyle(Color.white)
                             .padding(.horizontal)
 
-                        if store.tally.isEmpty && !store.isLoading {
-                            Text("No votes yet. Be the first!")
+                        if store.tracks.isEmpty && !store.isLoading {
+                            Text("No tracks yet. Add one!")
                                 .font(.liquidBody)
                                 .foregroundStyle(Color.white.opacity(0.6))
                                 .padding(.horizontal)
                         } else {
                             LazyVStack(spacing: 12) {
-                                ForEach(Array(store.tally.enumerated()), id: \.element.track) {
-                                    index, item in
-                                    TallyRow(
+                                // Sort tracks by vote count descending
+                                let sortedTracks = store.tracks.map { track -> (Track, Int) in
+                                    let count =
+                                        store.tally.first(where: {
+                                            $0.track == track.id
+                                                || $0.track == track.providerTrackId
+                                        })?.count ?? 0
+                                    return (track, count)
+                                }.sorted { $0.1 > $1.1 }
+
+                                ForEach(Array(sortedTracks.enumerated()), id: \.element.0.id) {
+                                    index, pair in
+                                    let (track, count) = pair
+                                    TrackRow(
                                         index: index + 1,
-                                        item: item,
-                                        isMyVote: false,  // Need backend support to know
+                                        track: track,
+                                        voteCount: count,
+                                        isMyVote: false,
                                         onVote: {
-                                            store.send(.voteButtonTapped(trackId: item.track))
+                                            store.send(.voteButtonTapped(trackId: track.id))
                                         }
                                     )
                                     .transition(.scale.combined(with: .opacity))
-                                    .animation(
-                                        .spring(response: 0.4, dampingFraction: 0.7).delay(
-                                            Double(index) * 0.05), value: store.tally)
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                        Button(role: .destructive) {
+                                            store.send(.removeTrackButtonTapped(trackId: track.id))
+                                        } label: {
+                                            Label("Remove", systemImage: "trash")
+                                        }
+                                    }
                                 }
                             }
                             .padding(.horizontal)
@@ -127,30 +143,56 @@ public struct EventDetailView: View {
     }
 }
 
-struct TallyRow: View {
+struct TrackRow: View {
     let index: Int
-    let item: MusicRoomAPIClient.TallyItem
+    let track: Track
+    let voteCount: Int
     let isMyVote: Bool
     let onVote: () -> Void
 
     var body: some View {
         GlassView(cornerRadius: 16)
-            .frame(height: 70)
+            .frame(height: 80)
             .overlay(
-                HStack(spacing: 16) {
+                HStack(spacing: 12) {
                     Text("#\(index)")
                         .font(.liquidTitle)
                         .foregroundStyle(Color.white.opacity(0.5))
-                        .frame(width: 40)
+                        .frame(width: 35)
+
+                    // Thumbnail
+                    if let url = track.thumbnailUrl {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image.resizable().aspectRatio(contentMode: .fill)
+                            default:
+                                Color.gray.opacity(0.3)
+                            }
+                        }
+                        .frame(width: 50, height: 50)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    } else {
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.3))
+                            .frame(width: 50, height: 50)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(item.track)  // Placeholder until we resolve Track ID -> Title
+                        Text(track.title)
                             .font(.liquidBody.bold())
                             .foregroundStyle(Color.white)
+                            .lineLimit(1)
 
-                        Text("\(item.count) votes")
+                        Text(track.artist)
                             .font(.liquidCaption)
                             .foregroundStyle(Color.white.opacity(0.7))
+                            .lineLimit(1)
+
+                        Text("\(voteCount) votes")
+                            .font(.caption2)
+                            .foregroundStyle(Color.liquidAccent)
                     }
 
                     Spacer()
