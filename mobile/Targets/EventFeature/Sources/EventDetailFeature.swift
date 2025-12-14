@@ -23,21 +23,25 @@ public struct EventDetailFeature: Sendable {
         }
     }
 
-    public enum Action: Equatable, Sendable {
+    public enum Action: Equatable, Sendable, BindableAction {
         case onAppear
         case loadTally
         case tallyLoaded(Result<[MusicRoomAPIClient.TallyItem], Error>)
         case voteButtonTapped(trackId: String)
         case voteResponse(Result<VoteResponse, Error>)
         case dismissInfo
+        case binding(BindingAction<State>)
 
         // Search
         case addTrackButtonTapped
+        case dismissMusicSearch
         case musicSearch(PresentationAction<MusicSearchFeature.Action>)
 
         // Playlist
+        // Playlist
         case removeTrackButtonTapped(trackId: String)
         case removeTrackResponse(Result<Void, Error>)
+        case addTrackResponse(Result<Track, Error>)
         case playlistLoaded([Track])
 
         // Realtime
@@ -68,8 +72,12 @@ public struct EventDetailFeature: Sendable {
     public init() {}
 
     public var body: some ReducerOf<Self> {
+        BindingReducer()
+
         Reduce { state, action in
             switch action {
+            case .binding:
+                return .none
             case .onAppear:
                 return .merge(
                     .run { [name = state.event.name] _ in
@@ -237,27 +245,38 @@ public struct EventDetailFeature: Sendable {
                 return .none
 
             case .musicSearch(.presented(.trackTapped(let item))):
-                state.musicSearch = nil  // Dismiss search
-                // For now, assume adding track means voting or adding to playlist?
-                // Design: search adds to playlist.
-                // But we don't have addTrack API yet in client (only remove).
-                // Wait, search currently calls `voteButtonTapped`.
-                // In Phase 2.1 it was voting. Phase 2.2 is Playlist.
-                // If the track is NOT in the playlist, we should ADD it.
-                // If it IS in the playlist, we should VOTE for it.
+                // Do not dismiss immediately to avoid 'state absent' error in ifLet
 
                 // Check if track exists
                 if state.tracks.contains(where: { $0.providerTrackId == item.providerTrackId }) {
-                    return .send(.voteButtonTapped(trackId: item.providerTrackId))  // Or track.id?
+                    return .run { [id = item.providerTrackId] send in
+                        await send(.voteButtonTapped(trackId: id))
+                        await send(.dismissMusicSearch)
+                    }
                 } else {
-                    // Need addTrack implementation in API
-                    // For now, let's just vote which might add it?
-                    // Backend `handleAddTrack` is separate from `vote`.
-                    // We need `addTrack` implemented in API.
-                    // For this step, I focused on Remove.
-                    // I will leave it as vote for now but note it needs update.
-                    return .send(.voteButtonTapped(trackId: item.providerTrackId))
+                    // Item not in playlist -> Add it
+                    state.isLoading = true
+                    return .run { [eventId = state.event.id] send in
+                        let request = AddTrackRequest(
+                            title: item.title,
+                            artist: item.artist,
+                            provider: "youtube",  // Backend enforces "youtube"
+                            providerTrackId: item.providerTrackId,
+                            thumbnailUrl: item.thumbnailUrl?.absoluteString ?? ""
+                        )
+                        await send(.dismissMusicSearch)
+                        // Add track after dismissing
+                        await send(
+                            .addTrackResponse(
+                                Result {
+                                    try await musicRoomAPI.addTrack(eventId.uuidString, request)
+                                }))
+                    }
                 }
+
+            case .dismissMusicSearch:
+                state.musicSearch = nil
+                return .none
 
             case .musicSearch:
                 return .none
@@ -309,6 +328,26 @@ public struct EventDetailFeature: Sendable {
                     title: "Error",
                     message: "Failed to remove track: \(error.localizedDescription)", type: .error)
                 return .send(.loadTally)  // Revert state by reloading
+
+            case .addTrackResponse(.success(let track)):
+                state.isLoading = false
+                state.userAlert = UserAlert(
+                    title: "Success",
+                    message: "Added \(track.title) to playlist",
+                    type: .success
+                )
+                state.tracks.append(track)
+                // Trigger Tally reload to ensure sync
+                return .send(.loadTally)
+
+            case .addTrackResponse(.failure(let error)):
+                state.isLoading = false
+                state.userAlert = UserAlert(
+                    title: "Error",
+                    message: "Failed to add track: \(error.localizedDescription)",
+                    type: .error
+                )
+                return .none
             }
         }
         .ifLet(\.$musicSearch, action: \.musicSearch) {
@@ -319,39 +358,68 @@ public struct EventDetailFeature: Sendable {
 
 extension EventDetailFeature.Action {
     public static func == (lhs: EventDetailFeature.Action, rhs: EventDetailFeature.Action) -> Bool {
-        switch (lhs, rhs) {
-        case (.onAppear, .onAppear),
-            (.loadTally, .loadTally),
-            (.dismissInfo, .dismissInfo),
-            (.addTrackButtonTapped, .addTrackButtonTapped),
-            (.realtimeConnected, .realtimeConnected):
-            return true
-        case (.voteButtonTapped(let lId), .voteButtonTapped(let rId)):
-            return lId == rId
-        case (.tallyLoaded(.success(let lItems)), .tallyLoaded(.success(let rItems))):
-            return lItems == rItems
-        case (.tallyLoaded(.failure(let lError)), .tallyLoaded(.failure(let rError))):
-            return lError.localizedDescription == rError.localizedDescription
-        case (.voteResponse(.success(let lResp)), .voteResponse(.success(let rResp))):
-            return lResp == rResp
-        case (.voteResponse(.failure(let lError)), .voteResponse(.failure(let rError))):
-            return lError.localizedDescription == rError.localizedDescription
-        case (.musicSearch(let lAction), .musicSearch(let rAction)):
-            return lAction == rAction
-        case (.realtimeMessageReceived(let lMsg), .realtimeMessageReceived(let rMsg)):
-            return lMsg == rMsg
-        case (.removeTrackButtonTapped(let lId), .removeTrackButtonTapped(let rId)):
-            return lId == rId
-        case (.playlistLoaded(let lTracks), .playlistLoaded(let rTracks)):
-            return lTracks == rTracks
-        case (.removeTrackResponse(.success), .removeTrackResponse(.success)):
-            return true
-        case (
-            .removeTrackResponse(.failure(let lError)), .removeTrackResponse(.failure(let rError))
-        ):
-            return lError.localizedDescription == rError.localizedDescription
-        default:
+        switch lhs {
+        case .onAppear:
+            if case .onAppear = rhs { return true }
+        case .loadTally:
+            if case .loadTally = rhs { return true }
+        case .dismissInfo:
+            if case .dismissInfo = rhs { return true }
+        case .addTrackButtonTapped:
+            if case .addTrackButtonTapped = rhs { return true }
+        case .realtimeConnected:
+            if case .realtimeConnected = rhs { return true }
+        case .dismissMusicSearch:
+            if case .dismissMusicSearch = rhs { return true }
+
+        case .voteButtonTapped(let lId):
+            if case .voteButtonTapped(let rId) = rhs { return lId == rId }
+        case .tallyLoaded(.success(let lItems)):
+            if case .tallyLoaded(.success(let rItems)) = rhs { return lItems == rItems }
+        case .tallyLoaded(.failure(let lError)):
+            if case .tallyLoaded(.failure(let rError)) = rhs {
+                return lError.localizedDescription == rError.localizedDescription
+            }
+        case .voteResponse(.success(let lResp)):
+            if case .voteResponse(.success(let rResp)) = rhs { return lResp == rResp }
+        case .voteResponse(.failure(let lError)):
+            if case .voteResponse(.failure(let rError)) = rhs {
+                return lError.localizedDescription == rError.localizedDescription
+            }
+
+        case .musicSearch(let lAction):
+            if case .musicSearch(let rAction) = rhs { return lAction == rAction }
+
+        case .realtimeMessageReceived(let lMsg):
+            if case .realtimeMessageReceived(let rMsg) = rhs { return lMsg == rMsg }
+
+        case .removeTrackButtonTapped(let lId):
+            if case .removeTrackButtonTapped(let rId) = rhs { return lId == rId }
+
+        case .playlistLoaded(let lTracks):
+            if case .playlistLoaded(let rTracks) = rhs { return lTracks == rTracks }
+
+        case .removeTrackResponse(.success):
+            if case .removeTrackResponse(.success) = rhs { return true }
+        case .removeTrackResponse(.failure(let lError)):
+            if case .removeTrackResponse(.failure(let rError)) = rhs {
+                return lError.localizedDescription == rError.localizedDescription
+            }
+
+        case .addTrackResponse(.success(let lTrack)):
+            if case .addTrackResponse(.success(let rTrack)) = rhs { return lTrack == rTrack }
+        case .addTrackResponse(.failure(let lError)):
+            if case .addTrackResponse(.failure(let rError)) = rhs {
+                return lError.localizedDescription == rError.localizedDescription
+            }
+
+        case .binding(let lBinding):
+            if case .binding(let rBinding) = rhs { return lBinding == rBinding }
+
+        // Catch-all for mix-matched cases handled by falling through
+        case .tallyLoaded, .voteResponse, .removeTrackResponse, .addTrackResponse:
             return false
         }
+        return false
     }
 }

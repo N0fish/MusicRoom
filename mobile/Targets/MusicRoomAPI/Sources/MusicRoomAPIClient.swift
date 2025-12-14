@@ -14,6 +14,7 @@ public struct MusicRoomAPIClient: Sendable {
     public var tally: @Sendable (UUID) async throws -> [TallyItem]
     public var search: @Sendable (_ query: String) async throws -> [MusicSearchItem]
     public var createEvent: @Sendable (CreateEventRequest) async throws -> Event
+    public var addTrack: @Sendable (String, AddTrackRequest) async throws -> Track
     public var connectToRealtime: @Sendable () -> AsyncStream<RealtimeMessage>
     public var removeTrack: @Sendable (_ playlistId: String, _ trackId: String) async throws -> Void
     public var getPlaylist: @Sendable (_ playlistId: String) async throws -> PlaylistResponse
@@ -106,6 +107,24 @@ extension MusicRoomAPIClient: DependencyKey {
 
                 let (data, _) = try await URLSession.shared.data(for: request)
                 return try JSONDecoder.iso8601.decode(Event.self, from: data)
+            },
+            addTrack: { playlistId, trackReq in
+                let url = settings.load().backendURL.appendingPathComponent(
+                    "playlists/\(playlistId)/tracks")
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.addCommonHeaders()
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+                request.httpBody = try JSONEncoder().encode(trackReq)
+
+                let (data, response) = try await URLSession.shared.data(for: request)
+                if let httpResponse = response as? HTTPURLResponse,
+                    !(200...299).contains(httpResponse.statusCode)
+                {
+                    throw MusicRoomAPIError.serverError(statusCode: httpResponse.statusCode)
+                }
+                return try JSONDecoder.iso8601.decode(Track.self, from: data)
             },
             connectToRealtime: {
                 // Construct WS URL
@@ -217,6 +236,12 @@ extension MusicRoomAPIClient: DependencyKey {
                 ]
             },
             createEvent: { _ in MockDataFactory.sampleEvents().first! },
+            addTrack: { _, req in
+                Track(
+                    title: req.title, artist: req.artist, provider: req.provider,
+                    providerTrackId: req.providerTrackId,
+                    thumbnailUrl: URL(string: req.thumbnailUrl))
+            },
             connectToRealtime: { AsyncStream { $0.finish() } },
             removeTrack: { _, _ in },
             getPlaylist: { _ in
@@ -243,6 +268,7 @@ extension MusicRoomAPIClient: DependencyKey {
             tally: { _ in [] },
             search: { _ in [] },
             createEvent: { _ in throw MusicRoomAPIError.networkError("Test unimplemented") },
+            addTrack: { _, _ in throw MusicRoomAPIError.networkError("Test unimplemented") },
             connectToRealtime: { AsyncStream { $0.finish() } },
             removeTrack: { _, _ in },
             getPlaylist: { _ in throw MusicRoomAPIError.networkError("Test unimplemented") }

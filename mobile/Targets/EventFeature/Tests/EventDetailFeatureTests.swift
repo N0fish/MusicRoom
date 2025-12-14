@@ -177,4 +177,87 @@ final class EventDetailFeatureTests: XCTestCase {
         }
     }
 
+    func testAddTrack_Success() async {
+        let event = Event(
+            id: UUID(), name: "Add Track Event", visibility: .publicEvent, ownerId: "u1",
+            licenseMode: .everyone, createdAt: Date(), updatedAt: Date())
+
+        let newTrackItem = MusicSearchItem(
+            title: "New Song", artist: "New Artist", provider: "youtube",
+            providerTrackId: "new1", thumbnailUrl: URL(string: "http://thumb.url")
+        )
+
+        let addedTrack = Track(
+            id: "t_new", title: "New Song", artist: "New Artist", provider: "youtube",
+            providerTrackId: "new1", thumbnailUrl: URL(string: "http://thumb.url"), votes: 0
+        )
+
+        var state = EventDetailFeature.State(event: event)
+        // Simulate search is OPEN
+        state.musicSearch = MusicSearchFeature.State()
+
+        let store = TestStore(initialState: state) {
+            EventDetailFeature()
+        } withDependencies: {
+            $0.musicRoomAPI.addTrack = { _, req in
+                // Verify request
+                print("DEBUG: addTrack called with \(req.title)")
+                XCTAssertEqual(req.title, "New Song")
+                XCTAssertEqual(req.provider, "youtube")
+                return addedTrack
+            }
+            $0.musicRoomAPI.tally = { _ in [] }
+            $0.musicRoomAPI.getPlaylist = { _ in
+                PlaylistResponse(
+                    playlist: PlaylistResponse.PlaylistMetadata(
+                        id: event.id.uuidString, ownerId: "u1", name: "P", isPublic: true,
+                        editMode: "o"),
+                    tracks: [addedTrack]
+                )
+            }
+            // Mock persistence
+            $0.persistence.savePlaylist = { _ in }
+            $0.continuousClock = ImmediateClock()
+        }
+
+        // Simulate search result selection
+        await store.send(.musicSearch(.presented(.trackTapped(newTrackItem)))) {
+            // Debugging the state passed to closure
+            XCTAssertNotNil($0.musicSearch, "Start state musicSearch should be non-nil")
+            // With deferred dismissal, musicSearch remains non-nil here
+            $0.isLoading = true
+        }
+
+        // Dismiss happens first now (immediate await)
+        await store.receive(.dismissMusicSearch) {
+            $0.musicSearch = nil
+        }
+
+        await store.receive(.addTrackResponse(.success(addedTrack))) {
+            $0.isLoading = false
+            $0.userAlert = EventDetailFeature.UserAlert(
+                title: "Success",
+                message: "Added New Song to playlist",
+                type: .success
+            )
+            $0.tracks.append(addedTrack)
+        }
+
+        // Then expecting loadTally
+        await store.receive(.loadTally) {
+            $0.isLoading = true
+        }
+
+        // loadTally triggers playlistLoaded AND tallyLoaded
+        await store.receive(.playlistLoaded([addedTrack]))
+        // No modification expected as tracks already updated
+
+        // Final action from loadTally
+        await store.receive(.tallyLoaded(.success([]))) {
+            $0.isLoading = false
+            // Tally sorted
+            $0.tally = []
+        }
+
+    }
 }

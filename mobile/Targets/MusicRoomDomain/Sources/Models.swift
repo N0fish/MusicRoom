@@ -128,6 +128,28 @@ public struct CreateEventRequest: Codable, Sendable {
     }
 }
 
+public struct AddTrackRequest: Codable, Sendable {
+    public let title: String
+    public let artist: String
+    public let provider: String
+    public let providerTrackId: String
+    public let thumbnailUrl: String
+
+    public init(
+        title: String,
+        artist: String,
+        provider: String,
+        providerTrackId: String,
+        thumbnailUrl: String
+    ) {
+        self.title = title
+        self.artist = artist
+        self.provider = provider
+        self.providerTrackId = providerTrackId
+        self.thumbnailUrl = thumbnailUrl
+    }
+}
+
 public struct VoteRequest: Codable, Sendable {
     public let trackId: String
     public let lat: Double?
