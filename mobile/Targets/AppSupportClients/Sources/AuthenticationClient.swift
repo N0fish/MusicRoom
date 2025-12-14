@@ -10,6 +10,7 @@ public struct AuthenticationClient: Sendable {
     public var getAccessToken: @Sendable () -> String?
     public var saveTokens: @Sendable (_ accessToken: String, _ refreshToken: String) async -> Void
     public var refreshToken: @Sendable () async throws -> Void
+    public var forgotPassword: @Sendable (_ email: String) async throws -> Void
 }
 
 public enum AuthenticationError: Error, Equatable {
@@ -30,7 +31,8 @@ extension AuthenticationClient: DependencyKey {
         isAuthenticated: { true },
         getAccessToken: { "mock_token" },
         saveTokens: { _, _ in },
-        refreshToken: {}
+        refreshToken: {},
+        forgotPassword: { _ in }
     )
 
     public static let testValue = AuthenticationClient(
@@ -40,7 +42,8 @@ extension AuthenticationClient: DependencyKey {
         isAuthenticated: { false },
         getAccessToken: { nil },
         saveTokens: { _, _ in },
-        refreshToken: {}
+        refreshToken: {},
+        forgotPassword: { _ in }
     )
 }
 
@@ -205,6 +208,23 @@ extension AuthenticationClient {
 
                 keychain.save(refreshResponse.accessToken, for: "accessToken")
                 keychain.save(refreshResponse.refreshToken, for: "refreshToken")
+            },
+            forgotPassword: { email in
+                let url = baseURL.appendingPathComponent("forgot-password")
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+
+                let body = ["email": email]
+                request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+                let (_, response) = try await urlSession.data(for: request)
+
+                guard let httpResponse = response as? HTTPURLResponse,
+                    (200...299).contains(httpResponse.statusCode)
+                else {
+                    throw AuthenticationError.networkError("Forgot password request failed")
+                }
             }
         )
     }

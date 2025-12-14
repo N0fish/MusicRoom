@@ -109,6 +109,18 @@ public struct AuthenticationView: View {
                                     store.password.isEmpty ? 0.3 : 0.8), lineWidth: 1)
                     )
 
+                    // Forgot Password Button
+                    if !store.isRegistering {
+                        Button(action: {
+                            store.send(.forgotPasswordButtonTapped)
+                        }) {
+                            Text("Forgot Password?")
+                                .font(.liquidCaption)
+                                .foregroundColor(.white.opacity(0.8))
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                        }
+                    }
+
                     if let error = store.errorMessage {
                         Text(error)
                             .foregroundColor(.red)
@@ -207,6 +219,10 @@ public struct AuthenticationView: View {
                 .foregroundColor(.liquidPrimary)
                 .padding(.bottom, 40)
             }
+        }
+        .fullScreenCover(item: $store.scope(state: \.forgotPassword, action: \.forgotPassword)) {
+            store in
+            ForgotPasswordView(store: store)
         }
     }
 }

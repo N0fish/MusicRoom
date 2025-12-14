@@ -12,6 +12,7 @@ public struct AuthenticationFeature: Sendable {
         public var isRegistering = false
         public var isLoading = false
         public var errorMessage: String?
+        @Presents public var forgotPassword: ForgotPasswordFeature.State?
 
         public init() {}
     }
@@ -22,6 +23,8 @@ public struct AuthenticationFeature: Sendable {
         case submitButtonTapped
         case socialLoginButtonTapped(SocialProvider)
         case authResponse(Result<Bool, AuthenticationError>)
+        case forgotPasswordButtonTapped
+        case forgotPassword(PresentationAction<ForgotPasswordFeature.Action>)
     }
 
     public enum SocialProvider: String, Sendable {
@@ -45,6 +48,13 @@ public struct AuthenticationFeature: Sendable {
             case .toggleModeButtonTapped:
                 state.isRegistering.toggle()
                 state.errorMessage = nil
+                return .none
+
+            case .forgotPasswordButtonTapped:
+                state.forgotPassword = ForgotPasswordFeature.State()
+                return .none
+
+            case .forgotPassword:
                 return .none
 
             case .socialLoginButtonTapped(let provider):
@@ -118,6 +128,9 @@ public struct AuthenticationFeature: Sendable {
                 }
                 return .none
             }
+        }
+        .ifLet(\.$forgotPassword, action: \.forgotPassword) {
+            ForgotPasswordFeature()
         }
     }
 }

@@ -40,6 +40,7 @@ public struct UserClient: Sendable {
     public var updateProfile: @Sendable (UserProfile) async throws -> UserProfile
     public var link: @Sendable (String, String) async throws -> UserProfile
     public var unlink: @Sendable (String) async throws -> UserProfile
+    public var changePassword: @Sendable (_ current: String, _ new: String) async throws -> Void
 }
 
 extension UserClient: DependencyKey {
@@ -87,7 +88,8 @@ extension UserClient: DependencyKey {
                 email: "preview@example.com",
                 preferences: [:]
             )
-        }
+        },
+        changePassword: { _, _ in }
     )
 
     public static let testValue = UserClient(
@@ -132,7 +134,8 @@ extension UserClient: DependencyKey {
                 email: "test@example.com",
                 preferences: [:]
             )
-        }
+        },
+        changePassword: { _, _ in }
     )
 }
 
@@ -234,6 +237,27 @@ extension UserClient {
                 }
 
                 return try JSONDecoder().decode(UserProfile.self, from: data)
+            },
+            changePassword: { current, new in
+                let url = URL(string: "http://localhost:8080/users/me/password")!
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+
+                if let accessToken = KeychainHelper().read("accessToken") {
+                    request.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+                }
+
+                let body = ["currentPassword": current, "newPassword": new]
+                request.httpBody = try JSONEncoder().encode(body)
+
+                let (_, response) = try await URLSession.shared.data(for: request)
+
+                guard let httpResponse = response as? HTTPURLResponse,
+                    (200...299).contains(httpResponse.statusCode)
+                else {
+                    throw URLError(.badServerResponse)
+                }
             }
         )
     }

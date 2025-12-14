@@ -195,4 +195,66 @@ final class ProfileFeatureTests: XCTestCase {
             $0.errorMessage = nil
         }
     }
+
+    func testChangePassword_Success() async {
+        let store = TestStore(initialState: ProfileFeature.State()) {
+            ProfileFeature()
+        } withDependencies: {
+            $0.user.changePassword = { current, new in
+                XCTAssertEqual(current, "oldPass")
+                XCTAssertEqual(new, "newPass")
+            }
+        }
+
+        await store.send(.toggleChangePasswordMode) {
+            $0.isChangingPassword = true
+        }
+
+        await store.send(.binding(.set(\.currentPassword, "oldPass"))) {
+            $0.currentPassword = "oldPass"
+        }
+        await store.send(.binding(.set(\.newPassword, "newPass"))) {
+            $0.newPassword = "newPass"
+        }
+        await store.send(.binding(.set(\.confirmNewPassword, "newPass"))) {
+            $0.confirmNewPassword = "newPass"
+        }
+
+        await store.send(.changePasswordButtonTapped) {
+            $0.isLoading = true
+        }
+
+        await store.receive(\.changePasswordResponse.success) {
+            $0.isLoading = false
+            $0.isChangingPassword = false
+            $0.passwordChangeSuccessMessage = "Password changed successfully."
+            $0.currentPassword = ""
+            $0.newPassword = ""
+            $0.confirmNewPassword = ""
+        }
+    }
+
+    func testChangePassword_ValidationMismatch() async {
+        let store = TestStore(initialState: ProfileFeature.State()) {
+            ProfileFeature()
+        }
+
+        await store.send(.toggleChangePasswordMode) {
+            $0.isChangingPassword = true
+        }
+
+        await store.send(.binding(.set(\.currentPassword, "oldPass"))) {
+            $0.currentPassword = "oldPass"
+        }
+        await store.send(.binding(.set(\.newPassword, "new1"))) {
+            $0.newPassword = "new1"
+        }
+        await store.send(.binding(.set(\.confirmNewPassword, "new2"))) {
+            $0.confirmNewPassword = "new2"
+        }
+
+        await store.send(.changePasswordButtonTapped) {
+            $0.errorMessage = "New passwords do not match."
+        }
+    }
 }

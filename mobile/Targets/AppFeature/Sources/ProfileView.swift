@@ -81,6 +81,40 @@ public struct ProfileView: View {
                         }
                     }
 
+                    // Security
+                    if let providers = store.userProfile?.linkedProviders,
+                        providers.isEmpty || providers.contains("email")
+                    {
+                        Section(header: Text("Security")) {
+                            if store.isChangingPassword {
+                                SecureField("Current Password", text: $store.currentPassword)
+                                SecureField("New Password", text: $store.newPassword)
+                                    .textContentType(.newPassword)
+                                SecureField("Confirm New Password", text: $store.confirmNewPassword)
+                                    .textContentType(.newPassword)
+
+                                Button("Update Password") {
+                                    store.send(.changePasswordButtonTapped)
+                                }
+                                .disabled(store.isLoading)
+
+                                Button("Cancel", role: .cancel) {
+                                    store.send(.toggleChangePasswordMode)
+                                }
+                            } else {
+                                Button("Change Password") {
+                                    store.send(.toggleChangePasswordMode)
+                                }
+                            }
+
+                            if let success = store.passwordChangeSuccessMessage {
+                                Text(success)
+                                    .foregroundColor(.green)
+                                    .font(.caption)
+                            }
+                        }
+                    }
+
                     // Linked Accounts
                     Section(header: Text("Linked Accounts")) {
                         ForEach(

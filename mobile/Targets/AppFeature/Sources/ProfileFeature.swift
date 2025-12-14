@@ -3,7 +3,7 @@ import ComposableArchitecture
 import Foundation
 
 @Reducer
-public struct ProfileFeature {
+public struct ProfileFeature: Sendable {
     @ObservableState
     public struct State: Equatable {
         public var userProfile: UserProfile?
@@ -16,6 +16,13 @@ public struct ProfileFeature {
         public var editableUsername: String = ""
         public var editableEmail: String = ""
         public var editableMusicPreferences: String = ""
+
+        // Password change fields
+        public var currentPassword = ""
+        public var newPassword = ""
+        public var confirmNewPassword = ""
+        public var isChangingPassword = false
+        public var passwordChangeSuccessMessage: String?
 
         public init() {}
     }
@@ -31,6 +38,9 @@ public struct ProfileFeature {
         case linkAccount(AuthenticationClient.SocialHelper.SocialProvider)
         case unlinkAccount(AuthenticationClient.SocialHelper.SocialProvider)
         case linkAccountResponse(TaskResult<UserProfile>)
+        case changePasswordButtonTapped
+        case changePasswordResponse(TaskResult<Bool>)
+        case toggleChangePasswordMode
     }
 
     @Dependency(\.user) var userClient
@@ -127,9 +137,6 @@ public struct ProfileFeature {
                         if let tokens = AuthenticationClient.SocialHelper.parseCallback(
                             url: callbackURL)
                         {
-                            // Link using the access token (or idToken) we got
-                            // Note: UserClient.link might behave differently depending on backend expectations
-                            // Assuming backend "link" endpoint takes the foreign token
                             await send(
                                 .linkAccountResponse(
                                     TaskResult {
@@ -163,6 +170,53 @@ public struct ProfileFeature {
             case .linkAccountResponse(.failure(let error)):
                 state.isLoading = false
                 state.errorMessage = "Failed to link/unlink account: \(error.localizedDescription)"
+                return .none
+
+            case .toggleChangePasswordMode:
+                state.isChangingPassword.toggle()
+                state.errorMessage = nil
+                state.passwordChangeSuccessMessage = nil
+                state.currentPassword = ""
+                state.newPassword = ""
+                state.confirmNewPassword = ""
+                return .none
+
+            case .changePasswordButtonTapped:
+                guard !state.currentPassword.isEmpty, !state.newPassword.isEmpty,
+                    !state.confirmNewPassword.isEmpty
+                else {
+                    state.errorMessage = "Please fill in all password fields."
+                    return .none
+                }
+                guard state.newPassword == state.confirmNewPassword else {
+                    state.errorMessage = "New passwords do not match."
+                    return .none
+                }
+                state.isLoading = true
+                state.errorMessage = nil
+
+                return .run {
+                    [current = state.currentPassword, new = state.newPassword, userClient] send in
+                    await send(
+                        .changePasswordResponse(
+                            TaskResult {
+                                try await userClient.changePassword(current, new)
+                                return true
+                            }))
+                }
+
+            case .changePasswordResponse(.success):
+                state.isLoading = false
+                state.isChangingPassword = false
+                state.passwordChangeSuccessMessage = "Password changed successfully."
+                state.currentPassword = ""
+                state.newPassword = ""
+                state.confirmNewPassword = ""
+                return .none
+
+            case .changePasswordResponse(.failure(let error)):
+                state.isLoading = false
+                state.errorMessage = "Failed to change password: \(error.localizedDescription)"
                 return .none
 
             case .binding:

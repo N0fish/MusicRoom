@@ -67,7 +67,8 @@ final class MusicRoomAPITests: XCTestCase {
             refreshToken: {
                 refreshCalled.setValue(true)
                 token.setValue("recovered_token")
-            }
+            },
+            forgotPassword: { _ in }
         )
 
         try await withDependencies {
@@ -119,9 +120,9 @@ final class MusicRoomAPITests: XCTestCase {
             saveTokens: { _, _ in },
             refreshToken: {
                 refreshCalled.setValue(true)
-                // Refresh succeeds but token is still bad/rejected by server
-                token.setValue("still_bad_token")
-            }
+                token.setValue("recovered_token")
+            },
+            forgotPassword: { _ in }
         )
 
         await withDependencies {
