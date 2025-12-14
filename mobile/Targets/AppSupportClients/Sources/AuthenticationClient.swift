@@ -9,6 +9,7 @@ public struct AuthenticationClient: Sendable {
     public var isAuthenticated: @Sendable () -> Bool
     public var getAccessToken: @Sendable () -> String?
     public var saveTokens: @Sendable (_ accessToken: String, _ refreshToken: String) async -> Void
+    public var refreshToken: @Sendable () async throws -> Void
 }
 
 public enum AuthenticationError: Error, Equatable {
@@ -28,7 +29,8 @@ extension AuthenticationClient: DependencyKey {
         logout: {},
         isAuthenticated: { true },
         getAccessToken: { "mock_token" },
-        saveTokens: { _, _ in }
+        saveTokens: { _, _ in },
+        refreshToken: {}
     )
 
     public static let testValue = AuthenticationClient(
@@ -37,7 +39,8 @@ extension AuthenticationClient: DependencyKey {
         logout: {},
         isAuthenticated: { false },
         getAccessToken: { nil },
-        saveTokens: { _, _ in }
+        saveTokens: { _, _ in },
+        refreshToken: {}
     )
 }
 
@@ -51,7 +54,7 @@ extension DependencyValues {
 // MARK: - Live Implementation
 
 extension AuthenticationClient {
-    static func live() -> Self {
+    static func live(urlSession: URLSession = .shared) -> Self {
         let keychain = KeychainHelper()
 
         // TODO: Use a proper configured base URL
@@ -67,7 +70,7 @@ extension AuthenticationClient {
                 let body = ["email": email, "password": password]
                 request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-                let (data, response) = try await URLSession.shared.data(for: request)
+                let (data, response) = try await urlSession.data(for: request)
 
                 guard let httpResponse = response as? HTTPURLResponse else {
                     throw AuthenticationError.networkError("Invalid response")
@@ -101,7 +104,7 @@ extension AuthenticationClient {
                 let body = ["email": email, "password": password]
                 request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-                let (data, response) = try await URLSession.shared.data(for: request)
+                let (data, response) = try await urlSession.data(for: request)
 
                 guard let httpResponse = response as? HTTPURLResponse,
                     (200...299).contains(httpResponse.statusCode)
@@ -132,6 +135,47 @@ extension AuthenticationClient {
             saveTokens: { accessToken, refreshToken in
                 keychain.save(accessToken, for: "accessToken")
                 keychain.save(refreshToken, for: "refreshToken")
+            },
+            refreshToken: {
+                guard let currentRefreshToken = keychain.read("refreshToken") else {
+                    throw AuthenticationError.invalidCredentials
+                }
+
+                let url = baseURL.appendingPathComponent("refresh")
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+
+                let body = ["refreshToken": currentRefreshToken]
+                request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+                let (data, response) = try await urlSession.data(for: request)
+
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw AuthenticationError.networkError("Invalid response")
+                }
+
+                if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                    // Refresh token invalid/expired
+                    keychain.delete("accessToken")
+                    keychain.delete("refreshToken")
+                    throw AuthenticationError.invalidCredentials
+                }
+
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    throw AuthenticationError.networkError(
+                        "Server error: \(httpResponse.statusCode)")
+                }
+
+                struct RefreshResponse: Decodable {
+                    let accessToken: String
+                    let refreshToken: String
+                }
+
+                let refreshResponse = try JSONDecoder().decode(RefreshResponse.self, from: data)
+
+                keychain.save(refreshResponse.accessToken, for: "accessToken")
+                keychain.save(refreshResponse.refreshToken, for: "refreshToken")
             }
         )
     }

@@ -1,5 +1,5 @@
-import Foundation
 import Dependencies
+import Foundation
 
 public struct AppSettings: Codable, Equatable, Sendable {
     public var backendURL: URL
@@ -77,6 +77,15 @@ public struct AppSettingsClient: Sendable {
         self.save = save
         self.reset = reset
     }
+}
+
+extension AppSettingsClient {
+    public static let testValue = AppSettingsClient(
+        load: { .default },
+        save: { _ in },
+        reset: { .default }
+    )
+    public static let previewValue = testValue
 }
 
 extension AppSettings {

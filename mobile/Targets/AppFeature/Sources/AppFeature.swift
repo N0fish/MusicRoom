@@ -20,6 +20,7 @@ public struct AppFeature: Sendable {
         public var authentication = AuthenticationFeature.State()
         public var settings: SettingsFeature.State
         public var eventList = EventListFeature.State()
+        public var profile = ProfileFeature.State()
 
         // Legacy/Stream State (To be refactored into EventDetail later)
         public var latestStreamMessage: String
@@ -52,6 +53,7 @@ public struct AppFeature: Sendable {
         case settings(SettingsFeature.Action)
         case authentication(AuthenticationFeature.Action)
         case eventList(EventListFeature.Action)
+        case profile(ProfileFeature.Action)
         case task
         case destinationChanged(State.Destination)
         case startApp
@@ -80,12 +82,30 @@ public struct AppFeature: Sendable {
             EventListFeature()
         }
 
+        Scope(state: \.profile, action: \.profile) {
+            ProfileFeature()
+        }
+
         Reduce { state, action in
             switch action {
             case .settings:
                 return .none
 
+            case .eventList(.delegate(.sessionExpired)):
+                return .send(.logoutButtonTapped)
+
             case .eventList:
+                return .none
+
+            case .profile(.logoutButtonTapped):
+                // ProfileFeature handles the API call, we just need to switch destination if needed.
+                // Actually ProfileFeature.logoutButtonTapped runs an effect to logout.
+                // We also need to switch navigation.
+                return .run { send in
+                    await send(.destinationChanged(.login))
+                }
+
+            case .profile:
                 return .none
 
             case .authentication(.authResponse(.success)):
@@ -116,11 +136,11 @@ public struct AppFeature: Sendable {
                 // Trigger initial data load
                 return .run { send in
                     await send(.eventList(.onAppear))
+                    await send(.profile(.onAppear))
                 }
 
             case .handleDeepLink(_):
                 // Legacy: ASWebAuthenticationSession handles callbacks internally for Social Auth.
-                // Keep this if we need to handle *other* deep links (e.g. Email Links)
                 return .none
 
             case .logoutButtonTapped:

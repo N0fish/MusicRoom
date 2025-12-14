@@ -1,7 +1,10 @@
 import ComposableArchitecture
+import Dependencies
 import Foundation
 import XCTest
 
+@testable import AppSettingsClient
+@testable import AppSupportClients
 @testable import MusicRoomAPI
 @testable import MusicRoomDomain
 
@@ -48,6 +51,107 @@ final class MusicRoomAPITests: XCTestCase {
         URLProtocol.unregisterClass(MockURLProtocol.self)
         MockURLProtocol.requestHandler = nil
         super.tearDown()
+    }
+
+    func testInterceptorRefreshesTokenOn401() async throws {
+        let refreshCalled = LockIsolated(false)
+        let token = LockIsolated("bad_token")
+
+        let mockAuth = AuthenticationClient(
+            login: { _, _ in },
+            register: { _, _ in },
+            logout: {},
+            isAuthenticated: { true },
+            getAccessToken: { token.value },
+            saveTokens: { _, _ in },
+            refreshToken: {
+                refreshCalled.setValue(true)
+                token.setValue("recovered_token")
+            }
+        )
+
+        try await withDependencies {
+            $0.authentication = mockAuth
+            $0.appSettings = .testValue
+        } operation: {
+            // Register MockURLProtocol
+            let config = URLSessionConfiguration.ephemeral
+            config.protocolClasses = [MockURLProtocol.self]
+            let session = URLSession(configuration: config)
+
+            // Setup Mock Handler
+            MockURLProtocol.requestHandler = { request in
+                if request.allHTTPHeaderFields?["Authorization"] == "Bearer recovered_token" {
+                    // Success after refresh
+                    let response = HTTPURLResponse(
+                        url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                    return (response, #"{"items": []}"#.data(using: .utf8)!)
+                } else {
+                    // First failure
+                    let response = HTTPURLResponse(
+                        url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!
+                    // 401 typically returns valid JSON error or empty
+                    return (response, "{}".data(using: .utf8)!)
+                }
+            }
+
+            // Instantiate live client with injected session
+            let client = MusicRoomAPIClient.live(urlSession: session)
+
+            // Call an endpoint that triggers the interceptor
+            // search uses performRequest
+            _ = try await client.search("test")
+
+            XCTAssertTrue(refreshCalled.value)
+        }
+    }
+
+    func testInterceptorFailsOnRepeated401() async throws {
+        let refreshCalled = LockIsolated(false)
+        let token = LockIsolated("bad_token")
+
+        let mockAuth = AuthenticationClient(
+            login: { _, _ in },
+            register: { _, _ in },
+            logout: {},
+            isAuthenticated: { true },
+            getAccessToken: { token.value },
+            saveTokens: { _, _ in },
+            refreshToken: {
+                refreshCalled.setValue(true)
+                // Refresh succeeds but token is still bad/rejected by server
+                token.setValue("still_bad_token")
+            }
+        )
+
+        await withDependencies {
+            $0.authentication = mockAuth
+            $0.appSettings = .testValue
+        } operation: {
+            let config = URLSessionConfiguration.ephemeral
+            config.protocolClasses = [MockURLProtocol.self]
+            let session = URLSession(configuration: config)
+
+            MockURLProtocol.requestHandler = { request in
+                // Always return 401
+                let response = HTTPURLResponse(
+                    url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!
+                return (response, "{}".data(using: .utf8)!)
+            }
+
+            let client = MusicRoomAPIClient.live(urlSession: session)
+
+            do {
+                _ = try await client.search("test")
+                XCTFail("Should have thrown error")
+            } catch let error as MusicRoomAPIError {
+                XCTAssertEqual(error, .sessionExpired)
+            } catch {
+                XCTFail("Unexpected error: \(error)")
+            }
+
+            XCTAssertTrue(refreshCalled.value)
+        }
     }
 
     func testListEvents() async throws {

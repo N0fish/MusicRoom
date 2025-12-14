@@ -47,6 +47,11 @@ public struct EventDetailFeature: Sendable {
         // Realtime
         case realtimeMessageReceived(RealtimeMessage)
         case realtimeConnected
+        case delegate(Delegate)
+
+        public enum Delegate: Equatable, Sendable {
+            case sessionExpired
+        }
     }
 
     @Dependency(\.musicRoomAPI) var musicRoomAPI
@@ -78,6 +83,10 @@ public struct EventDetailFeature: Sendable {
             switch action {
             case .binding:
                 return .none
+
+            case .delegate:
+                return .none
+
             case .onAppear:
                 return .merge(
                     .run { [name = state.event.name] _ in
@@ -108,7 +117,10 @@ public struct EventDetailFeature: Sendable {
                     case .success(let response):
                         try? await persistence.savePlaylist(response)
                         await send(.playlistLoaded(response.tracks))
-                    case .failure:
+                    case .failure(let error):
+                        if let apiError = error as? MusicRoomAPIError, apiError == .sessionExpired {
+                            await send(.delegate(.sessionExpired))
+                        }
                         // Fallback to cache
                         if let cached = try? await persistence.loadPlaylist() {
                             // Only use cache if it matches this event?
@@ -135,6 +147,9 @@ public struct EventDetailFeature: Sendable {
 
             case .tallyLoaded(.failure(let error)):
                 state.isLoading = false
+                if let apiError = error as? MusicRoomAPIError, apiError == .sessionExpired {
+                    return .send(.delegate(.sessionExpired))
+                }
                 print("Tally refresh failed: \(error)")
                 return .none
 
@@ -220,6 +235,9 @@ public struct EventDetailFeature: Sendable {
 
             case .voteResponse(.failure(let error)):
                 state.isVoting = false
+                if let apiError = error as? MusicRoomAPIError, apiError == .sessionExpired {
+                    return .send(.delegate(.sessionExpired))
+                }
                 let message: String
                 if let apiError = error as? MusicRoomAPIError {
                     message = apiError.errorDescription ?? "Unknown generic error"
@@ -346,6 +364,9 @@ public struct EventDetailFeature: Sendable {
 
             case .addTrackResponse(.failure(let error)):
                 state.isLoading = false
+                if let apiError = error as? MusicRoomAPIError, apiError == .sessionExpired {
+                    return .send(.delegate(.sessionExpired))
+                }
                 state.userAlert = UserAlert(
                     title: "Error",
                     message: "Failed to add track: \(error.localizedDescription)",

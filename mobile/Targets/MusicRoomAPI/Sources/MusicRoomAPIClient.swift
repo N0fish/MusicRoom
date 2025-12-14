@@ -1,4 +1,5 @@
 import AppSettingsClient
+import AppSupportClients
 import Dependencies
 import Foundation
 import MusicRoomDomain
@@ -28,6 +29,7 @@ public struct MusicRoomAPIClient: Sendable {
             self.count = count
         }
     }
+
 }
 
 extension DependencyValues {
@@ -39,7 +41,130 @@ extension DependencyValues {
 
 extension MusicRoomAPIClient: DependencyKey {
     public static var liveValue: MusicRoomAPIClient {
+        live()
+    }
+
+    public static func live(urlSession: URLSession = .shared) -> MusicRoomAPIClient {
         @Dependency(\.appSettings) var settings
+        @Dependency(\.authentication) var authentication
+
+        let appVersion =
+            Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
+
+        @Sendable func performRequest<T: Decodable & Sendable>(
+            _ request: URLRequest, retryCount: Int = 0
+        )
+            async throws -> T
+        {
+            var request = request
+            // Headers
+            request.setValue("iOS", forHTTPHeaderField: "X-Platform")
+
+            let deviceName = await MainActor.run { UIDevice.current.name }
+            request.setValue(deviceName, forHTTPHeaderField: "X-Device")
+            request.setValue(appVersion, forHTTPHeaderField: "X-App-Version")
+
+            // Auth
+            if let token = authentication.getAccessToken() {
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            }
+
+            do {
+                let (data, response) = try await urlSession.data(for: request)
+
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw MusicRoomAPIError.networkError("Invalid response")
+                }
+
+                // Token Refresh (401)
+                if httpResponse.statusCode == 401 {
+                    if retryCount < 1 {
+                        do {
+                            try await authentication.refreshToken()
+                            // Update token in new request is handled by recursive call
+                            return try await performRequest(request, retryCount: retryCount + 1)
+                        } catch {
+                            throw MusicRoomAPIError.sessionExpired
+                        }
+                    } else {
+                        throw MusicRoomAPIError.sessionExpired
+                    }
+                }
+
+                // Error Mapping
+                switch httpResponse.statusCode {
+                case 200...299:
+                    break
+                case 403:
+                    throw MusicRoomAPIError.forbidden
+                case 404:
+                    throw MusicRoomAPIError.notFound
+                default:
+                    throw MusicRoomAPIError.serverError(statusCode: httpResponse.statusCode)
+                }
+
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+                return try decoder.decode(T.self, from: data)
+            } catch let error as MusicRoomAPIError {
+                throw error
+            } catch {
+                throw MusicRoomAPIError.networkError(error.localizedDescription)
+            }
+        }
+
+        @Sendable func performRequestNoContent(_ request: URLRequest, retryCount: Int = 0)
+            async throws
+        {
+            var request = request
+            // ... same headers ...
+            request.setValue("iOS", forHTTPHeaderField: "X-Platform")
+
+            let deviceName = await MainActor.run { UIDevice.current.name }
+            request.setValue(deviceName, forHTTPHeaderField: "X-Device")
+            request.setValue(appVersion, forHTTPHeaderField: "X-App-Version")
+
+            if let token = authentication.getAccessToken() {
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            }
+
+            do {
+                let (_, response) = try await urlSession.data(for: request)
+
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw MusicRoomAPIError.networkError("Invalid response")
+                }
+
+                if httpResponse.statusCode == 401 {
+                    if retryCount < 1 {
+                        do {
+                            try await authentication.refreshToken()
+                            return try await performRequestNoContent(
+                                request, retryCount: retryCount + 1)
+                        } catch {
+                            throw MusicRoomAPIError.sessionExpired
+                        }
+                    } else {
+                        throw MusicRoomAPIError.sessionExpired
+                    }
+                }
+
+                switch httpResponse.statusCode {
+                case 200...299:
+                    break
+                case 403:
+                    throw MusicRoomAPIError.forbidden
+                case 404:
+                    throw MusicRoomAPIError.notFound
+                default:
+                    throw MusicRoomAPIError.serverError(statusCode: httpResponse.statusCode)
+                }
+            } catch let error as MusicRoomAPIError {
+                throw error
+            } catch {
+                throw MusicRoomAPIError.networkError(error.localizedDescription)
+            }
+        }
 
         return MusicRoomAPIClient(
             fetchSampleEvents: {
@@ -49,82 +174,69 @@ extension MusicRoomAPIClient: DependencyKey {
             listEvents: {
                 let url = settings.load().backendURL.appendingPathComponent("events")
                 var request = URLRequest(url: url)
-                request.addCommonHeaders()
-                let (data, _) = try await URLSession.shared.data(for: request)
-                return try JSONDecoder.iso8601.decode([Event].self, from: data)
+                request.httpMethod = "GET"
+                return try await performRequest(request)
             },
             getEvent: { id in
-                let url = settings.load().backendURL.appendingPathComponent(
-                    "events/\(id.uuidString)")
+                let url = settings.load().backendURL.appendingPathComponent("events")
+                    .appendingPathComponent(id.uuidString)
                 var request = URLRequest(url: url)
-                request.addCommonHeaders()
-                let (data, _) = try await URLSession.shared.data(for: request)
-                return try JSONDecoder.iso8601.decode(Event.self, from: data)
+                request.httpMethod = "GET"
+                return try await performRequest(request)
             },
             vote: { eventId, trackId, lat, lng in
                 let url = settings.load().backendURL.appendingPathComponent(
                     "events/\(eventId.uuidString)/vote")
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
-                request.addCommonHeaders()
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
                 let body = VoteRequest(trackId: trackId, lat: lat, lng: lng)
                 request.httpBody = try JSONEncoder().encode(body)
 
-                let (data, _) = try await URLSession.shared.data(for: request)
-                return try JSONDecoder().decode(VoteResponse.self, from: data)
+                return try await performRequest(request)
             },
             tally: { eventId in
-                let url = settings.load().backendURL.appendingPathComponent(
-                    "events/\(eventId.uuidString)/tally")
+                let url = settings.load().backendURL.appendingPathComponent("events")
+                    .appendingPathComponent(eventId.uuidString)
+                    .appendingPathComponent("tally")
                 var request = URLRequest(url: url)
-                request.addCommonHeaders()
-                let (data, _) = try await URLSession.shared.data(for: request)
-                return try JSONDecoder().decode([TallyItem].self, from: data)
+                request.httpMethod = "GET"
+                return try await performRequest(request)
             },
             search: { query in
-                var url = settings.load().backendURL.appendingPathComponent("music/search")
-                url.append(queryItems: [URLQueryItem(name: "query", value: query)])
+                let url = settings.load().backendURL.appendingPathComponent("music")
+                    .appendingPathComponent("search")
+                var components = URLComponents(url: url, resolvingAgainstBaseURL: true)!
+                components.queryItems = [URLQueryItem(name: "query", value: query)]
+                let request = URLRequest(url: components.url!)
+                // Use default GET
 
-                var request = URLRequest(url: url)
-                request.addCommonHeaders()
-
-                let (data, _) = try await URLSession.shared.data(for: request)
                 struct SearchResponse: Decodable {
                     let items: [MusicSearchItem]
                 }
-                return try JSONDecoder().decode(SearchResponse.self, from: data).items
+
+                let response: SearchResponse = try await performRequest(request)
+                return response.items
             },
             createEvent: { requestBody in
                 let url = settings.load().backendURL.appendingPathComponent("events")
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
-                request.addCommonHeaders()
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
                 request.httpBody = try JSONEncoder.iso8601.encode(requestBody)
-
-                let (data, _) = try await URLSession.shared.data(for: request)
-                return try JSONDecoder.iso8601.decode(Event.self, from: data)
+                return try await performRequest(request)
             },
             addTrack: { playlistId, trackReq in
                 let url = settings.load().backendURL.appendingPathComponent(
                     "playlists/\(playlistId)/tracks")
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
-                request.addCommonHeaders()
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
                 request.httpBody = try JSONEncoder().encode(trackReq)
-
-                let (data, response) = try await URLSession.shared.data(for: request)
-                if let httpResponse = response as? HTTPURLResponse,
-                    !(200...299).contains(httpResponse.statusCode)
-                {
-                    throw MusicRoomAPIError.serverError(statusCode: httpResponse.statusCode)
-                }
-                return try JSONDecoder.iso8601.decode(Track.self, from: data)
+                return try await performRequest(request)
             },
             connectToRealtime: {
                 // Construct WS URL
@@ -136,23 +248,29 @@ extension MusicRoomAPIClient: DependencyKey {
                 }
                 // Convert http/https to ws/wss (simple hack for MVP)
                 let scheme = currentBackendURL.scheme == "https" ? "wss" : "ws"
-                // Usually gateway routes /ws -> realtime-service. Assuming direct or gateway config.
-                // Based on realtime-service.md: ws://localhost:3004/ws
-                // If via gateway (port 8080), it might not proxy websockets correctly without config?
-                // Let's assume gateway proxies /ws or we use direct port 3004 if running locally?
-                // For MVP, let's use the gateway URL but change protocol.
 
-                // Note: If using gateway, the path might be /ws
                 var components = URLComponents()
                 components.scheme = scheme
                 components.host = host
                 components.port = port  // Use same port as API for now (Gateway)
                 components.path = "/ws"
 
+                // Pass token in query param or header?
+                // WS standard limits headers in browser, but URLSession supports it.
+                // However, many backends expect token in query/protocol.
+                // For now, let's try appending token to query if available?
+                // Or standard "Authorization" header if backend supports it for WS upgrade.
+                // Let's assume header for now.
+
                 guard let url = components.url else { return AsyncStream { $0.finish() } }
 
+                var request = URLRequest(url: url)
+                if let token = authentication.getAccessToken() {
+                    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                }
+
                 return AsyncStream { continuation in
-                    let task = URLSession.shared.webSocketTask(with: url)
+                    let task = URLSession.shared.webSocketTask(with: request)
                     task.resume()
 
                     // Simple recursive receiver
@@ -198,23 +316,15 @@ extension MusicRoomAPIClient: DependencyKey {
                     "playlists/\(playlistId)/tracks/\(trackId)")
                 var request = URLRequest(url: url)
                 request.httpMethod = "DELETE"
-                request.addCommonHeaders()
-
-                let (_, response) = try await URLSession.shared.data(for: request)
-                if let httpResponse = response as? HTTPURLResponse,
-                    !(200...299).contains(httpResponse.statusCode)
-                {
-                    throw MusicRoomAPIError.serverError(statusCode: httpResponse.statusCode)
-                }
+                try await performRequestNoContent(request)
             },
             getPlaylist: { playlistId in
                 let url = settings.load().backendURL.appendingPathComponent(
                     "playlists/\(playlistId)")
-                var request = URLRequest(url: url)
-                request.addCommonHeaders()
-                let (data, _) = try await URLSession.shared.data(for: request)
-                return try JSONDecoder.iso8601.decode(PlaylistResponse.self, from: data)
-            }
+                let request = URLRequest(url: url)
+                return try await performRequest(request)
+            },
+
         )
     }
 
@@ -255,7 +365,8 @@ extension MusicRoomAPIClient: DependencyKey {
                             providerTrackId: "1", thumbnailUrl: nil)
                     ]
                 )
-            }
+            },
+
         )
     }
 
@@ -271,7 +382,8 @@ extension MusicRoomAPIClient: DependencyKey {
             addTrack: { _, _ in throw MusicRoomAPIError.networkError("Test unimplemented") },
             connectToRealtime: { AsyncStream { $0.finish() } },
             removeTrack: { _, _ in },
-            getPlaylist: { _ in throw MusicRoomAPIError.networkError("Test unimplemented") }
+            getPlaylist: { _ in throw MusicRoomAPIError.networkError("Test unimplemented") },
+
         )
     }
 }
@@ -279,11 +391,17 @@ extension MusicRoomAPIClient: DependencyKey {
 public enum MusicRoomAPIError: Error, Equatable, LocalizedError {
     case networkError(String)
     case serverError(statusCode: Int)
+    case sessionExpired
+    case forbidden
+    case notFound
 
     public var errorDescription: String? {
         switch self {
         case .networkError(let message): return "Network Error: \(message)"
         case .serverError(let code): return "Server Error: \(code)"
+        case .sessionExpired: return "Session Expired"
+        case .forbidden: return "Access Denied"
+        case .notFound: return "Not Found"
         }
     }
 }

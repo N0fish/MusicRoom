@@ -60,6 +60,19 @@ let project = Project(
             dependencies: [
                 .target(name: "MusicRoomDomain"),
                 .target(name: "AppSettingsClient"),
+                .target(name: "AppSupportClients"),
+                .package(product: "Dependencies"),
+            ]
+        ),
+        Target.target(
+            name: "AppSupportClientsTests",
+            destinations: .iOS,
+            product: .unitTests,
+            bundleId: "io.tuist.AppSupportClientsTests",
+            infoPlist: .default,
+            sources: ["Targets/AppSupportClients/Tests/**"],
+            dependencies: [
+                .target(name: "AppSupportClients"),
                 .package(product: "Dependencies"),
             ]
         ),
@@ -216,12 +229,6 @@ let project = Project(
             ],
             dependencies: [
                 .target(name: "MusicRoomMobile"),
-                .target(name: "AppFeature"),
-                .target(name: "SettingsFeature"),
-                .target(name: "EventFeature"),
-                .target(name: "MusicRoomAPI"),
-                .target(name: "MusicRoomDomain"),
-                .target(name: "AppSettingsClient"),
                 .package(product: "ComposableArchitecture"),
                 .package(product: "SwiftNavigation"),
                 .package(product: "CasePaths"),

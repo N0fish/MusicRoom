@@ -1,43 +1,80 @@
 import Dependencies
 import Foundation
 
-public struct UserProfile: Decodable, Equatable, Sendable {
+public struct UserProfile: Codable, Equatable, Sendable {
     public let id: String
     public let userId: String
     public let username: String
     public let displayName: String
     public let avatarUrl: String
     public let hasCustomAvatar: Bool
+    public let email: String?
+    public let preferences: [String: String]?
+
+    public init(
+        id: String,
+        userId: String,
+        username: String,
+        displayName: String,
+        avatarUrl: String,
+        hasCustomAvatar: Bool,
+        email: String? = nil,
+        preferences: [String: String]? = nil
+    ) {
+        self.id = id
+        self.userId = userId
+        self.username = username
+        self.displayName = displayName
+        self.avatarUrl = avatarUrl
+        self.hasCustomAvatar = hasCustomAvatar
+        self.email = email
+        self.preferences = preferences
+    }
 }
 
 public struct UserClient: Sendable {
     public var me: @Sendable () async throws -> UserProfile
+    public var updateProfile: @Sendable (UserProfile) async throws -> UserProfile
 }
 
 extension UserClient: DependencyKey {
     public static let liveValue = UserClient.live()
 
-    public static let previewValue = UserClient {
-        UserProfile(
-            id: "mock-id",
-            userId: "mock-user-id",
-            username: "Preview User",
-            displayName: "Preview Display Name",
-            avatarUrl: "",
-            hasCustomAvatar: false
-        )
-    }
+    public static let previewValue = UserClient(
+        me: {
+            UserProfile(
+                id: "mock-id",
+                userId: "mock-user-id",
+                username: "Preview User",
+                displayName: "Preview Display Name",
+                avatarUrl: "",
+                hasCustomAvatar: false,
+                email: "preview@example.com",
+                preferences: [:]
+            )
+        },
+        updateProfile: { profile in
+            return profile
+        }
+    )
 
-    public static let testValue = UserClient {
-        UserProfile(
-            id: "test-id",
-            userId: "test-user-id",
-            username: "Test User",
-            displayName: "Test Display Name",
-            avatarUrl: "",
-            hasCustomAvatar: false
-        )
-    }
+    public static let testValue = UserClient(
+        me: {
+            UserProfile(
+                id: "test-id",
+                userId: "test-user-id",
+                username: "Test User",
+                displayName: "Test Display Name",
+                avatarUrl: "",
+                hasCustomAvatar: false,
+                email: "test@example.com",
+                preferences: [:]
+            )
+        },
+        updateProfile: { profile in
+            return profile
+        }
+    )
 }
 
 extension DependencyValues {
@@ -63,6 +100,28 @@ extension UserClient {
                 if let token = KeychainHelper().read("accessToken") {
                     request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
                 }
+
+                let (data, response) = try await URLSession.shared.data(for: request)
+
+                guard let httpResponse = response as? HTTPURLResponse,
+                    (200...299).contains(httpResponse.statusCode)
+                else {
+                    throw URLError(.badServerResponse)
+                }
+
+                return try JSONDecoder().decode(UserProfile.self, from: data)
+            },
+            updateProfile: { profile in
+                let url = URL(string: "http://localhost:8080/users/me")!
+                var request = URLRequest(url: url)
+                request.httpMethod = "PUT"
+                request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+
+                if let token = KeychainHelper().read("accessToken") {
+                    request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                }
+
+                request.httpBody = try JSONEncoder().encode(profile)
 
                 let (data, response) = try await URLSession.shared.data(for: request)
 

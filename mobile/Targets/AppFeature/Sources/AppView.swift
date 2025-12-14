@@ -37,6 +37,19 @@ public struct AppView: View {
     private var appContent: some View {
         WithViewStore(store, observe: { $0 }) { appViewStore in
             List {
+                Section("Account") {
+                    NavigationLink {
+                        ProfileView(
+                            store: store.scope(
+                                state: \.profile,
+                                action: \.profile
+                            )
+                        )
+                    } label: {
+                        Label("My Profile", systemImage: "person.crop.circle")
+                    }
+                }
+
                 Section("Environment") {
                     NavigationLink {
                         SettingsView(

@@ -30,6 +30,11 @@ public struct EventListFeature: Sendable {
         case createEvent(PresentationAction<CreateEventFeature.Action>)
         case path(StackAction<EventDetailFeature.State, EventDetailFeature.Action>)
         case networkStatusChanged(NetworkStatus)
+        case delegate(Delegate)
+
+        public enum Delegate: Equatable, Sendable {
+            case sessionExpired
+        }
     }
 
     // Dependencies
@@ -100,6 +105,11 @@ public struct EventListFeature: Sendable {
                 return .none
 
             case .eventsLoaded(.failure(let error)):
+                // Check for session expired
+                if let apiError = error as? MusicRoomAPIError, apiError == .sessionExpired {
+                    return .send(.delegate(.sessionExpired))
+                }
+
                 // Try loading from cache as fallback
                 return .run { send in
                     await telemetry.log(
@@ -145,6 +155,12 @@ public struct EventListFeature: Sendable {
                 return .none
 
             case .createEvent:
+                return .none
+
+            case .path(.element(id: _, action: .delegate(.sessionExpired))):
+                return .send(.delegate(.sessionExpired))
+
+            case .delegate:
                 return .none
 
             case .path:
@@ -193,6 +209,8 @@ extension EventListFeature.Action {
             }
         case (.networkStatusChanged(let lStatus), .networkStatusChanged(let rStatus)):
             return lStatus == rStatus
+        case (.delegate(let lDelegate), .delegate(let rDelegate)):
+            return lDelegate == rDelegate
         default:
             return false
         }

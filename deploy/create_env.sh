@@ -38,6 +38,7 @@ SERVICES=(
   "backend/services/realtime-service"
   "backend/services/vote-service"
   "backend/services/mock-service"
+  "backend/services/music-provider-service"
   "frontend"
 )
 
