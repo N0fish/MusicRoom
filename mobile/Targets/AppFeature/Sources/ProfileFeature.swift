@@ -28,10 +28,15 @@ public struct ProfileFeature {
         case saveButtonTapped
         case updateProfileResponse(TaskResult<UserProfile>)
         case logoutButtonTapped
+        case linkAccount(AuthenticationClient.SocialHelper.SocialProvider)
+        case unlinkAccount(AuthenticationClient.SocialHelper.SocialProvider)
+        case linkAccountResponse(TaskResult<UserProfile>)
     }
 
     @Dependency(\.user) var userClient
     @Dependency(\.authentication) var authClient
+    @Dependency(\.webAuthenticationSession) var webAuth
+    @Dependency(\.appSettings) var appSettings
 
     public init() {}
 
@@ -109,6 +114,56 @@ public struct ProfileFeature {
                 return .run { [authClient] _ in
                     await authClient.logout()
                 }
+
+            case .linkAccount(let provider):
+                state.isLoading = true
+                return .run { [appSettings, webAuth, userClient] send in
+                    let settings = appSettings.load()
+                    let authURL = AuthenticationClient.SocialHelper.authURL(
+                        for: provider, baseURL: settings.backendURL)
+
+                    do {
+                        let callbackURL = try await webAuth.authenticate(authURL, "musicroom")
+                        if let tokens = AuthenticationClient.SocialHelper.parseCallback(
+                            url: callbackURL)
+                        {
+                            // Link using the access token (or idToken) we got
+                            // Note: UserClient.link might behave differently depending on backend expectations
+                            // Assuming backend "link" endpoint takes the foreign token
+                            await send(
+                                .linkAccountResponse(
+                                    TaskResult {
+                                        try await userClient.link(
+                                            provider.rawValue, tokens.accessToken)
+                                    }))
+                        } else {
+                            await send(.linkAccountResponse(.failure(URLError(.badServerResponse))))
+                        }
+                    } catch {
+                        await send(.linkAccountResponse(.failure(error)))
+                    }
+                }
+
+            case .unlinkAccount(let provider):
+                state.isLoading = true
+                return .run { [userClient] send in
+                    await send(
+                        .linkAccountResponse(
+                            TaskResult {
+                                try await userClient.unlink(provider.rawValue)
+                            }))
+                }
+
+            case .linkAccountResponse(.success(let profile)):
+                state.isLoading = false
+                state.userProfile = profile
+                state.errorMessage = nil
+                return .none
+
+            case .linkAccountResponse(.failure(let error)):
+                state.isLoading = false
+                state.errorMessage = "Failed to link/unlink account: \(error.localizedDescription)"
+                return .none
 
             case .binding:
                 return .none

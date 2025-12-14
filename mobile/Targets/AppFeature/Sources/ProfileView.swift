@@ -1,3 +1,4 @@
+import AppSupportClients
 import ComposableArchitecture
 import SwiftUI
 
@@ -77,6 +78,33 @@ public struct ProfileView: View {
                         } else {
                             LabeledContent(
                                 "Music Genres", value: profile.preferences?["genres"] ?? "None")
+                        }
+                    }
+
+                    // Linked Accounts
+                    Section(header: Text("Linked Accounts")) {
+                        ForEach(
+                            [AuthenticationClient.SocialHelper.SocialProvider.google, .intra42],
+                            id: \.self
+                        ) {
+                            provider in
+                            HStack {
+                                Text(
+                                    provider == .intra42
+                                        ? "Intra 42" : provider.rawValue.capitalized)
+                                Spacer()
+                                if profile.linkedProviders.contains(provider.rawValue) {
+                                    Button("Unlink", role: .destructive) {
+                                        store.send(.unlinkAccount(provider))
+                                    }
+                                    .disabled(store.isLoading)
+                                } else {
+                                    Button("Link") {
+                                        store.send(.linkAccount(provider))
+                                    }
+                                    .disabled(store.isLoading)
+                                }
+                            }
                         }
                     }
 

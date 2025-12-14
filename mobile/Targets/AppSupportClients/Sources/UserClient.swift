@@ -8,6 +8,7 @@ public struct UserProfile: Codable, Equatable, Sendable {
     public let displayName: String
     public let avatarUrl: String
     public let hasCustomAvatar: Bool
+    public let linkedProviders: [String]
     public let email: String?
     public let preferences: [String: String]?
 
@@ -18,6 +19,7 @@ public struct UserProfile: Codable, Equatable, Sendable {
         displayName: String,
         avatarUrl: String,
         hasCustomAvatar: Bool,
+        linkedProviders: [String] = [],
         email: String? = nil,
         preferences: [String: String]? = nil
     ) {
@@ -27,6 +29,7 @@ public struct UserProfile: Codable, Equatable, Sendable {
         self.displayName = displayName
         self.avatarUrl = avatarUrl
         self.hasCustomAvatar = hasCustomAvatar
+        self.linkedProviders = linkedProviders
         self.email = email
         self.preferences = preferences
     }
@@ -35,6 +38,8 @@ public struct UserProfile: Codable, Equatable, Sendable {
 public struct UserClient: Sendable {
     public var me: @Sendable () async throws -> UserProfile
     public var updateProfile: @Sendable (UserProfile) async throws -> UserProfile
+    public var link: @Sendable (String, String) async throws -> UserProfile
+    public var unlink: @Sendable (String) async throws -> UserProfile
 }
 
 extension UserClient: DependencyKey {
@@ -49,12 +54,39 @@ extension UserClient: DependencyKey {
                 displayName: "Preview Display Name",
                 avatarUrl: "",
                 hasCustomAvatar: false,
+                linkedProviders: ["google"],
                 email: "preview@example.com",
                 preferences: [:]
             )
         },
         updateProfile: { profile in
             return profile
+        },
+        link: { _, _ in
+            UserProfile(
+                id: "mock-id",
+                userId: "mock-user-id",
+                username: "Preview User",
+                displayName: "Preview Display Name",
+                avatarUrl: "",
+                hasCustomAvatar: false,
+                linkedProviders: ["google", "42"],
+                email: "preview@example.com",
+                preferences: [:]
+            )
+        },
+        unlink: { _ in
+            UserProfile(
+                id: "mock-id",
+                userId: "mock-user-id",
+                username: "Preview User",
+                displayName: "Preview Display Name",
+                avatarUrl: "",
+                hasCustomAvatar: false,
+                linkedProviders: [],
+                email: "preview@example.com",
+                preferences: [:]
+            )
         }
     )
 
@@ -67,12 +99,39 @@ extension UserClient: DependencyKey {
                 displayName: "Test Display Name",
                 avatarUrl: "",
                 hasCustomAvatar: false,
+                linkedProviders: ["google"],
                 email: "test@example.com",
                 preferences: [:]
             )
         },
         updateProfile: { profile in
             return profile
+        },
+        link: { _, _ in
+            UserProfile(
+                id: "test-id",
+                userId: "test-user-id",
+                username: "Test User",
+                displayName: "Test Display Name",
+                avatarUrl: "",
+                hasCustomAvatar: false,
+                linkedProviders: ["google", "42"],
+                email: "test@example.com",
+                preferences: [:]
+            )
+        },
+        unlink: { _ in
+            UserProfile(
+                id: "test-id",
+                userId: "test-user-id",
+                username: "Test User",
+                displayName: "Test Display Name",
+                avatarUrl: "",
+                hasCustomAvatar: false,
+                linkedProviders: [],
+                email: "test@example.com",
+                preferences: [:]
+            )
         }
     )
 }
@@ -122,6 +181,49 @@ extension UserClient {
                 }
 
                 request.httpBody = try JSONEncoder().encode(profile)
+
+                let (data, response) = try await URLSession.shared.data(for: request)
+
+                guard let httpResponse = response as? HTTPURLResponse,
+                    (200...299).contains(httpResponse.statusCode)
+                else {
+                    throw URLError(.badServerResponse)
+                }
+
+                return try JSONDecoder().decode(UserProfile.self, from: data)
+            },
+            link: { provider, token in
+                let url = URL(string: "http://localhost:8080/users/me/link/\(provider)")!
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+
+                if let accessToken = KeychainHelper().read("accessToken") {
+                    request.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+                }
+
+                // Send the provider's token (accessToken/idToken) as body
+                let body = ["token": token]
+                request.httpBody = try JSONEncoder().encode(body)
+
+                let (data, response) = try await URLSession.shared.data(for: request)
+
+                guard let httpResponse = response as? HTTPURLResponse,
+                    (200...299).contains(httpResponse.statusCode)
+                else {
+                    throw URLError(.badServerResponse)
+                }
+
+                return try JSONDecoder().decode(UserProfile.self, from: data)
+            },
+            unlink: { provider in
+                let url = URL(string: "http://localhost:8080/users/me/link/\(provider)")!
+                var request = URLRequest(url: url)
+                request.httpMethod = "DELETE"
+
+                if let accessToken = KeychainHelper().read("accessToken") {
+                    request.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+                }
 
                 let (data, response) = try await URLSession.shared.data(for: request)
 

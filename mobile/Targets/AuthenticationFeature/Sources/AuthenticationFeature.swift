@@ -54,27 +54,16 @@ public struct AuthenticationFeature: Sendable {
                         authentication = self.authentication
                     ] send in
                     let settings = appSettings.load()
-                    // Construct URL: e.g. http://localhost:8080/auth/google/login
-                    let authURL = settings.backendURL
-                        .appendingPathComponent("auth")
-                        .appendingPathComponent(provider.rawValue)
-                        .appendingPathComponent("login")
+                    let authURL = AuthenticationClient.SocialHelper.authURL(
+                        for: .init(rawValue: provider.rawValue)!, baseURL: settings.backendURL)
 
                     do {
                         let callbackURL = try await webAuth.authenticate(authURL, "musicroom")
 
-                        // Parse Tokens from Callback URL
-                        let components = URLComponents(
-                            url: callbackURL, resolvingAgainstBaseURL: true)
-                        let items = components?.queryItems ?? []
-
-                        if let accessToken = items.first(where: { $0.name == "accessToken" })?
-                            .value,
-                            let refreshToken = items.first(where: { $0.name == "refreshToken" })?
-                                .value
+                        if let tokens = AuthenticationClient.SocialHelper.parseCallback(
+                            url: callbackURL)
                         {
-
-                            await authentication.saveTokens(accessToken, refreshToken)
+                            await authentication.saveTokens(tokens.accessToken, tokens.refreshToken)
                             await send(.authResponse(.success(true)))
                         } else {
                             await send(.authResponse(.failure(.unknown)))

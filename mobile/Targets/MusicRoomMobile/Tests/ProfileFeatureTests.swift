@@ -128,4 +128,71 @@ final class ProfileFeatureTests: XCTestCase {
 
         XCTAssertTrue(logoutCalled.value)
     }
+
+    func testLinkAccount_Success() async {
+
+        let profileLinked = UserProfile(
+            id: "1", userId: "user1", username: "u", displayName: "d", avatarUrl: "",
+            hasCustomAvatar: false, linkedProviders: ["google"], email: nil, preferences: [:]
+        )
+        _ = profileLinked  // Suppress unused warning if closure is ignored
+
+        let store = TestStore(initialState: ProfileFeature.State()) {
+            ProfileFeature()
+        } withDependencies: {
+            $0.webAuthenticationSession.authenticate = { _, _ in
+                URL(string: "musicroom://auth?accessToken=mockAccess&refreshToken=mockRefresh")!
+            }
+            $0.user.link = { provider, token in
+                XCTAssertEqual(provider, "google")
+                XCTAssertEqual(token, "mockAccess")
+                return profileLinked
+            }
+        }
+
+        // store.exhaustivity = .off
+
+        await store.send(
+            ProfileFeature.Action.linkAccount(
+                AuthenticationClient.SocialHelper.SocialProvider.google)
+        ) {
+            $0.isLoading = true
+        }
+
+        await store.receive(\.linkAccountResponse.success) {
+            $0.isLoading = false
+            $0.userProfile = profileLinked
+            $0.errorMessage = nil
+        }
+    }
+
+    func testUnlinkAccount_Success() async {
+
+        let profileUnlinked = UserProfile(
+            id: "1", userId: "user1", username: "u", displayName: "d", avatarUrl: "",
+            hasCustomAvatar: false, linkedProviders: [], email: nil, preferences: [:]
+        )
+
+        let store = TestStore(initialState: ProfileFeature.State()) {
+            ProfileFeature()
+        } withDependencies: {
+            $0.user.unlink = { provider in
+                XCTAssertEqual(provider, "google")
+                return profileUnlinked
+            }
+        }
+
+        await store.send(
+            ProfileFeature.Action.unlinkAccount(
+                AuthenticationClient.SocialHelper.SocialProvider.google)
+        ) {
+            $0.isLoading = true
+        }
+
+        await store.receive(\.linkAccountResponse.success) {
+            $0.isLoading = false
+            $0.userProfile = profileUnlinked
+            $0.errorMessage = nil
+        }
+    }
 }

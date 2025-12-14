@@ -51,6 +51,35 @@ extension DependencyValues {
     }
 }
 
+extension AuthenticationClient {
+    public struct SocialHelper {
+        public enum SocialProvider: String, Sendable {
+            case google
+            case intra42 = "42"
+        }
+
+        public static func authURL(for provider: SocialProvider, baseURL: URL) -> URL {
+            return
+                baseURL
+                .appendingPathComponent("auth")
+                .appendingPathComponent(provider.rawValue)
+                .appendingPathComponent("login")
+        }
+
+        public static func parseCallback(url: URL) -> (accessToken: String, refreshToken: String)? {
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: true)
+            let items = components?.queryItems ?? []
+
+            guard let accessToken = items.first(where: { $0.name == "accessToken" })?.value,
+                let refreshToken = items.first(where: { $0.name == "refreshToken" })?.value
+            else {
+                return nil
+            }
+            return (accessToken, refreshToken)
+        }
+    }
+}
+
 // MARK: - Live Implementation
 
 extension AuthenticationClient {
