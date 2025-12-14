@@ -134,7 +134,13 @@ public struct AppFeature: Sendable {
                 state.hasBootstrapped = true
 
                 // Trigger initial data load
-                return .run { send in
+                return .run { [telemetry] send in
+                    await telemetry.log(
+                        "app.launch",
+                        [
+                            "version": Bundle.main.infoDictionary?["CFBundleShortVersionString"]
+                                as? String ?? "unknown"
+                        ])
                     await send(.eventList(.onAppear))
                     await send(.profile(.onAppear))
                 }
@@ -144,7 +150,8 @@ public struct AppFeature: Sendable {
                 return .none
 
             case .logoutButtonTapped:
-                return .run { [authentication = self.authentication] send in
+                return .run { [authentication = self.authentication, telemetry] send in
+                    await telemetry.log("user.logout", [:])
                     await authentication.logout()
                     await send(.destinationChanged(.login))
                 }

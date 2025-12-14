@@ -16,6 +16,9 @@ final class AppFeatureTests: XCTestCase {
         } withDependencies: {
             $0.authentication.logout = { logoutCalled.setValue(true) }
             $0.authentication.isAuthenticated = { true }
+            $0.telemetry.log = { action, _ in
+                XCTAssertEqual(action, "user.logout")
+            }
         }
 
         // Set initial state to logged in (app)

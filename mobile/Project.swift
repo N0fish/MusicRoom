@@ -201,6 +201,7 @@ let project = Project(
             dependencies: [
                 .package(product: "Dependencies"),
                 .target(name: "MusicRoomDomain"),
+                .target(name: "AppSettingsClient"),
             ]
         ),
         Target.target(

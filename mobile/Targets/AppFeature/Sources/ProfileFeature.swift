@@ -47,6 +47,7 @@ public struct ProfileFeature: Sendable {
     @Dependency(\.authentication) var authClient
     @Dependency(\.webAuthenticationSession) var webAuth
     @Dependency(\.appSettings) var appSettings
+    @Dependency(\.telemetry) var telemetry
 
     public init() {}
 
@@ -113,7 +114,9 @@ public struct ProfileFeature: Sendable {
                 state.isEditing = false
                 state.userProfile = profile
                 state.errorMessage = nil
-                return .none
+                return .run { [telemetry] _ in
+                    await telemetry.log("user.profile.update.success", [:])
+                }
 
             case .updateProfileResponse(.failure(let error)):
                 state.isLoading = false
@@ -143,6 +146,8 @@ public struct ProfileFeature: Sendable {
                                         try await userClient.link(
                                             provider.rawValue, tokens.accessToken)
                                     }))
+                            await telemetry.log(
+                                "user.account.link.attempt", ["provider": provider.rawValue])
                         } else {
                             await send(.linkAccountResponse(.failure(URLError(.badServerResponse))))
                         }
@@ -165,7 +170,9 @@ public struct ProfileFeature: Sendable {
                 state.isLoading = false
                 state.userProfile = profile
                 state.errorMessage = nil
-                return .none
+                return .run { [telemetry] _ in
+                    await telemetry.log("user.account.link.success", [:])
+                }
 
             case .linkAccountResponse(.failure(let error)):
                 state.isLoading = false
@@ -212,7 +219,9 @@ public struct ProfileFeature: Sendable {
                 state.currentPassword = ""
                 state.newPassword = ""
                 state.confirmNewPassword = ""
-                return .none
+                return .run { [telemetry] _ in
+                    await telemetry.log("user.password.change.success", [:])
+                }
 
             case .changePasswordResponse(.failure(let error)):
                 state.isLoading = false

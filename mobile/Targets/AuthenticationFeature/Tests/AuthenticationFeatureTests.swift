@@ -13,6 +13,9 @@ final class AuthenticationFeatureTests: XCTestCase {
             AuthenticationFeature()
         } withDependencies: {
             $0.authentication.login = { _, _ in }  // Success
+            $0.telemetry.log = { action, metadata in
+                XCTAssertEqual(action, "user.auth.login.success")
+            }
         }
 
         await store.send(.binding(.set(\.email, "test@example.com"))) {

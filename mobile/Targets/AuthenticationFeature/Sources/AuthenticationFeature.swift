@@ -35,6 +35,7 @@ public struct AuthenticationFeature: Sendable {
     @Dependency(\.authentication) var authentication
     @Dependency(\.webAuthenticationSession) var webAuthenticationSession
     @Dependency(\.appSettings) var appSettings
+    @Dependency(\.telemetry) var telemetry
 
     public init() {}
 
@@ -61,8 +62,9 @@ public struct AuthenticationFeature: Sendable {
                 return .run {
                     [
                         appSettings = self.appSettings, webAuth = self.webAuthenticationSession,
-                        authentication = self.authentication
+                        authentication = self.authentication, telemetry = self.telemetry
                     ] send in
+                    await telemetry.log("user.auth.social_attempt", ["provider": provider.rawValue])
                     let settings = appSettings.load()
                     let authURL = AuthenticationClient.SocialHelper.authURL(
                         for: .init(rawValue: provider.rawValue)!, baseURL: settings.backendURL)
@@ -96,16 +98,21 @@ public struct AuthenticationFeature: Sendable {
                 return .run {
                     [
                         email = state.email, password = state.password,
-                        isRegistering = state.isRegistering, authentication = self.authentication
+                        isRegistering = state.isRegistering, authentication = self.authentication,
+                        telemetry = self.telemetry
                     ] send in
                     do {
                         if isRegistering {
                             try await authentication.register(email, password)
+                            await telemetry.log("user.auth.register.success", [:])
                         } else {
                             try await authentication.login(email, password)
+                            await telemetry.log("user.auth.login.success", [:])
                         }
                         await send(.authResponse(.success(true)))
                     } catch let error as AuthenticationError {
+                        await telemetry.log(
+                            "user.auth.failure", ["error": error.localizedDescription])
                         await send(.authResponse(.failure(error)))
                     } catch {
                         await send(.authResponse(.failure(.unknown)))

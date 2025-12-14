@@ -116,6 +116,12 @@ final class EventDetailFeatureTests: XCTestCase {
             }
             $0.persistence.savePlaylist = { _ in }
             $0.continuousClock = ImmediateClock()
+            $0.telemetry.log = { action, metadata in
+                if action == "event.vote.attempt" {
+                    XCTAssertEqual(metadata["eventId"], event.id.uuidString)
+                    XCTAssertEqual(metadata["trackId"], "t1")
+                }
+            }
         }
 
         await store.send(.voteButtonTapped(trackId: "t1")) {

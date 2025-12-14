@@ -67,6 +67,9 @@ final class ProfileFeatureTests: XCTestCase {
         } withDependencies: {
             $0.user.me = { initialProfile }
             $0.user.updateProfile = { _ in updatedProfile }
+            $0.telemetry.log = { action, _ in
+                XCTAssertEqual(action, "user.profile.update.success")
+            }
         }
 
         // Load initial

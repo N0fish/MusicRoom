@@ -29,6 +29,7 @@ public struct EventDetailFeature: Sendable {
         case tallyLoaded(TaskResult<[MusicRoomAPIClient.TallyItem]>)
         case voteButtonTapped(trackId: String)
         case voteResponse(TaskResult<VoteResponse>)
+        case internalVoteFailure(String)
         case dismissInfo
         case binding(BindingAction<State>)
 
@@ -191,9 +192,12 @@ public struct EventDetailFeature: Sendable {
                     state.tally.sort { $0.count > $1.count }
                 }
 
-                return .run { [event = state.event, locationClient] send in
+                return .run { [event = state.event, locationClient, telemetry] send in
                     var lat: Double?
                     var lng: Double?
+
+                    await telemetry.log(
+                        "event.vote.attempt", ["eventId": event.id.uuidString, "trackId": trackId])
 
                     // Geo Check
                     if event.licenseMode == .geoTime {
@@ -230,21 +234,19 @@ public struct EventDetailFeature: Sendable {
                     try await clock.sleep(for: .seconds(1))
                     await send(.loadTally)
                     try await clock.sleep(for: .seconds(2))
+                    try await clock.sleep(for: .seconds(2))
                     await send(.dismissInfo)
                 }
 
             case .voteResponse(.failure(let error)):
-                state.isVoting = false
-                if let apiError = error as? MusicRoomAPIError, apiError == .sessionExpired {
-                    return .send(.delegate(.sessionExpired))
-                }
-                let message: String
-                if let apiError = error as? MusicRoomAPIError {
-                    message = apiError.errorDescription ?? "Unknown generic error"
-                } else {
-                    message = error.localizedDescription
+                return .run { [telemetry] send in
+                    await telemetry.log("event.vote.failure", ["error": error.localizedDescription])
+                    // Re-send to handle UI update
+                    await send(.internalVoteFailure(error.localizedDescription))
                 }
 
+            case .internalVoteFailure(let message):
+                state.isVoting = false
                 // Detailed Map for user-friendly errors
                 if message.contains("403") {
                     state.userAlert = UserAlert(
@@ -277,7 +279,10 @@ public struct EventDetailFeature: Sendable {
                 } else {
                     // Item not in playlist -> Add it
                     state.isLoading = true
-                    return .run { [eventId = state.event.id] send in
+                    return .run { [eventId = state.event.id, telemetry] send in
+                        await telemetry.log(
+                            "event.track.add.attempt",
+                            ["eventId": eventId.uuidString, "trackId": item.providerTrackId])
                         let request = AddTrackRequest(
                             title: item.title,
                             artist: item.artist,
@@ -333,7 +338,9 @@ public struct EventDetailFeature: Sendable {
                 // Optimistic removal
                 state.tracks.removeAll { $0.id == trackId }
 
-                return .run { [eventId = state.event.id] send in
+                return .run { [eventId = state.event.id, telemetry] send in
+                    await telemetry.log(
+                        "event.track.remove", ["eventId": eventId.uuidString, "trackId": trackId])
                     await send(
                         .removeTrackResponse(
                             TaskResult {
