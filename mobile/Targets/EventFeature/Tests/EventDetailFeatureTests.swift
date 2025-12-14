@@ -23,16 +23,17 @@ final class EventDetailFeatureTests: XCTestCase {
         }
 
         await store.send(.onAppear)
-        await store.receive(\.loadTally) {
-            $0.isLoading = true
+        await store.receive(\.loadTally) { state in
+            state.isLoading = true
         }
-        await store.receive(\.tallyLoaded.success) {
-            $0.isLoading = false
-            $0.tally = tallyItems
+        await store.receive(\.tallyLoaded.success) { state in
+            state.isLoading = false
+            state.tally = tallyItems
         }
     }
 
     func testVoteSuccess() async {
+        let clock = TestClock()
         let event = Event(
             id: UUID(), name: "Test", visibility: .publicEvent, ownerId: "u1",
             licenseMode: .everyone, createdAt: Date(), updatedAt: Date())
@@ -43,25 +44,24 @@ final class EventDetailFeatureTests: XCTestCase {
             $0.musicRoomAPI.vote = { _, _, _, _ in
                 VoteResponse(status: "ok", trackId: "t1", totalVotes: 11)
             }
-            $0.musicRoomAPI.tally = { _ in [] }  // Mock tally refresh
+            $0.musicRoomAPI.tally = { _ in [] }
+            $0.continuousClock = clock
         }
 
-        await store.send(.voteButtonTapped(trackId: "t1")) {
-            $0.isVoting = true
+        await store.send(.voteButtonTapped(trackId: "t1")) { state in
+            state.isVoting = true
         }
 
-        await store.receive(\.voteResponse.success) {
-            $0.isVoting = false
-            $0.successMessage = "Vote registered!"
+        await store.receive(\.voteResponse.success) { state in
+            state.isVoting = false
+            state.successMessage = "Voted for t1!"
         }
 
-        await store.receive(\.loadTally) {
-            $0.isLoading = true
-        }
+        await clock.advance(by: .seconds(2))
 
-        await store.receive(\.tallyLoaded.success) {
-            $0.isLoading = false
-            $0.tally = []
+        await store.receive(\.dismissInfo) {
+            $0.errorMessage = nil
+            $0.successMessage = nil
         }
     }
 }

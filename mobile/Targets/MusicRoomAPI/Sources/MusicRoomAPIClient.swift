@@ -13,11 +13,17 @@ public struct MusicRoomAPIClient: Sendable {
             -> VoteResponse
     public var tally: @Sendable (UUID) async throws -> [TallyItem]
     public var search: @Sendable (_ query: String) async throws -> [MusicSearchItem]
+    public var createEvent: @Sendable (CreateEventRequest) async throws -> Event
     public var connectToRealtime: @Sendable () -> AsyncStream<RealtimeMessage>
 
     public struct TallyItem: Codable, Sendable, Equatable {
         public let track: String
         public let count: Int
+
+        public init(track: String, count: Int) {
+            self.track = track
+            self.count = count
+        }
     }
 }
 
@@ -29,7 +35,7 @@ extension DependencyValues {
 }
 
 extension MusicRoomAPIClient: DependencyKey {
-    public static let liveValue: MusicRoomAPIClient = {
+    public static var liveValue: MusicRoomAPIClient {
         @Dependency(\.appSettings) var settings
 
         return MusicRoomAPIClient(
@@ -86,6 +92,18 @@ extension MusicRoomAPIClient: DependencyKey {
                     let items: [MusicSearchItem]
                 }
                 return try JSONDecoder().decode(SearchResponse.self, from: data).items
+            },
+            createEvent: { requestBody in
+                let url = settings.load().backendURL.appendingPathComponent("events")
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.addCommonHeaders()
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+                request.httpBody = try JSONEncoder.iso8601.encode(requestBody)
+
+                let (data, _) = try await URLSession.shared.data(for: request)
+                return try JSONDecoder.iso8601.decode(Event.self, from: data)
             },
             connectToRealtime: {
                 // Construct WS URL
@@ -157,7 +175,7 @@ extension MusicRoomAPIClient: DependencyKey {
                 }
             }
         )
-    }()
+    }
 
     public static let previewValue = MusicRoomAPIClient(
         fetchSampleEvents: { [] },
@@ -175,6 +193,7 @@ extension MusicRoomAPIClient: DependencyKey {
                     providerTrackId: "2", thumbnailUrl: nil),
             ]
         },
+        createEvent: { _ in MockDataFactory.sampleEvents().first! },
         connectToRealtime: { AsyncStream { $0.finish() } }
     )
 
@@ -185,6 +204,7 @@ extension MusicRoomAPIClient: DependencyKey {
         vote: { _, _, _, _ in VoteResponse(status: "ok", trackId: "1", totalVotes: 1) },
         tally: { _ in [] },
         search: { _ in [] },
+        createEvent: { _ in throw MusicRoomAPIError.networkError("Test unimplemented") },
         connectToRealtime: { AsyncStream { $0.finish() } }
     )
 }
@@ -207,6 +227,14 @@ extension JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
+    }
+}
+
+extension JSONEncoder {
+    static var iso8601: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
     }
 }
 

@@ -27,22 +27,22 @@ final class EventListFeatureTests: XCTestCase {
             $0.telemetry.log = { _, _ in }
         }
 
-        await store.send(.onAppear) {
-            // onAppear triggers loadEvents if empty
+        await store.send(.onAppear)
+
+        await store.receive(\.loadEvents) { state in
+            state.isLoading = true
         }
 
-        await store.receive(\.loadEvents) {
-            $0.isLoading = true
-        }
-
-        await store.receive(\.eventsLoaded.success) {
-            $0.isLoading = false
-            $0.events = events
+        await store.receive(\.eventsLoaded.success) { state in
+            state.isLoading = false
+            state.events = events
         }
     }
 
     func testLoadEventsFailure() async {
-        struct MockError: Error, Equatable {}
+        struct MockError: Error, Equatable, LocalizedError {
+            var errorDescription: String? { "Mock failed" }
+        }
 
         let store = TestStore(initialState: EventListFeature.State()) {
             EventListFeature()
@@ -53,14 +53,13 @@ final class EventListFeatureTests: XCTestCase {
 
         await store.send(.onAppear)
 
-        await store.receive(\.loadEvents) {
-            $0.isLoading = true
+        await store.receive(\.loadEvents) { state in
+            state.isLoading = true
         }
 
         await store.receive(\.eventsLoaded.failure) {
             $0.isLoading = false
-            $0.errorMessage =
-                "The operation couldn’t be completed. (EventListFeatureTests.MockError error 1.)"  // Default description
+            $0.errorMessage = "Mock failed"
             $0.events = []
         }
     }

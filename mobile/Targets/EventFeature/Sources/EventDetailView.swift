@@ -77,27 +77,31 @@ public struct EventDetailView: View {
                                             store.send(.voteButtonTapped(trackId: item.track))
                                         }
                                     )
+                                    .transition(.scale.combined(with: .opacity))
+                                    .animation(
+                                        .spring(response: 0.4, dampingFraction: 0.7).delay(
+                                            Double(index) * 0.05), value: store.tally)
                                 }
                             }
                             .padding(.horizontal)
                         }
 
                         // Add Track Button
-                        Button {
-                            store.send(.addTrackButtonTapped)
-                        } label: {
+                        LiquidButton(
+                            useGlass: true,
+                            action: {
+                                store.send(.addTrackButtonTapped)
+                            }
+                        ) {
                             HStack {
                                 Image(systemName: "plus.circle.fill")
-                                    .font(.system(size: 24))
+                                    .font(.liquidIcon)
                                 Text("Add Track")
                                     .font(.liquidBody.bold())
                                 Spacer()
                             }
                             .foregroundStyle(Color.white)
-                            .padding()
-                            .background(
-                                GlassView(cornerRadius: 16)
-                            )
+                            .frame(maxWidth: .infinity)
                         }
                         .padding(.horizontal)
                         .padding(.top, 20)

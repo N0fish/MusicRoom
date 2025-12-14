@@ -42,6 +42,7 @@ public struct EventDetailFeature: Sendable {
 
     @Dependency(\.musicRoomAPI) var musicRoomAPI
     @Dependency(\.telemetry) var telemetry
+    @Dependency(\.continuousClock) var clock
 
     private enum CancelID { case realtime }
 
@@ -90,17 +91,26 @@ public struct EventDetailFeature: Sendable {
                 state.errorMessage = nil
                 state.successMessage = nil
 
-                // For MVP Search results: trackId from SearchItem is providerTrackId.
-                // But backend expects 'track' string in votes table.
-                // We should technically send provider info too or backend resolves it.
-                // Models.swift VoteRequest only has trackId.
-                // Assuming trackId == providerTrackId is enough for MVP if we stick to one provider.
+                // Optimistic Update
+                if let index = state.tally.firstIndex(where: { $0.track == trackId }) {
+                    let item = state.tally[index]
+                    // Assume TallyItem is immutable property, so recreate
+                    let newItem = MusicRoomAPIClient.TallyItem(
+                        track: item.track, count: item.count + 1)
+                    state.tally[index] = newItem
+                    // Re-sort
+                    state.tally.sort { $0.count > $1.count }
+                } else {
+                    // New item
+                    let newItem = MusicRoomAPIClient.TallyItem(track: trackId, count: 1)
+                    state.tally.append(newItem)
+                    state.tally.sort { $0.count > $1.count }
+                }
 
                 return .run { [eventId = state.event.id] send in
                     await send(
                         .voteResponse(
                             Result {
-                                // Pass nil lat/lng for now or implement LocationManager later
                                 try await musicRoomAPI.vote(eventId, trackId, nil, nil)
                             }))
                 }
@@ -108,9 +118,12 @@ public struct EventDetailFeature: Sendable {
             case .voteResponse(.success(let response)):
                 state.isVoting = false
                 state.successMessage = "Voted for \(response.trackId)!"
-                // Tally update should come via Realtime or manual refresh
+
+                // Re-fetch tally to ensure consistency after short delay
                 return .run { send in
-                    try await Task.sleep(nanoseconds: 2_000_000_000)
+                    try await clock.sleep(for: .seconds(1))
+                    await send(.loadTally)
+                    try await clock.sleep(for: .seconds(2))
                     await send(.dismissInfo)
                 }
 

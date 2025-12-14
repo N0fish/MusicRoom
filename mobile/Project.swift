@@ -21,6 +21,9 @@ let project = Project(
         .remote(
             url: "https://github.com/pointfreeco/swift-concurrency-extras",
             requirement: .upToNextMajor(from: "1.3.2")),
+        .remote(
+            url: "https://github.com/pointfreeco/swift-clocks",
+            requirement: .upToNextMajor(from: "1.0.0")),
     ],
     settings: .settings(base: [
         "SWIFT_VERSION": "6.0",
@@ -202,16 +205,25 @@ let project = Project(
             bundleId: "com.musicroom.mobileTests",
             deploymentTargets: deploymentTargets,
             infoPlist: .default,
-            sources: ["Targets/MusicRoomMobile/Tests/**"],
+            sources: [
+                "Targets/MusicRoomMobile/Tests/**",
+                "Targets/EventFeature/Tests/**",
+                "Targets/MusicRoomAPI/Tests/**",
+            ],
             dependencies: [
                 .target(name: "MusicRoomMobile"),
                 .target(name: "AppFeature"),
                 .target(name: "SettingsFeature"),
+                .target(name: "EventFeature"),
+                .target(name: "MusicRoomAPI"),
+                .target(name: "MusicRoomDomain"),
                 .target(name: "AppSettingsClient"),
                 .package(product: "ComposableArchitecture"),
                 .package(product: "SwiftNavigation"),
                 .package(product: "CasePaths"),
                 .package(product: "ConcurrencyExtras"),
+                .package(product: "Dependencies"),
+                .package(product: "Clocks"),
             ]
         ),
     ]

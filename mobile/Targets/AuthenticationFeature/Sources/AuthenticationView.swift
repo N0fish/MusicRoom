@@ -57,12 +57,20 @@ public struct AuthenticationView: View {
                     HStack {
                         Image(systemName: "envelope.fill")
                             .foregroundColor(.liquidPrimary)
-                        TextField("Email Credentials", text: $store.email)
-                            .textContentType(.emailAddress)
-                            .keyboardType(.emailAddress)
-                            .autocapitalization(.none)
-                            .foregroundColor(.white)
-                            .font(.liquidBody)
+                            .frame(width: 24)
+                        ZStack(alignment: .leading) {
+                            if store.email.isEmpty {
+                                Text("Email Credentials")
+                                    .font(.liquidBody)
+                                    .foregroundColor(.white.opacity(0.6))
+                            }
+                            TextField("", text: $store.email)
+                                .textContentType(.emailAddress)
+                                .keyboardType(.emailAddress)
+                                .autocapitalization(.none)
+                                .foregroundColor(.white)
+                                .font(.liquidBody)
+                        }
                     }
                     .padding()
                     .background(Color.black.opacity(0.3))
@@ -78,10 +86,18 @@ public struct AuthenticationView: View {
                     HStack {
                         Image(systemName: "lock.fill")
                             .foregroundColor(.liquidAccent)
-                        SecureField("Passcode", text: $store.password)
-                            .textContentType(store.isRegistering ? .newPassword : .password)
-                            .foregroundColor(.white)
-                            .font(.liquidBody)
+                            .frame(width: 24)
+                        ZStack(alignment: .leading) {
+                            if store.password.isEmpty {
+                                Text("Passcode")
+                                    .font(.liquidBody)
+                                    .foregroundColor(.white.opacity(0.6))
+                            }
+                            SecureField("", text: $store.password)
+                                .textContentType(store.isRegistering ? .newPassword : .password)
+                                .foregroundColor(.white)
+                                .font(.liquidBody)
+                        }
                     }
                     .padding()
                     .background(Color.black.opacity(0.3))

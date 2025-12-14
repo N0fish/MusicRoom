@@ -39,6 +39,10 @@ public struct EventListView: View {
         } destination: { store in
             EventDetailView(store: store)
         }
+        .sheet(item: $store.scope(state: \.createEvent, action: \.createEvent)) {
+            createEventStore in
+            CreateEventView(store: createEventStore)
+        }
     }
 
     private var header: some View {
@@ -47,16 +51,19 @@ public struct EventListView: View {
                 .font(.liquidTitle)
                 .foregroundStyle(.white)
             Spacer()
-            Button {
-                store.send(.createEventButtonTapped)
-            } label: {
+
+            LiquidButton(
+                useGlass: true,
+                action: {
+                    store.send(.createEventButtonTapped)
+                }
+            ) {
                 Image(systemName: "plus")
                     .font(.liquidButton)
                     .foregroundStyle(.white)
-                    .padding(12)
-                    .background(GlassView())
-                    .clipShape(Circle())
+                    .frame(width: 24, height: 24)
             }
+            .clipShape(Circle())
         }
         .padding()
         .background(.ultraThinMaterial)
@@ -65,7 +72,7 @@ public struct EventListView: View {
     private func errorView(message: String) -> some View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 48))
+                .font(.liquidHeroIcon)
                 .foregroundStyle(Color.liquidAccent)
 
             Text("Something went wrong")
@@ -76,13 +83,11 @@ public struct EventListView: View {
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
 
-            Button("Retry") {
-                store.send(.retryButtonTapped)
-            }
-            .font(.liquidButton)
-            .padding()
-            .background(GlassView())
-            .clipShape(Capsule())
+            LiquidPrimaryButton(
+                title: "Retry",
+                action: {
+                    store.send(.retryButtonTapped)
+                })
         }
         .padding()
         .frame(maxHeight: .infinity)
@@ -91,7 +96,7 @@ public struct EventListView: View {
     private var emptyState: some View {
         VStack(spacing: 16) {
             Image(systemName: "music.mic")
-                .font(.system(size: 64))
+                .font(.liquidHeroIcon)
                 .foregroundStyle(Color.liquidSecondary)
 
             Text("No Events Yet")
@@ -108,11 +113,15 @@ public struct EventListView: View {
     private var eventList: some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                ForEach(store.events) { event in
+                ForEach(Array(store.events.enumerated()), id: \.element.id) { index, event in
                     EventCard(event: event)
                         .onTapGesture {
                             store.send(.eventTapped(event))
                         }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .animation(
+                            .spring(duration: 0.5, bounce: 0.3).delay(Double(index) * 0.05),
+                            value: store.events)
                 }
             }
             .padding()

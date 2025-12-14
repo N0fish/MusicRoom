@@ -17,4 +17,12 @@ extension Font {
 
     /// Caption (13pt, Medium, Rounded)
     public static let liquidCaption: Font = .system(size: 13, weight: .medium, design: .rounded)
+
+    // MARK: - Icon Sizes
+
+    /// Large Icon for Empty States/Headers (64pt)
+    public static let liquidHeroIcon: Font = .system(size: 64, weight: .regular, design: .rounded)
+
+    /// Standard Icon (24pt)
+    public static let liquidIcon: Font = .system(size: 24, weight: .regular, design: .rounded)
 }

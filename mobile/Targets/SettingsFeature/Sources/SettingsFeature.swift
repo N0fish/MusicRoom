@@ -1,7 +1,7 @@
-import Foundation
-import ComposableArchitecture
 import AppSettingsClient
 import AppSupportClients
+import ComposableArchitecture
+import Foundation
 
 @Reducer
 public struct SettingsFeature {
@@ -59,7 +59,7 @@ public struct SettingsFeature {
             switch summary.status {
             case .reachable:
                 return "Reachable in \(String(format: "%.0f", summary.latencyMs)) ms"
-            case let .unreachable(reason):
+            case .unreachable(let reason):
                 return "Unavailable: \(reason)"
             }
         }
@@ -87,13 +87,14 @@ public struct SettingsFeature {
     @Dependency(\.appSettings) var appSettings
     @Dependency(\.diagnostics) var diagnostics
     @Dependency(\.appMetadata) var appMetadata
+    @Dependency(\.date) var date
 
     public init() {}
 
     public var body: some ReducerOf<Self> {
         Reduce { state, action in
             switch action {
-            case let .backendURLTextChanged(text):
+            case .backendURLTextChanged(let text):
                 state.backendURLText = text
                 if state.canEditBackendURL {
                     state.lastCustomURLText = text
@@ -102,24 +103,26 @@ public struct SettingsFeature {
 
             case .task:
                 state.isLoading = true
-                return .run { [appSettings = self.appSettings, appMetadata = self.appMetadata] send in
+                return .run {
+                    [appSettings = self.appSettings, appMetadata = self.appMetadata] send in
                     await send(.loadResponse(appSettings.load()))
                     await send(.metadataLoaded(await appMetadata.load()))
                 }
 
-            case let .loadResponse(settings):
+            case .loadResponse(let settings):
                 state.isLoading = false
                 state.selectedPreset = settings.selectedPreset
                 state.savedBackendURL = settings.backendURL
                 state.backendURLText = settings.backendURL.absoluteString
-                state.lastCustomURLText = settings.lastCustomURL?.absoluteString ?? settings.backendURL.absoluteString
+                state.lastCustomURLText =
+                    settings.lastCustomURL?.absoluteString ?? settings.backendURL.absoluteString
                 return .none
 
-            case let .metadataLoaded(metadata):
+            case .metadataLoaded(let metadata):
                 state.metadata = metadata
                 return .none
 
-            case let .presetChanged(preset):
+            case .presetChanged(let preset):
                 state.selectedPreset = preset
                 switch preset {
                 case .custom:
@@ -130,7 +133,8 @@ public struct SettingsFeature {
                 return .none
 
             case .saveButtonTapped:
-                guard let targetURL = state.resolveURLForCurrentPreset(), targetURL.scheme != nil else {
+                guard let targetURL = state.resolveURLForCurrentPreset(), targetURL.scheme != nil
+                else {
                     state.alert = SettingsFeature.invalidURLAlert()
                     return .none
                 }
@@ -156,7 +160,7 @@ public struct SettingsFeature {
                     await send(.settingsSaved(appSettings.reset()))
                 }
 
-            case let .settingsSaved(settings):
+            case .settingsSaved(let settings):
                 state.isPersisting = false
                 state.selectedPreset = settings.selectedPreset
                 state.savedBackendURL = settings.backendURL
@@ -164,12 +168,14 @@ public struct SettingsFeature {
                 if settings.selectedPreset == .custom {
                     state.lastCustomURLText = settings.backendURL.absoluteString
                 } else {
-                    state.lastCustomURLText = settings.lastCustomURL?.absoluteString ?? state.lastCustomURLText
+                    state.lastCustomURLText =
+                        settings.lastCustomURL?.absoluteString ?? state.lastCustomURLText
                 }
                 return .none
 
             case .runConnectionTest:
-                guard let targetURL = state.resolveURLForCurrentPreset(), targetURL.scheme != nil else {
+                guard let targetURL = state.resolveURLForCurrentPreset(), targetURL.scheme != nil
+                else {
                     state.alert = SettingsFeature.invalidURLAlert()
                     return .none
                 }
@@ -184,19 +190,19 @@ public struct SettingsFeature {
                     }
                 }
 
-            case let .connectionResponseSuccess(summary):
+            case .connectionResponseSuccess(let summary):
                 state.isDiagnosticsInFlight = false
                 state.diagnosticsSummary = summary
                 return .none
 
-            case let .connectionResponseFailed(message):
+            case .connectionResponseFailed(let message):
                 state.isDiagnosticsInFlight = false
                 guard let url = state.lastPingedURL else { return .none }
                 state.diagnosticsSummary = DiagnosticsSummary(
                     testedURL: url,
                     status: .unreachable(reason: message),
                     latencyMs: 0,
-                    measuredAt: Date()
+                    measuredAt: date()
                 )
                 return .none
 
@@ -208,8 +214,8 @@ public struct SettingsFeature {
     }
 }
 
-private extension SettingsFeature.State {
-    func resolveURLForCurrentPreset() -> URL? {
+extension SettingsFeature.State {
+    fileprivate func resolveURLForCurrentPreset() -> URL? {
         let trimmed = backendURLText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         if selectedPreset == .custom {
@@ -220,8 +226,8 @@ private extension SettingsFeature.State {
     }
 }
 
-private extension SettingsFeature {
-    static func invalidURLAlert() -> AlertState<Alert> {
+extension SettingsFeature {
+    fileprivate static func invalidURLAlert() -> AlertState<Alert> {
         AlertState {
             TextState("Invalid URL")
         } actions: {

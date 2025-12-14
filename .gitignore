@@ -30,3 +30,19 @@ node_modules/
 
 # other files
 *.txt
+
+# iOS / Xcode / Swift
+*.xcresult
+*.xccheckout
+*.moved-aside
+*.xcuserstate
+*.swp
+*.xctimeline
+xcuserdata/
+**/xcuserdata/
+.build/
+
+# Fastlane
+fastlane/report.xml
+fastlane/screenshots
+fastlane/test_output

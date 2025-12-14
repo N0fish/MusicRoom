@@ -12,6 +12,7 @@ public struct EventListFeature: Sendable {
         public var isLoading: Bool = false
         public var errorMessage: String?
         public var path = StackState<EventDetailFeature.State>()
+        @Presents public var createEvent: CreateEventFeature.State?
 
         public init() {}
     }
@@ -23,6 +24,7 @@ public struct EventListFeature: Sendable {
         case eventTapped(Event)
         case createEventButtonTapped
         case retryButtonTapped
+        case createEvent(PresentationAction<CreateEventFeature.Action>)
         case path(StackAction<EventDetailFeature.State, EventDetailFeature.Action>)
     }
 
@@ -79,7 +81,15 @@ public struct EventListFeature: Sendable {
                 }
 
             case .createEventButtonTapped:
-                // To be implemented
+                state.createEvent = CreateEventFeature.State()
+                return .none
+
+            case .createEvent(.presented(.createResponse(.success(let event)))):
+                state.createEvent = nil  // Dismiss on success
+                state.events.append(event)  // Optimistic add or full reload
+                return .none
+
+            case .createEvent:
                 return .none
 
             case .path:
@@ -88,6 +98,9 @@ public struct EventListFeature: Sendable {
         }
         .forEach(\.path, action: \.path) {
             EventDetailFeature()
+        }
+        .ifLet(\.$createEvent, action: \.createEvent) {
+            CreateEventFeature()
         }
     }
 }
@@ -112,6 +125,8 @@ extension EventListFeature.Action {
             }
         case (.eventTapped(let lhsEvent), .eventTapped(let rhsEvent)):
             return lhsEvent == rhsEvent
+        case (.createEvent(let lhsAction), .createEvent(let rhsAction)):
+            return lhsAction == rhsAction
         default:
             return false
         }
