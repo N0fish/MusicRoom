@@ -50,11 +50,30 @@ final class EventDetailFeatureTests: XCTestCase {
 
         await store.send(.voteButtonTapped(trackId: "t1")) { state in
             state.isVoting = true
+            // Optimistic update: t1 count increases from 0 to 1 (since tally was empty)
+            state.tally = [MusicRoomAPIClient.TallyItem(track: "t1", count: 1)]
         }
 
         await store.receive(\.voteResponse.success) { state in
             state.isVoting = false
             state.successMessage = "Voted for t1!"
+        }
+
+        // Wait for clock sleep in effect
+        await clock.advance(by: .seconds(1))
+
+        await store.receive(\.loadTally) { state in
+            // loadTally sets isLoading = true? check reducer.
+            // Usually loadTally just fetches.
+            state.isLoading = true
+        }
+
+        await store.receive(\.tallyLoaded.success) { state in
+            state.isLoading = false
+            // Tally remains same as mock returns [], but logic might append?
+            // Wait, mock returns [], so tally becomes empty?
+            // If reducer replaces tally with API result, it becomes [].
+            state.tally = []
         }
 
         await clock.advance(by: .seconds(2))

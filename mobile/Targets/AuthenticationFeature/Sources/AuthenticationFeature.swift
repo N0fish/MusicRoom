@@ -30,7 +30,7 @@ public struct AuthenticationFeature: Sendable {
     }
 
     @Dependency(\.authentication) var authentication
-    @Dependency(\.openURL) var openURL
+    @Dependency(\.webAuthenticationSession) var webAuthenticationSession
     @Dependency(\.appSettings) var appSettings
 
     public init() {}
@@ -48,7 +48,11 @@ public struct AuthenticationFeature: Sendable {
                 return .none
 
             case .socialLoginButtonTapped(let provider):
-                return .run { [appSettings = self.appSettings, openURL = self.openURL] _ in
+                return .run {
+                    [
+                        appSettings = self.appSettings, webAuth = self.webAuthenticationSession,
+                        authentication = self.authentication
+                    ] send in
                     let settings = appSettings.load()
                     // Construct URL: e.g. http://localhost:8080/auth/google/login
                     let authURL = settings.backendURL
@@ -56,7 +60,29 @@ public struct AuthenticationFeature: Sendable {
                         .appendingPathComponent(provider.rawValue)
                         .appendingPathComponent("login")
 
-                    await openURL(authURL)
+                    do {
+                        let callbackURL = try await webAuth.authenticate(authURL, "musicroom")
+
+                        // Parse Tokens from Callback URL
+                        let components = URLComponents(
+                            url: callbackURL, resolvingAgainstBaseURL: true)
+                        let items = components?.queryItems ?? []
+
+                        if let accessToken = items.first(where: { $0.name == "accessToken" })?
+                            .value,
+                            let refreshToken = items.first(where: { $0.name == "refreshToken" })?
+                                .value
+                        {
+
+                            await authentication.saveTokens(accessToken, refreshToken)
+                            await send(.authResponse(.success(true)))
+                        } else {
+                            await send(.authResponse(.failure(.unknown)))
+                        }
+                    } catch {
+                        // User likely cancelled or network error
+                        await send(.authResponse(.failure(.unknown)))
+                    }
                 }
 
             case .submitButtonTapped:

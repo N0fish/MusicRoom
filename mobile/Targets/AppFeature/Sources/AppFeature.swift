@@ -118,35 +118,10 @@ public struct AppFeature: Sendable {
                     await send(.eventList(.onAppear))
                 }
 
-            case .handleDeepLink(let url):
-                return .run { [authentication = self.authentication] send in
-                    guard url.scheme == "musicroom",
-                        url.host == "auth",
-                        url.path == "/callback"
-                    else { return }
-
-                    let components = URLComponents(url: url, resolvingAgainstBaseURL: true)
-                    var items: [URLQueryItem] = components?.queryItems ?? []
-
-                    if let fragment = components?.fragment {
-                        let dummyURL = URL(string: "http://dummy.com/?" + fragment)
-                        if let fragmentComponents = URLComponents(
-                            url: dummyURL!, resolvingAgainstBaseURL: true)
-                        {
-                            items.append(contentsOf: fragmentComponents.queryItems ?? [])
-                        }
-                    }
-
-                    guard let accessToken = items.first(where: { $0.name == "accessToken" })?.value,
-                        let refreshToken = items.first(where: { $0.name == "refreshToken" })?.value
-                    else {
-                        return
-                    }
-
-                    await authentication.saveTokens(accessToken, refreshToken)
-                    await send(.destinationChanged(.app))
-                    await send(.startApp)
-                }
+            case .handleDeepLink(_):
+                // Legacy: ASWebAuthenticationSession handles callbacks internally for Social Auth.
+                // Keep this if we need to handle *other* deep links (e.g. Email Links)
+                return .none
 
             case .logoutButtonTapped:
                 return .run { [authentication = self.authentication] send in
