@@ -50,14 +50,7 @@ public struct EventListFeature: Sendable {
             switch action {
             case .onAppear:
                 // Start network monitor
-                return .merge(
-                    .run { send in
-                        for await status in networkMonitor.start() {
-                            await send(.networkStatusChanged(status))
-                        }
-                    },
-                    .send(.loadEvents)
-                )
+                return .send(.loadEvents)
 
             case .networkStatusChanged(let status):
                 state.isOffline = (status == .unsatisfied || status == .requiresConnection)
@@ -127,9 +120,9 @@ public struct EventListFeature: Sendable {
                 state.isLoading = false
                 state.events = events
                 if state.isOffline {
-                    state.errorMessage = nil  // clean UI in offline mode
+                    state.errorMessage = nil  // clean UI in offline mode, Banner handles it
                 } else {
-                    state.errorMessage = "Loaded from cache (Offline)"
+                    state.errorMessage = "Loaded from cache (API Failed)"
                 }
                 return .none
 

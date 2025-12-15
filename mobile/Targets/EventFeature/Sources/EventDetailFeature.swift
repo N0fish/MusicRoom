@@ -14,6 +14,7 @@ public struct EventDetailFeature: Sendable {
         public var isLoading: Bool = false
         public var isVoting: Bool = false
         public var userAlert: UserAlert?
+        public var isOffline: Bool = false
 
         // Navigation / Presentation
         @Presents public var musicSearch: MusicSearchFeature.State?
@@ -94,7 +95,8 @@ public struct EventDetailFeature: Sendable {
                         await telemetry.log("Viewed Event Detail: \(name)", [:])
                     },
                     .send(.loadTally),
-                    .run { send in
+                    .run { [isOffline = state.isOffline] send in
+                        guard !isOffline else { return }
                         for await msg in musicRoomAPI.connectToRealtime() {
                             await send(.realtimeMessageReceived(msg))
                         }
@@ -192,6 +194,17 @@ public struct EventDetailFeature: Sendable {
                     state.tally.sort { $0.count > $1.count }
                 }
 
+                // Offline Check
+                if state.isOffline {
+                    state.isVoting = false
+                    state.userAlert = UserAlert(
+                        title: "Offline",
+                        message: "You cannot vote while offline.",
+                        type: .error
+                    )
+                    return .none
+                }
+
                 return .run { [event = state.event, locationClient, telemetry] send in
                     var lat: Double?
                     var lng: Double?
@@ -264,6 +277,14 @@ public struct EventDetailFeature: Sendable {
                 return .none
 
             case .addTrackButtonTapped:
+                if state.isOffline {
+                    state.userAlert = UserAlert(
+                        title: "Offline",
+                        message: "You cannot add tracks while offline.",
+                        type: .error
+                    )
+                    return .none
+                }
                 state.musicSearch = MusicSearchFeature.State()
                 return .none
 

@@ -50,8 +50,7 @@ final class EventListFeatureTests: XCTestCase {
             $0.events = events
         }
 
-        // Network monitor yields satisfied
-        await store.receive(.networkStatusChanged(.satisfied))
+        // Network monitor handled by AppFeature now
     }
 
     func testOfflineLoad_ReadsFromCache() async {
@@ -77,12 +76,7 @@ final class EventListFeatureTests: XCTestCase {
         } withDependencies: {
             $0.musicRoomAPI.listEvents = { fatalError("Should not call API when offline") }
             $0.telemetry.log = { _, _ in }
-            $0.networkMonitor.start = {
-                AsyncStream {
-                    $0.yield(.unsatisfied)
-                    $0.finish()
-                }
-            }
+            $0.networkMonitor.start = { AsyncStream.never }
             $0.persistence.loadEvents = { events }
         }
 
@@ -99,8 +93,6 @@ final class EventListFeatureTests: XCTestCase {
             $0.events = events
             $0.errorMessage = nil
         }
-
-        await offlineStore.receive(.networkStatusChanged(.unsatisfied))
     }
 
     func testLoadEventsFailure_FallbackToCache() async {
@@ -125,7 +117,7 @@ final class EventListFeatureTests: XCTestCase {
         } withDependencies: {
             $0.musicRoomAPI.listEvents = { throw MockError() }
             $0.telemetry.log = { _, _ in }
-            $0.networkMonitor.start = { AsyncStream { $0.finish() } }
+            $0.networkMonitor.start = { AsyncStream.never }
             $0.persistence.loadEvents = { events }
         }
 
@@ -141,7 +133,7 @@ final class EventListFeatureTests: XCTestCase {
         await store.receive(\.eventsLoadedFromCache.success) {
             $0.isLoading = false
             $0.events = events
-            $0.errorMessage = "Loaded from cache (Offline)"
+            $0.errorMessage = "Loaded from cache (API Failed)"
         }
     }
 }

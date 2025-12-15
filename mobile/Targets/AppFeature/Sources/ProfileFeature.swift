@@ -23,6 +23,7 @@ public struct ProfileFeature: Sendable {
         public var confirmNewPassword = ""
         public var isChangingPassword = false
         public var passwordChangeSuccessMessage: String?
+        public var isOffline: Bool = false
 
         public init() {}
     }
@@ -76,6 +77,10 @@ public struct ProfileFeature: Sendable {
                 return .none
 
             case .toggleEditMode:
+                if state.isOffline {
+                    state.errorMessage = "You cannot edit your profile while offline."
+                    return .none
+                }
                 state.isEditing.toggle()
                 if !state.isEditing, let profile = state.userProfile {
                     // Reset fields on cancel
@@ -88,6 +93,10 @@ public struct ProfileFeature: Sendable {
 
             case .saveButtonTapped:
                 guard let currentProfile = state.userProfile else { return .none }
+                if state.isOffline {
+                    state.errorMessage = "You cannot save changes while offline."
+                    return .none
+                }
                 state.isLoading = true
 
                 let preferences = ["genres": state.editableMusicPreferences]
@@ -129,6 +138,10 @@ public struct ProfileFeature: Sendable {
                 }
 
             case .linkAccount(let provider):
+                if state.isOffline {
+                    state.errorMessage = "You cannot link accounts while offline."
+                    return .none
+                }
                 state.isLoading = true
                 return .run { [appSettings, webAuth, userClient] send in
                     let settings = appSettings.load()
@@ -157,6 +170,10 @@ public struct ProfileFeature: Sendable {
                 }
 
             case .unlinkAccount(let provider):
+                if state.isOffline {
+                    state.errorMessage = "You cannot unlink accounts while offline."
+                    return .none
+                }
                 state.isLoading = true
                 return .run { [userClient] send in
                     await send(
@@ -189,6 +206,10 @@ public struct ProfileFeature: Sendable {
                 return .none
 
             case .changePasswordButtonTapped:
+                if state.isOffline {
+                    state.errorMessage = "You cannot change password while offline."
+                    return .none
+                }
                 guard !state.currentPassword.isEmpty, !state.newPassword.isEmpty,
                     !state.confirmNewPassword.isEmpty
                 else {

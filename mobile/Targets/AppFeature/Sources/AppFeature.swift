@@ -25,6 +25,7 @@ public struct AppFeature: Sendable {
         // Legacy/Stream State (To be refactored into EventDetail later)
         public var latestStreamMessage: String
         public var hasBootstrapped: Bool
+        public var isOffline: Bool = false
 
         public init() {
             self.settings = SettingsFeature.State(
@@ -59,6 +60,7 @@ public struct AppFeature: Sendable {
         case startApp
         case logoutButtonTapped
         case handleDeepLink(URL)
+        case networkStatusChanged(NetworkStatus)
     }
 
     @Dependency(\.musicRoomAPI) var musicRoomAPI
@@ -66,6 +68,7 @@ public struct AppFeature: Sendable {
     @Dependency(\.playlistStream) var playlistStream
     @Dependency(\.telemetry) var telemetry
     @Dependency(\.authentication) var authentication
+    @Dependency(\.networkMonitor) var networkMonitor
 
     public init() {}
 
@@ -134,16 +137,37 @@ public struct AppFeature: Sendable {
                 state.hasBootstrapped = true
 
                 // Trigger initial data load
-                return .run { [telemetry] send in
+                return .run { [telemetry, networkMonitor] send in
                     await telemetry.log(
                         "app.launch",
                         [
                             "version": Bundle.main.infoDictionary?["CFBundleShortVersionString"]
                                 as? String ?? "unknown"
                         ])
-                    await send(.eventList(.onAppear))
-                    await send(.profile(.onAppear))
+
+                    // Start Network Monitor
+                    for await status in networkMonitor.start() {
+                        await send(.networkStatusChanged(status))
+                    }
                 }
+
+            case .networkStatusChanged(let status):
+                let isOffline = (status == .unsatisfied || status == .requiresConnection)
+                state.isOffline = isOffline
+
+                // Propagate to Profile (State update)
+                state.profile.isOffline = isOffline
+
+                // Propagate to EventList (Action for logic + State update handled by action potentially,
+                // but we can set state here too to be sure, or let the action do it.
+                // EventList.networkStatusChanged sets the state, so sending action is enough for the root list.)
+                // However, we also need to update the Navigation Stack path which EventList owns.
+                // We can iterate the stack here.
+                for id in state.eventList.path.ids {
+                    state.eventList.path[id: id]?.isOffline = isOffline
+                }
+
+                return .send(.eventList(.networkStatusChanged(status)))
 
             case .handleDeepLink(_):
                 // Legacy: ASWebAuthenticationSession handles callbacks internally for Social Auth.

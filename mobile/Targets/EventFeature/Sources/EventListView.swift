@@ -33,6 +33,16 @@ public struct EventListView: View {
                     }
                 }
             }
+            .safeAreaInset(edge: .top) {
+                if store.isOffline {
+                    Text("You are offline. Showing cached data.")
+                        .font(.caption)
+                        .padding(8)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.orange)
+                        .foregroundColor(.white)
+                }
+            }
             .onAppear {
                 store.send(.onAppear)
             }

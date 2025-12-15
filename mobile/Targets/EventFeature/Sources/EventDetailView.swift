@@ -97,6 +97,7 @@ public struct EventDetailView: View {
                                         track: track,
                                         voteCount: count,
                                         isMyVote: false,
+                                        isOffline: store.isOffline,
                                         onVote: {
                                             store.send(.voteButtonTapped(trackId: track.id))
                                         }
@@ -118,7 +119,9 @@ public struct EventDetailView: View {
                         LiquidButton(
                             useGlass: true,
                             action: {
-                                store.send(.addTrackButtonTapped)
+                                if !store.isOffline {
+                                    store.send(.addTrackButtonTapped)
+                                }
                             }
                         ) {
                             HStack {
@@ -128,9 +131,10 @@ public struct EventDetailView: View {
                                     .font(.liquidBody.bold())
                                 Spacer()
                             }
-                            .foregroundStyle(Color.white)
+                            .foregroundStyle(store.isOffline ? Color.gray : Color.white)
                             .frame(maxWidth: .infinity)
                         }
+                        .disabled(store.isOffline)
                         .padding(.horizontal)
                         .padding(.top, 20)
 
@@ -160,6 +164,7 @@ struct TrackRow: View {
     let track: Track
     let voteCount: Int
     let isMyVote: Bool
+    let isOffline: Bool
     let onVote: () -> Void
 
     var body: some View {
@@ -212,8 +217,10 @@ struct TrackRow: View {
                     Button(action: onVote) {
                         Image(systemName: isMyVote ? "arrow.up.circle.fill" : "arrow.up.circle")
                             .font(.system(size: 28))
-                            .foregroundStyle(isMyVote ? Color.green : Color.white)
+                            .foregroundStyle(
+                                isOffline ? Color.gray : (isMyVote ? Color.green : Color.white))
                     }
+                    .disabled(isOffline)
                 }
                 .padding(.horizontal, 16)
             )
