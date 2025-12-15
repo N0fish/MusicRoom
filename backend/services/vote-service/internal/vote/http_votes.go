@@ -53,7 +53,7 @@ func (s *HTTPServer) handleTally(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var out []Row
+	out := []Row{}
 	for rows.Next() {
 		var row Row
 		if err := rows.Scan(&row.Track, &row.Count); err != nil {

@@ -150,6 +150,7 @@ PORT=3003
 DATABASE_URL=${DB_URL}
 REDIS_URL=${REDIS_URL}
 USER_SERVICE_URL=http://user-service:3005
+PLAYLIST_SERVICE_URL=http://playlist-service:3002
 EENV
       ;;
 

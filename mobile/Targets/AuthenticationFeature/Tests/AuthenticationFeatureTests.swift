@@ -220,4 +220,22 @@ final class AuthenticationFeatureTests: XCTestCase {
             $0.errorMessage = "Server error. Please try again later."
         }
     }
+
+    func testSocialHelper_ParseCallback_Fragment() {
+        let url = URL(
+            string: "musicroom://auth/callback#accessToken=test_access&refreshToken=test_refresh")!
+        let tokens = AuthenticationClient.SocialHelper.parseCallback(url: url)
+
+        XCTAssertEqual(tokens?.accessToken, "test_access")
+        XCTAssertEqual(tokens?.refreshToken, "test_refresh")
+    }
+
+    func testSocialHelper_ParseCallback_Query() {
+        let url = URL(
+            string: "musicroom://auth/callback?accessToken=query_access&refreshToken=query_refresh")!
+        let tokens = AuthenticationClient.SocialHelper.parseCallback(url: url)
+
+        XCTAssertEqual(tokens?.accessToken, "query_access")
+        XCTAssertEqual(tokens?.refreshToken, "query_refresh")
+    }
 }

@@ -1,5 +1,6 @@
 import AuthenticationFeature
 import ComposableArchitecture
+import EventFeature
 import MusicRoomDomain
 import SettingsFeature
 import SwiftUI
@@ -35,84 +36,45 @@ public struct AppView: View {
     }
 
     private var appContent: some View {
-        WithViewStore(store, observe: { $0 }) { appViewStore in
-            List {
-                Section("Account") {
-                    NavigationLink {
-                        ProfileView(
-                            store: store.scope(
-                                state: \.profile,
-                                action: \.profile
-                            )
-                        )
-                    } label: {
-                        Label("My Profile", systemImage: "person.crop.circle")
-                    }
-                }
-
-                Section("Environment") {
-                    NavigationLink {
-                        SettingsView(
-                            store: store.scope(
-                                state: \.settings,
-                                action: \.settings
-                            )
-                        )
-                    } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Label(
-                                "Backend Settings",
-                                systemImage: "antenna.radiowaves.left.and.right")
-                            Text(appViewStore.settings.backendURLSummary)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-                }
-
-                Section("Sample Data Preview") {
-                    if appViewStore.eventList.isLoading {
-                        ProgressView("Loading mock events…")
-                    } else if let error = appViewStore.eventList.errorMessage {
-                        Text("Error: \(error)")
-                            .foregroundStyle(.red)
-                    } else {
-                        ForEach(appViewStore.eventList.events, id: \.id) { event in
-                            VStack(alignment: .leading) {
-                                Text(event.name)
-                                    .font(.headline)
-                                Text(
-                                    "\(event.licenseMode.label) · \(event.visibility.label)"
-                                )
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label(
-                            "Policy Engine Active",
-                            systemImage: "checkmark.shield"
-                        )
-                        .font(.subheadline)
-                        Label(
-                            appViewStore.latestStreamMessage,
-                            systemImage: "dot.radiowaves.left.and.right"
-                        )
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    }
-                }
-
-                Section {
-                    Button("Logout", role: .destructive) {
-                        appViewStore.send(.logoutButtonTapped)
-                    }
-                }
+        TabView {
+            // Tab 1: Events
+            EventListView(
+                store: store.scope(
+                    state: \.eventList,
+                    action: \.eventList
+                )
+            )
+            .tabItem {
+                Label("Events", systemImage: "music.note.list")
             }
-            .navigationTitle("Music Room")
+
+            // Tab 2: Profile
+            NavigationStack {
+                ProfileView(
+                    store: store.scope(
+                        state: \.profile,
+                        action: \.profile
+                    )
+                )
+            }
+            .tabItem {
+                Label("Profile", systemImage: "person.crop.circle")
+            }
+
+            // Tab 3: Settings
+            NavigationStack {
+                SettingsView(
+                    store: store.scope(
+                        state: \.settings,
+                        action: \.settings
+                    )
+                )
+            }
+            .tabItem {
+                Label("Settings", systemImage: "gear")
+            }
         }
+        // Assuming .liquidAccent is defined or available globally, otherwise it would need to be defined.
+        .tint(.liquidAccent)  // Consistent styling
     }
 }

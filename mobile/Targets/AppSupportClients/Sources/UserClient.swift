@@ -1,27 +1,66 @@
 import Dependencies
 import Foundation
 
+public struct UserPreferences: Codable, Equatable, Sendable {
+    public var genres: [String]?
+    public var artists: [String]?
+    public var moods: [String]?
+
+    public init(genres: [String]? = nil, artists: [String]? = nil, moods: [String]? = nil) {
+        self.genres = genres
+        self.artists = artists
+        self.moods = moods
+    }
+}
+
 public struct UserProfile: Codable, Equatable, Sendable {
     public let id: String
     public let userId: String
     public let username: String
     public let displayName: String
-    public let avatarUrl: String
+    public let avatarUrl: String?
     public let hasCustomAvatar: Bool
-    public let linkedProviders: [String]
-    public let email: String?
-    public let preferences: [String: String]?
+    public let bio: String?
+    public let visibility: String
+    public let preferences: UserPreferences
+    // Fields not returned by /users/me, but used in UI.
+    // We make them optional and mutable to potentialy fill them later or locally.
+    public var linkedProviders: [String] = []
+    public var email: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case id, userId, username, displayName, avatarUrl, hasCustomAvatar, bio, visibility,
+            preferences
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        userId = try container.decode(String.self, forKey: .userId)
+        username = try container.decode(String.self, forKey: .username)
+        displayName = try container.decode(String.self, forKey: .displayName)
+        avatarUrl = try container.decodeIfPresent(String.self, forKey: .avatarUrl)
+        hasCustomAvatar = try container.decode(Bool.self, forKey: .hasCustomAvatar)
+        bio = try container.decodeIfPresent(String.self, forKey: .bio)
+        visibility = try container.decode(String.self, forKey: .visibility)
+        preferences = try container.decode(UserPreferences.self, forKey: .preferences)
+
+        email = nil
+        linkedProviders = []
+    }
 
     public init(
         id: String,
         userId: String,
         username: String,
         displayName: String,
-        avatarUrl: String,
+        avatarUrl: String?,
         hasCustomAvatar: Bool,
+        bio: String? = nil,
+        visibility: String = "public",
+        preferences: UserPreferences = UserPreferences(),
         linkedProviders: [String] = [],
-        email: String? = nil,
-        preferences: [String: String]? = nil
+        email: String? = nil
     ) {
         self.id = id
         self.userId = userId
@@ -29,9 +68,11 @@ public struct UserProfile: Codable, Equatable, Sendable {
         self.displayName = displayName
         self.avatarUrl = avatarUrl
         self.hasCustomAvatar = hasCustomAvatar
+        self.bio = bio
+        self.visibility = visibility
+        self.preferences = preferences
         self.linkedProviders = linkedProviders
         self.email = email
-        self.preferences = preferences
     }
 }
 
@@ -55,9 +96,11 @@ extension UserClient: DependencyKey {
                 displayName: "Preview Display Name",
                 avatarUrl: "",
                 hasCustomAvatar: false,
+                bio: "Music lover",
+                visibility: "public",
+                preferences: UserPreferences(genres: ["Pop", "Rock"]),
                 linkedProviders: ["google"],
-                email: "preview@example.com",
-                preferences: [:]
+                email: "preview@example.com"
             )
         },
         updateProfile: { profile in
@@ -71,9 +114,11 @@ extension UserClient: DependencyKey {
                 displayName: "Preview Display Name",
                 avatarUrl: "",
                 hasCustomAvatar: false,
+                bio: "Music lover",
+                visibility: "public",
+                preferences: UserPreferences(genres: ["Pop", "Rock"]),
                 linkedProviders: ["google", "42"],
-                email: "preview@example.com",
-                preferences: [:]
+                email: "preview@example.com"
             )
         },
         unlink: { _ in
@@ -84,9 +129,11 @@ extension UserClient: DependencyKey {
                 displayName: "Preview Display Name",
                 avatarUrl: "",
                 hasCustomAvatar: false,
+                bio: "Music lover",
+                visibility: "public",
+                preferences: UserPreferences(genres: ["Pop", "Rock"]),
                 linkedProviders: [],
-                email: "preview@example.com",
-                preferences: [:]
+                email: "preview@example.com"
             )
         },
         changePassword: { _, _ in }
@@ -101,9 +148,11 @@ extension UserClient: DependencyKey {
                 displayName: "Test Display Name",
                 avatarUrl: "",
                 hasCustomAvatar: false,
+                bio: nil,
+                visibility: "public",
+                preferences: UserPreferences(),
                 linkedProviders: ["google"],
-                email: "test@example.com",
-                preferences: [:]
+                email: "test@example.com"
             )
         },
         updateProfile: { profile in
@@ -117,9 +166,11 @@ extension UserClient: DependencyKey {
                 displayName: "Test Display Name",
                 avatarUrl: "",
                 hasCustomAvatar: false,
+                bio: nil,
+                visibility: "public",
+                preferences: UserPreferences(),
                 linkedProviders: ["google", "42"],
-                email: "test@example.com",
-                preferences: [:]
+                email: "test@example.com"
             )
         },
         unlink: { _ in
@@ -130,9 +181,11 @@ extension UserClient: DependencyKey {
                 displayName: "Test Display Name",
                 avatarUrl: "",
                 hasCustomAvatar: false,
+                bio: nil,
+                visibility: "public",
+                preferences: UserPreferences(),
                 linkedProviders: [],
-                email: "test@example.com",
-                preferences: [:]
+                email: "test@example.com"
             )
         },
         changePassword: { _, _ in }
@@ -147,31 +200,62 @@ extension DependencyValues {
 }
 
 extension UserClient {
-    static func live() -> Self {
-        // TODO: Inject AuthenticationClient to get the token, or read from Keychain directly?
-        // Ideally, we should use an interceptor or inject the token.
-        // For simplicity here, we'll read from Keychain again (duplication, but decouples for now).
+    // in UserClient.swift
 
+    static func live() -> Self {
         return Self(
             me: {
+                // 1. Fetch User Profile
                 // TODO: Use configured base URL
-                let url = URL(string: "http://localhost:8080/users/me")!
-                var request = URLRequest(url: url)
-                request.httpMethod = "GET"
+                let urlProfile = URL(string: "http://localhost:8080/users/me")!
+                var reqProfile = URLRequest(url: urlProfile)
+                reqProfile.httpMethod = "GET"
 
                 if let token = KeychainHelper().read("accessToken") {
-                    request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                    reqProfile.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
                 }
 
-                let (data, response) = try await URLSession.shared.data(for: request)
+                let (dataProfile, respProfile) = try await URLSession.shared.data(for: reqProfile)
 
-                guard let httpResponse = response as? HTTPURLResponse,
-                    (200...299).contains(httpResponse.statusCode)
+                guard let httpRespProfile = respProfile as? HTTPURLResponse,
+                    (200...299).contains(httpRespProfile.statusCode)
                 else {
                     throw URLError(.badServerResponse)
                 }
 
-                return try JSONDecoder().decode(UserProfile.self, from: data)
+                var profile = try JSONDecoder().decode(UserProfile.self, from: dataProfile)
+
+                // 2. Fetch Auth Info (Linked Providers)
+                let urlAuth = URL(string: "http://localhost:8080/auth/me")!
+                var reqAuth = URLRequest(url: urlAuth)
+                reqAuth.httpMethod = "GET"
+                if let token = KeychainHelper().read("accessToken") {
+                    reqAuth.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                }
+
+                // We try-catch auth fetch so we don't block profile load if auth service fails?
+                // But user explicitly complained about linking. So failure should probably be visible.
+                // However, failing entire profile load because auth/me failed might be harsh.
+                // Let's try to fetch it, if it fails, default to empty.
+
+                struct AuthMeResponse: Decodable {
+                    let linkedProviders: [String]?
+                }
+
+                do {
+                    let (dataAuth, respAuth) = try await URLSession.shared.data(for: reqAuth)
+                    if let httpRespAuth = respAuth as? HTTPURLResponse,
+                        (200...299).contains(httpRespAuth.statusCode)
+                    {
+                        let authData = try JSONDecoder().decode(AuthMeResponse.self, from: dataAuth)
+                        profile.linkedProviders = authData.linkedProviders ?? []
+                    }
+                } catch {
+                    print("UserClient: Failed to fetch auth/me: \(error)")
+                    // Keep default empty linkedProviders
+                }
+
+                return profile
             },
             updateProfile: { profile in
                 let url = URL(string: "http://localhost:8080/users/me")!

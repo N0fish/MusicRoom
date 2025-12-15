@@ -146,6 +146,7 @@ let project = Project(
                 .target(name: "PolicyEngine"),
                 .target(name: "RealtimeMocks"),
                 .target(name: "AppSupportClients"),
+                .target(name: "MusicRoomUI"),
                 .package(product: "ComposableArchitecture"),
             ]
         ),

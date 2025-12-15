@@ -14,8 +14,9 @@ final class ProfileFeatureTests: XCTestCase {
             displayName: "Test User",
             avatarUrl: "http://example.com/avatar.jpg",
             hasCustomAvatar: false,
-            email: "test@example.com",
-            preferences: ["genres": "Rock"]
+            preferences: UserPreferences(genres: ["Rock"]),
+            linkedProviders: [],
+            email: "test@example.com"
         )
 
         let store = TestStore(initialState: ProfileFeature.State()) {
@@ -46,8 +47,9 @@ final class ProfileFeatureTests: XCTestCase {
             displayName: "Old Name",
             avatarUrl: "http://example.com/avatar.jpg",
             hasCustomAvatar: false,
-            email: "old@example.com",
-            preferences: ["genres": "Old"]
+            preferences: UserPreferences(genres: ["Old"]),
+            linkedProviders: [],
+            email: "old@example.com"
         )
 
         // Final profile after update
@@ -58,8 +60,9 @@ final class ProfileFeatureTests: XCTestCase {
             displayName: "New Name",
             avatarUrl: "http://example.com/avatar.jpg",
             hasCustomAvatar: false,
-            email: "new@example.com",
-            preferences: ["genres": "New"]
+            preferences: UserPreferences(genres: ["New"]),
+            linkedProviders: [],
+            email: "new@example.com"
         )
 
         let store = TestStore(initialState: ProfileFeature.State()) {
@@ -136,7 +139,8 @@ final class ProfileFeatureTests: XCTestCase {
 
         let profileLinked = UserProfile(
             id: "1", userId: "user1", username: "u", displayName: "d", avatarUrl: "",
-            hasCustomAvatar: false, linkedProviders: ["google"], email: nil, preferences: [:]
+            hasCustomAvatar: false, preferences: UserPreferences(), linkedProviders: ["google"],
+            email: nil
         )
         _ = profileLinked  // Suppress unused warning if closure is ignored
 
@@ -173,7 +177,7 @@ final class ProfileFeatureTests: XCTestCase {
 
         let profileUnlinked = UserProfile(
             id: "1", userId: "user1", username: "u", displayName: "d", avatarUrl: "",
-            hasCustomAvatar: false, linkedProviders: [], email: nil, preferences: [:]
+            hasCustomAvatar: false, preferences: UserPreferences(), linkedProviders: [], email: nil
         )
 
         let store = TestStore(initialState: ProfileFeature.State()) {

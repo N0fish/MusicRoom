@@ -9,16 +9,18 @@ import (
 )
 
 type HTTPServer struct {
-	pool           *pgxpool.Pool
-	rdb            *redis.Client
-	userServiceURL string
+	pool               *pgxpool.Pool
+	rdb                *redis.Client
+	userServiceURL     string
+	playlistServiceURL string
 }
 
-func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, userServiceURL string) http.Handler {
+func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, userServiceURL, playlistServiceURL string) http.Handler {
 	s := &HTTPServer{
-		pool:           pool,
-		rdb:            rdb,
-		userServiceURL: userServiceURL,
+		pool:               pool,
+		rdb:                rdb,
+		userServiceURL:     userServiceURL,
+		playlistServiceURL: playlistServiceURL,
 	}
 
 	r := chi.NewRouter()

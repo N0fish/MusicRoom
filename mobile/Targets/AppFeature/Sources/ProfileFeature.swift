@@ -68,7 +68,8 @@ public struct ProfileFeature: Sendable {
                 state.editableDisplayName = profile.displayName
                 state.editableUsername = profile.username
                 state.editableEmail = profile.email ?? ""
-                state.editableMusicPreferences = profile.preferences?["genres"] ?? ""
+                state.editableMusicPreferences =
+                    profile.preferences.genres?.joined(separator: ",") ?? ""
                 return .none
 
             case .profileResponse(.failure(let error)):
@@ -87,7 +88,8 @@ public struct ProfileFeature: Sendable {
                     state.editableDisplayName = profile.displayName
                     state.editableUsername = profile.username
                     state.editableEmail = profile.email ?? ""
-                    state.editableMusicPreferences = profile.preferences?["genres"] ?? ""
+                    state.editableMusicPreferences =
+                        profile.preferences.genres?.joined(separator: ",") ?? ""
                 }
                 return .none
 
@@ -99,7 +101,14 @@ public struct ProfileFeature: Sendable {
                 }
                 state.isLoading = true
 
-                let preferences = ["genres": state.editableMusicPreferences]
+                let genres = state.editableMusicPreferences
+                    .split(separator: ",")
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+
+                let preferences = UserPreferences(
+                    genres: genres, artists: currentProfile.preferences.artists,
+                    moods: currentProfile.preferences.moods)
 
                 let updatedProfile = UserProfile(
                     id: currentProfile.id,
@@ -108,8 +117,11 @@ public struct ProfileFeature: Sendable {
                     displayName: state.editableDisplayName,
                     avatarUrl: currentProfile.avatarUrl,
                     hasCustomAvatar: currentProfile.hasCustomAvatar,
-                    email: state.editableEmail.isEmpty ? nil : state.editableEmail,
-                    preferences: preferences
+                    bio: currentProfile.bio,
+                    visibility: currentProfile.visibility,
+                    preferences: preferences,
+                    linkedProviders: currentProfile.linkedProviders,
+                    email: state.editableEmail.isEmpty ? nil : state.editableEmail
                 )
 
                 return .run { [userClient] send in

@@ -18,7 +18,15 @@ public struct MusicRoomAPIClient: Sendable {
     public var addTrack: @Sendable (String, AddTrackRequest) async throws -> Track
     public var connectToRealtime: @Sendable () -> AsyncStream<RealtimeMessage>
     public var removeTrack: @Sendable (_ playlistId: String, _ trackId: String) async throws -> Void
+    public var authMe: @Sendable () async throws -> AuthMeResponse
     public var getPlaylist: @Sendable (_ playlistId: String) async throws -> PlaylistResponse
+
+    public struct AuthMeResponse: Decodable, Sendable {
+        public let userId: String
+        public let email: String
+        public let emailVerified: Bool
+        public let linkedProviders: [String]?
+    }
 
     public struct TallyItem: Codable, Sendable, Equatable {
         public let track: String
@@ -318,13 +326,18 @@ extension MusicRoomAPIClient: DependencyKey {
                 request.httpMethod = "DELETE"
                 try await performRequestNoContent(request)
             },
+            authMe: {
+                let url = settings.load().backendURL.appendingPathComponent("auth/me")
+                var request = URLRequest(url: url)
+                request.httpMethod = "GET"
+                return try await performRequest(request)
+            },
             getPlaylist: { playlistId in
                 let url = settings.load().backendURL.appendingPathComponent(
                     "playlists/\(playlistId)")
                 let request = URLRequest(url: url)
                 return try await performRequest(request)
-            },
-
+            }
         )
     }
 
@@ -354,6 +367,11 @@ extension MusicRoomAPIClient: DependencyKey {
             },
             connectToRealtime: { AsyncStream { $0.finish() } },
             removeTrack: { _, _ in },
+            authMe: {
+                AuthMeResponse(
+                    userId: "user1", email: "test@example.com", emailVerified: true,
+                    linkedProviders: ["google"])
+            },
             getPlaylist: { _ in
                 PlaylistResponse(
                     playlist: PlaylistResponse.PlaylistMetadata(
@@ -365,8 +383,7 @@ extension MusicRoomAPIClient: DependencyKey {
                             providerTrackId: "1", thumbnailUrl: nil)
                     ]
                 )
-            },
-
+            }
         )
     }
 
@@ -382,8 +399,11 @@ extension MusicRoomAPIClient: DependencyKey {
             addTrack: { _, _ in throw MusicRoomAPIError.networkError("Test unimplemented") },
             connectToRealtime: { AsyncStream { $0.finish() } },
             removeTrack: { _, _ in },
-            getPlaylist: { _ in throw MusicRoomAPIError.networkError("Test unimplemented") },
-
+            authMe: {
+                AuthMeResponse(
+                    userId: "user1", email: "test@example.com", emailVerified: true,
+                    linkedProviders: [])
+            }, getPlaylist: { _ in throw MusicRoomAPIError.networkError("Test unimplemented") }
         )
     }
 }

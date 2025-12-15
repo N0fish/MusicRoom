@@ -87,11 +87,12 @@ public struct EventListView: View {
 
             Text("Something went wrong")
                 .font(.liquidH2)
+                .foregroundStyle(.white)
 
             Text(message)
                 .font(.liquidBody)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.8))
 
             LiquidPrimaryButton(
                 title: "Retry",

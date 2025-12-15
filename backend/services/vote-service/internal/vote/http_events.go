@@ -1,9 +1,9 @@
 package vote
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"time"
 
@@ -130,44 +130,71 @@ func (s *HTTPServer) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 1. Create Playlist in playlist-service to get a synchronized ID
+	plReq := map[string]any{
+		"name":        body.Name,
+		"description": "Event Playlist for " + body.Name,
+		"isPublic":    true, // Events are public by default logic here? Or match visibility?
+		"editMode":    "everyone",
+	}
+	if body.Visibility == visibilityPrivate {
+		plReq["isPublic"] = false
+		plReq["editMode"] = "invited" // match event logic roughly
+	}
+
+	plBody, _ := json.Marshal(plReq)
+	reqPL, err := http.NewRequestWithContext(r.Context(), http.MethodPost, s.playlistServiceURL+"/playlists", bytes.NewReader(plBody))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create request: "+err.Error())
+		return
+	}
+	reqPL.Header.Set("Content-Type", "application/json")
+	reqPL.Header.Set("X-User-Id", userID) // Pass through auth
+
+	// We use a default http client here since we didn't inject one, assuming s.httpClient or http.DefaultClient
+	// For now using http.DefaultClient but strictly we should add HttpClient to HTTPServer.
+	// TIMEOUT is crucial but for MVP using DefaultClient
+	respPL, err := http.DefaultClient.Do(reqPL)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "playlist-service unavailable: "+err.Error())
+		return
+	}
+	defer respPL.Body.Close()
+
+	if respPL.StatusCode != http.StatusCreated && respPL.StatusCode != http.StatusOK {
+		writeError(w, http.StatusBadGateway, "playlist-service failed")
+		return
+	}
+
+	var plResp struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(respPL.Body).Decode(&plResp); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to decode playlist response")
+		return
+	}
+
+	// 2. Insert Event with the SAME ID
 	ctx := r.Context()
 	var id string
-	err := s.pool.QueryRow(ctx, `
-        INSERT INTO events (name, visibility, owner_id, license_mode, geo_lat, geo_lng, geo_radius_m, vote_start, vote_end)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+	err = s.pool.QueryRow(ctx, `
+        INSERT INTO events (id, name, visibility, owner_id, license_mode, geo_lat, geo_lng, geo_radius_m, vote_start, vote_end)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
         RETURNING id
-    `, body.Name, body.Visibility, userID, body.LicenseMode, body.GeoLat, body.GeoLng, body.GeoRadiusM, voteStart, voteEnd).Scan(&id)
+    `, plResp.ID, body.Name, body.Visibility, userID, body.LicenseMode, body.GeoLat, body.GeoLng, body.GeoRadiusM, voteStart, voteEnd).Scan(&id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	evt := map[string]any{
-		"type": "event.created",
-		"payload": map[string]any{
-			"id":          id,
-			"name":        body.Name,
-			"visibility":  body.Visibility,
-			"ownerId":     userID,
-			"licenseMode": body.LicenseMode,
-		},
-	}
-	// if b, err := json.Marshal(evt); err == nil {
-	// 	_ = s.rdb.Publish(ctx, "broadcast", string(b)).Err()
-	// }
-	if b, err := json.Marshal(evt); err != nil {
-		log.Printf("vote-service: marshal event.created: %v", err)
-	} else if err := s.rdb.Publish(ctx, "broadcast", string(b)).Err(); err != nil {
-		log.Printf("vote-service: publish event.created: %v", err)
+	// Fetch the full event (including timestamps) to return to client
+	fullEvent, err := loadEvent(ctx, s.pool, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load created event: "+err.Error())
+		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id":          id,
-		"name":        body.Name,
-		"visibility":  body.Visibility,
-		"ownerId":     userID,
-		"licenseMode": body.LicenseMode,
-	})
+	writeJSON(w, http.StatusOK, fullEvent)
 }
 
 func (s *HTTPServer) handleGetEvent(w http.ResponseWriter, r *http.Request) {

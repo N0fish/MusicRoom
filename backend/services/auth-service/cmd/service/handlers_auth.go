@@ -19,9 +19,10 @@ type Credentials struct {
 }
 
 type AuthMeResponse struct {
-	UserID        string `json:"userId"`
-	Email         string `json:"email"`
-	EmailVerified bool   `json:"emailVerified"`
+	UserID          string   `json:"userId"`
+	Email           string   `json:"email"`
+	EmailVerified   bool     `json:"emailVerified"`
+	LinkedProviders []string `json:"linkedProviders"`
 }
 
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
@@ -177,6 +178,12 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		UserID:        user.ID,
 		Email:         user.Email,
 		EmailVerified: user.EmailVerified,
+	}
+	if user.GoogleID != nil {
+		resp.LinkedProviders = append(resp.LinkedProviders, "google")
+	}
+	if user.FTID != nil {
+		resp.LinkedProviders = append(resp.LinkedProviders, "42")
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

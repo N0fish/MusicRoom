@@ -30,6 +30,29 @@ func AutoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
 		return err
 	}
 
+	// Ensure columns exist for existing tables
+	if _, err := pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS owner_id TEXT NOT NULL DEFAULT ''`); err != nil {
+		log.Printf("migrate alter owner_id: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS license_mode TEXT NOT NULL DEFAULT 'everyone'`); err != nil {
+		log.Printf("migrate alter license_mode: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS geo_lat DOUBLE PRECISION`); err != nil {
+		log.Printf("migrate alter geo_lat: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS geo_lng DOUBLE PRECISION`); err != nil {
+		log.Printf("migrate alter geo_lng: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS geo_radius_m INT`); err != nil {
+		log.Printf("migrate alter geo_radius_m: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS vote_start TIMESTAMPTZ`); err != nil {
+		log.Printf("migrate alter vote_start: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS vote_end TIMESTAMPTZ`); err != nil {
+		log.Printf("migrate alter vote_end: %v", err)
+	}
+
 	if _, err := pool.Exec(ctx, `
         CREATE TABLE IF NOT EXISTS votes(
             id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -65,16 +65,38 @@ extension AuthenticationClient {
         }
 
         public static func authURL(for provider: SocialProvider, baseURL: URL) -> URL {
-            return
+            let url =
                 baseURL
                 .appendingPathComponent("auth")
                 .appendingPathComponent(provider.rawValue)
                 .appendingPathComponent("login")
+
+            guard var components = URLComponents(url: url, resolvingAgainstBaseURL: true) else {
+                return url
+            }
+
+            components.queryItems = [
+                URLQueryItem(name: "redirect", value: "musicroom://auth/callback")
+            ]
+
+            return components.url ?? url
         }
 
         public static func parseCallback(url: URL) -> (accessToken: String, refreshToken: String)? {
             let components = URLComponents(url: url, resolvingAgainstBaseURL: true)
-            let items = components?.queryItems ?? []
+
+            // 1. Try query items first
+            var items = components?.queryItems ?? []
+
+            // 2. If empty, try parsing fragment as query string
+            if items.isEmpty, let fragment = components?.fragment {
+                let dummyURL = URL(string: "http://dummy.com?\(fragment)")!
+                if let fragmentComponents = URLComponents(
+                    url: dummyURL, resolvingAgainstBaseURL: true)
+                {
+                    items = fragmentComponents.queryItems ?? []
+                }
+            }
 
             guard let accessToken = items.first(where: { $0.name == "accessToken" })?.value,
                 let refreshToken = items.first(where: { $0.name == "refreshToken" })?.value
@@ -262,8 +284,8 @@ extension AuthenticationClient {
 // MARK: - Keychain Helper
 
 private struct KeychainHelper {
-    func save(_ data: String, for key: String) {
-        let data = Data(data.utf8)
+    func save(_ value: String, for key: String) {
+        let data = value.data(using: .utf8)!
         let query =
             [
                 kSecClass: kSecClassGenericPassword,
@@ -271,8 +293,14 @@ private struct KeychainHelper {
                 kSecValueData: data,
             ] as [String: Any]
 
+        // First try to delete code
         SecItemDelete(query as CFDictionary)
-        SecItemAdd(query as CFDictionary, nil)
+
+        // Then add
+        let status = SecItemAdd(query as CFDictionary, nil)
+        if status != errSecSuccess {
+            print("Keychain save error for key \(key): \(status)")
+        }
     }
 
     func read(_ key: String) -> String? {
@@ -289,6 +317,8 @@ private struct KeychainHelper {
 
         if status == errSecSuccess, let data = dataTypeRef as? Data {
             return String(data: data, encoding: .utf8)
+        } else if status != errSecItemNotFound {
+            print("Keychain read error for key \(key): \(status)")
         }
         return nil
     }
@@ -300,6 +330,9 @@ private struct KeychainHelper {
                 kSecAttrAccount: key,
             ] as [String: Any]
 
-        SecItemDelete(query as CFDictionary)
+        let status = SecItemDelete(query as CFDictionary)
+        if status != errSecSuccess && status != errSecItemNotFound {
+            print("Keychain delete error for key \(key): \(status)")
+        }
     }
 }

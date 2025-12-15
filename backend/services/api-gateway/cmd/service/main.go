@@ -188,6 +188,7 @@ func main() {
 
 	// Realtime (ws passthrough is handled in realtime-service; here we mostly proxy HTTP control if needed)
 	r.Mount("/realtime", realtimeProxy)
+	r.HandleFunc("/ws", realtimeProxy.ServeHTTP)
 
 	// Music provider (search for tracks in external SDK)
 	r.Group(func(r chi.Router) {
