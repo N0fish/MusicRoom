@@ -24,7 +24,13 @@ extension PersistenceClient: DependencyKey {
                 try await actor.save(events, to: "events_cache.json")
             },
             loadEvents: {
-                try await actor.load([Event].self, from: "events_cache.json")
+                do {
+                    return try await actor.load([Event].self, from: "events_cache.json")
+                } catch PersistenceError.notFound {
+                    return []
+                } catch {
+                    throw error
+                }
             },
             savePlaylist: { playlist in
                 try await actor.save(playlist, to: "playlist_cache.json")
@@ -68,8 +74,19 @@ private actor PersistenceActor {
 
     func load<T: Decodable>(_ type: T.Type, from filename: String) throws -> T {
         let url = try fileURL(for: filename)
-        let data = try Data(contentsOf: url)
-        return try decoder.decode(type, from: data)
+        do {
+            let data = try Data(contentsOf: url)
+            return try decoder.decode(type, from: data)
+        } catch let error as NSError
+            where error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoSuchFileError
+        {
+            // If file doesn't exist, we can treat it as "not found" or return nil depending on needs.
+            // But since this is a generic load, simpler to throw a specific custom error
+            // which the client wrapper can handle, OR handle it here.
+            throw PersistenceError.notFound
+        } catch {
+            throw error
+        }
     }
 
     private func fileURL(for filename: String) throws -> URL {

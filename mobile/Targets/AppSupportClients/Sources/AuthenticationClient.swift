@@ -15,6 +15,9 @@ public struct AuthenticationClient: Sendable {
 
 public enum AuthenticationError: Error, Equatable {
     case invalidCredentials
+    case userAlreadyExists
+    case badRequest(String)
+    case serverError(String)
     case networkError(String)
     case unknown
 }
@@ -112,7 +115,17 @@ extension AuthenticationClient {
                     throw AuthenticationError.invalidCredentials
                 }
 
+                if httpResponse.statusCode == 500 {
+                    throw AuthenticationError.serverError("Internal Server Error")
+                }
+
                 guard (200...299).contains(httpResponse.statusCode) else {
+                    if httpResponse.statusCode == 400 {
+                        struct ErrorResponse: Decodable { let error: String }
+                        if let errResp = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
+                            throw AuthenticationError.badRequest(errResp.error)
+                        }
+                    }
                     throw AuthenticationError.networkError(
                         "Server error: \(httpResponse.statusCode)")
                 }
@@ -138,9 +151,25 @@ extension AuthenticationClient {
 
                 let (data, response) = try await urlSession.data(for: request)
 
-                guard let httpResponse = response as? HTTPURLResponse,
-                    (200...299).contains(httpResponse.statusCode)
-                else {
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw AuthenticationError.networkError("Registration failed")
+                }
+
+                if httpResponse.statusCode == 409 {
+                    throw AuthenticationError.userAlreadyExists
+                }
+
+                if httpResponse.statusCode == 500 {
+                    throw AuthenticationError.serverError("Internal Server Error")
+                }
+
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    if httpResponse.statusCode == 400 {
+                        struct ErrorResponse: Decodable { let error: String }
+                        if let errResp = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
+                            throw AuthenticationError.badRequest(errResp.error)
+                        }
+                    }
                     throw AuthenticationError.networkError("Registration failed")
                 }
 

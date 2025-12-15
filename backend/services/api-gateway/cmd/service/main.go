@@ -49,6 +49,13 @@ func main() {
 		// _, _ = w.Write([]byte("ok"))
 	})
 
+	// Audit / Telemetry
+	r.Post("/audit/logs", func(w http.ResponseWriter, r *http.Request) {
+		// In a real implementation, we would forward this to an audit service or write to a structured log
+		// For now, we just acknowledge receipt to prevent 404 errors on the client
+		w.WriteHeader(http.StatusOK)
+	})
+
 	// openapi.yaml
 	r.Get("/docs/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, openapiFile)

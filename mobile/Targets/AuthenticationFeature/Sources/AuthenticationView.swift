@@ -18,6 +18,7 @@ public struct AuthenticationView: View {
                 scrollViewContent
             }
             .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.interactively)
         }
     }
 
@@ -68,6 +69,8 @@ public struct AuthenticationView: View {
                                 .textContentType(.emailAddress)
                                 .keyboardType(.emailAddress)
                                 .autocapitalization(.none)
+                                .autocorrectionDisabled(true)
+                                .submitLabel(.next)
                                 .foregroundColor(.white)
                                 .font(.liquidBody)
                         }
@@ -95,6 +98,8 @@ public struct AuthenticationView: View {
                             }
                             SecureField("", text: $store.password)
                                 .textContentType(store.isRegistering ? .newPassword : .password)
+                                .autocorrectionDisabled(true)
+                                .submitLabel(.go)
                                 .foregroundColor(.white)
                                 .font(.liquidBody)
                         }

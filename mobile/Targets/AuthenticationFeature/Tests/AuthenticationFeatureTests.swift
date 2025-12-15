@@ -133,4 +133,91 @@ final class AuthenticationFeatureTests: XCTestCase {
             $0.errorMessage = "An unknown error occurred."  // or default error handling
         }
     }
+    func testRegister_UserAlreadyExists() async {
+        let store = TestStore(initialState: AuthenticationFeature.State()) {
+            AuthenticationFeature()
+        } withDependencies: {
+            $0.authentication.register = { _, _ in throw AuthenticationError.userAlreadyExists }
+        }
+
+        await store.send(.toggleModeButtonTapped) {
+            $0.isRegistering = true
+        }
+
+        await store.send(.binding(.set(\.email, "exists@example.com"))) {
+            $0.email = "exists@example.com"
+        }
+        await store.send(.binding(.set(\.password, "password"))) {
+            $0.password = "password"
+        }
+
+        await store.send(.submitButtonTapped) {
+            $0.isLoading = true
+        }
+
+        await store.receive(.authResponse(.failure(.userAlreadyExists))) {
+            $0.isLoading = false
+            $0.errorMessage = "This email is already registered."
+        }
+    }
+
+    func testRegister_BadRequest() async {
+        let store = TestStore(initialState: AuthenticationFeature.State()) {
+            AuthenticationFeature()
+        } withDependencies: {
+            $0.authentication.register = { _, _ in
+                throw AuthenticationError.badRequest("Password too short")
+            }
+        }
+
+        await store.send(.toggleModeButtonTapped) {
+            $0.isRegistering = true
+        }
+
+        await store.send(.binding(.set(\.email, "new@example.com"))) {
+            $0.email = "new@example.com"
+        }
+        await store.send(.binding(.set(\.password, "123"))) {
+            $0.password = "123"
+        }
+
+        await store.send(.submitButtonTapped) {
+            $0.isLoading = true
+        }
+
+        await store.receive(.authResponse(.failure(.badRequest("Password too short")))) {
+            $0.isLoading = false
+            $0.errorMessage = "Password too short"
+        }
+    }
+
+    func testRegister_ServerError() async {
+        let store = TestStore(initialState: AuthenticationFeature.State()) {
+            AuthenticationFeature()
+        } withDependencies: {
+            $0.authentication.register = { _, _ in
+                throw AuthenticationError.serverError("Internal Error")
+            }
+        }
+
+        await store.send(.toggleModeButtonTapped) {
+            $0.isRegistering = true
+        }
+
+        await store.send(.binding(.set(\.email, "new@example.com"))) {
+            $0.email = "new@example.com"
+        }
+        await store.send(.binding(.set(\.password, "password"))) {
+            $0.password = "password"
+        }
+
+        await store.send(.submitButtonTapped) {
+            $0.isLoading = true
+        }
+
+        await store.receive(.authResponse(.failure(.serverError("Internal Error")))) {
+            $0.isLoading = false
+            $0.errorMessage = "Server error. Please try again later."
+        }
+    }
 }

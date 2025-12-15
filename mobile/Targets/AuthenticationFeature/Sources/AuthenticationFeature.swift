@@ -128,6 +128,12 @@ public struct AuthenticationFeature: Sendable {
                 switch error {
                 case .invalidCredentials:
                     state.errorMessage = "Invalid email or password."
+                case .userAlreadyExists:
+                    state.errorMessage = "This email is already registered."
+                case .badRequest(let message):
+                    state.errorMessage = message
+                case .serverError:
+                    state.errorMessage = "Server error. Please try again later."
                 case .networkError(let message):
                     state.errorMessage = message
                 case .unknown:
