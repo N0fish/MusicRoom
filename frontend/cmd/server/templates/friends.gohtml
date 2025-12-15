@@ -48,7 +48,7 @@
     searchResults.innerHTML = users.map(user => `
       <div class="flex items-center justify-between p-2 bg-card-bg-hover rounded-lg">
         <div class="flex items-center space-x-4">
-          <img src="${user.avatarUrl || '/avatars/default.svg'}" alt="Avatar" class="w-10 h-10 rounded-full">
+          <img src="${API}${user.avatarUrl || '/avatars/default.svg'}" alt="Avatar" class="w-10 h-10 rounded-full">
           <div>
             <p class="font-semibold text-text">${user.displayName}</p>
             <p class="text-sm text-text-muted">@${user.username}</p>

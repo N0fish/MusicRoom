@@ -2,12 +2,14 @@ package main
 
 import (
 	"embed"
+	"encoding/json"
 	"html/template"
 	"log"
 	"net/http"
 	"os"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -23,6 +25,16 @@ type App struct {
 	WS  string
 }
 
+type Playlist struct {
+	ID          string    `json:"id"`
+	OwnerID     string    `json:"ownerId"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	IsPublic    bool      `json:"isPublic"`
+	EditMode    string    `json:"editMode"` // "everyone" | "invited"
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
 func main() {
 	api := getenv("API_URL", "http://localhost:8080")
 	ws := getenv("WS_URL", "ws://localhost:3004/ws")
@@ -31,18 +43,38 @@ func main() {
 	app := &App{API: api, WS: ws}
 
 	r := chi.NewRouter()
-	r.Get("/", app.page("home.gohtml"))
-	r.Get("/auth", app.page("auth.gohtml"))
-	r.Get("/auth/callback", app.page("auth.gohtml"))
-	r.Get("/playlists", app.page("playlists.gohtml"))
-	r.Get("/event", app.page("event.gohtml"))
-	r.Get("/realtime", app.page("realtime.gohtml"))
-	r.Get("/me", app.page("me.gohtml"))
-	r.Get("/friends", app.page("friends.gohtml"))
+	r.Get("/", app.page("home.gohtml", nil))
+	r.Get("/auth", app.page("auth.gohtml", nil))
+	r.Get("/auth/callback", app.page("auth.gohtml", nil))
+	r.Get("/playlists", app.playlistsPage())
+	r.Get("/event", app.page("event.gohtml", nil))
+	r.Get("/realtime", app.page("realtime.gohtml", nil))
+	r.Get("/me", app.page("me.gohtml", nil))
+	r.Get("/friends", app.page("friends.gohtml", nil))
+
+	r.Get("/static/playlists.js", func(w http.ResponseWriter, r *http.Request) {
+		tpl, err := template.ParseFS(staticFS, "static/playlists.js")
+		if err != nil {
+			http.Error(w, "template error", 500)
+			return
+		}
+		w.Header().Set("content-type", "application/javascript")
+		data := map[string]any{
+			"API": app.API,
+			"WS":  app.WS,
+		}
+		if err := tpl.Execute(w, data); err != nil {
+			http.Error(w, err.Error(), 500)
+		}
+	})
 
 	// static assets (из embed FS)
 	r.Get("/static/*", func(w http.ResponseWriter, r *http.Request) {
 		p := strings.TrimPrefix(r.URL.Path, "/static/")
+		if p == "playlists.js" { // handled separately
+			http.NotFound(w, r)
+			return
+		}
 		b, err := staticFS.ReadFile(path.Join("static", p))
 		if err != nil {
 			http.NotFound(w, r)
@@ -62,21 +94,45 @@ func main() {
 
 	log.Printf("Go frontend on :%s (API=%s, WS=%s)", port, api, ws)
 	log.Fatal(http.ListenAndServe(":"+port, r))
-
-	// Это сертификаты для https. Они нужны если мы решим использовать https в качестве общего протокола для сервисов.
-	// tlsEnabled := strings.EqualFold(getenv("TLS_ENABLED", "false"), "true")
-	// if tlsEnabled {
-	// 	certFile := getenv("TLS_CERT_FILE", "../../../certs/cert.pem")
-	// 	keyFile := getenv("TLS_KEY_FILE", "../../../certs/key.pem")
-	// 	log.Printf("Go frontend on HTTPS :%s (API=%s, WS=%s)", port, api, ws)
-	// 	log.Fatal(http.ListenAndServeTLS(":"+port, certFile, keyFile, r))
-	// } else {
-	// 	log.Printf("Go frontend on HTTP :%s (API=%s, WS=%s)", port, api, ws)
-	// 	log.Fatal(http.ListenAndServe(":"+port, r))
-	// }
 }
 
-func (a *App) page(name string) http.HandlerFunc {
+func (a *App) playlistsPage() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// playlists, err := a.getPlaylists()
+		// if err != nil {
+		// 	log.Printf("Failed to get playlists: %v", err)
+		// 	http.Error(w, "Failed to get playlists", 500)
+		// 	return
+		// }
+
+		data := map[string]any{
+			"Playlists": []Playlist{},
+		}
+		a.page("playlists.gohtml", data)(w, r)
+	}
+}
+
+func (a *App) getPlaylists() ([]Playlist, error) {
+	req, err := http.NewRequest("GET", a.API+"/playlists", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add("x-user-id", "user1")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var playlists []Playlist
+	if err := json.NewDecoder(resp.Body).Decode(&playlists); err != nil {
+		return nil, err
+	}
+	return playlists, nil
+}
+
+func (a *App) page(name string, data map[string]any) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tpl, err := template.ParseFS(tplFS, "templates/base.gohtml", "templates/"+name)
 		if err != nil {
@@ -84,11 +140,13 @@ func (a *App) page(name string) http.HandlerFunc {
 			return
 		}
 
-		data := map[string]any{
-			"API":  a.API,
-			"WS":   a.WS,
-			"Path": r.URL.Path,
+		if data == nil {
+			data = map[string]any{}
 		}
+		data["API"] = a.API
+		data["WS"] = a.WS
+		data["Path"] = r.URL.Path
+
 		if err := tpl.ExecuteTemplate(w, "base", data); err != nil {
 			http.Error(w, err.Error(), 500)
 		}
