@@ -129,7 +129,7 @@ EENV
 PORT=3005
 DATABASE_URL=${DB_URL}
 AVATAR_DIR=./avatars
-DEFAULT_AVATAR_URL=/avatars/default.svg
+DEFAULT_AVATAR_URL=/avatars/default.png
 EENV
       ;;
 

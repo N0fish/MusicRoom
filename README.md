@@ -206,7 +206,7 @@ Ex : GET /users/me
 	"userId": "uuid-пользователя",
 	"username": "quiet-dragon",
 	"displayName": "Alla",
-	"avatarUrl": "/static/avatars/default.svg",
+	"avatarUrl": "/static/avatars/default.png",
 	"hasCustomAvatar": false,
 	"bio": "DJ from Paris",
 	"visibility": "private",

@@ -56,6 +56,9 @@ func main() {
 		if strings.HasSuffix(p, ".svg") {
 			w.Header().Set("content-type", "image/svg+xml")
 		}
+		if strings.HasSuffix(p, ".png") {
+			w.Header().Set("content-type", "image/png")
+		}
 		w.Write(b)
 	})
 
