@@ -4,6 +4,14 @@ import SwiftUI
 
 public struct AuthenticationView: View {
     @Bindable var store: StoreOf<AuthenticationFeature>
+    @State private var start = UnitPoint(x: 0, y: -2)
+    @State private var end = UnitPoint(x: 4, y: 0)
+    @FocusState private var focusedField: Field?
+
+    private enum Field {
+        case email
+        case password
+    }
 
     public init(store: StoreOf<AuthenticationFeature>) {
         self.store = store
@@ -18,7 +26,9 @@ public struct AuthenticationView: View {
                 scrollViewContent
             }
             .scrollIndicators(.hidden)
-            .scrollDismissesKeyboard(.interactively)
+        }
+        .onAppear {
+            focusedField = .email
         }
     }
 
@@ -66,13 +76,17 @@ public struct AuthenticationView: View {
                                     .foregroundColor(.white.opacity(0.6))
                             }
                             TextField("", text: $store.email)
+                                .focused($focusedField, equals: .email)
                                 .textContentType(.emailAddress)
                                 .keyboardType(.emailAddress)
-                                .autocapitalization(.none)
+                                .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled(true)
                                 .submitLabel(.next)
                                 .foregroundColor(.white)
                                 .font(.liquidBody)
+                                .onSubmit {
+                                    focusedField = .password
+                                }
                         }
                     }
                     .padding()
@@ -84,6 +98,9 @@ public struct AuthenticationView: View {
                                 Color.liquidPrimary.opacity(
                                     store.email.isEmpty ? 0.3 : 0.8), lineWidth: 1)
                     )
+                    .onTapGesture {
+                        focusedField = .email
+                    }
 
                     // Password Field
                     HStack {
@@ -97,11 +114,15 @@ public struct AuthenticationView: View {
                                     .foregroundColor(.white.opacity(0.6))
                             }
                             SecureField("", text: $store.password)
+                                .focused($focusedField, equals: .password)
                                 .textContentType(store.isRegistering ? .newPassword : .password)
                                 .autocorrectionDisabled(true)
                                 .submitLabel(.go)
                                 .foregroundColor(.white)
                                 .font(.liquidBody)
+                                .onSubmit {
+                                    store.send(.submitButtonTapped)
+                                }
                         }
                     }
                     .padding()
@@ -113,6 +134,9 @@ public struct AuthenticationView: View {
                                 Color.liquidAccent.opacity(
                                     store.password.isEmpty ? 0.3 : 0.8), lineWidth: 1)
                     )
+                    .onTapGesture {
+                        focusedField = .password
+                    }
 
                     // Forgot Password Button
                     if !store.isRegistering {

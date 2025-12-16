@@ -24,9 +24,9 @@ public struct AppView: View {
                         )
                     )
                 case .app:
-                    NavigationStack {
-                        appContent
-                    }
+                    appContent
+                case .splash:
+                    SplashView()
                 }
             }
             .task {

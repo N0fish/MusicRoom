@@ -259,7 +259,8 @@ extension MusicRoomAPIClient: DependencyKey {
 
                 var components = URLComponents()
                 components.scheme = scheme
-                components.host = host
+                // Fix for iOS Simulator: 'localhost' can cause socket errors (SO_CONNECTION_IDLE), use 127.0.0.1
+                components.host = host == "localhost" ? "127.0.0.1" : host
                 components.port = port  // Use same port as API for now (Gateway)
                 components.path = "/ws"
 

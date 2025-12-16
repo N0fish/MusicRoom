@@ -22,6 +22,7 @@ echo "✅ Created .env (root)"
 JWT_SECRET="supersecretdev"
 DB_URL="postgres://musicroom:musicroom@postgres:5432/musicroom?sslmode=disable"
 REDIS_URL="redis://redis:6379"
+YOUTUBE_API_KEY="AIzaSyBeDpLXg_R02KCnUEJlO7_-c26RCFIJj_Q"
 
 FRONTEND_PORT=5175
 GATEWAY_PORT=8080
@@ -167,7 +168,7 @@ EENV
     "backend/services/music-provider-service")
       cat > "$ENV_FILE" <<EENV
 PORT=3007
-YOUTUBE_API_KEY=
+YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
 REDIS_URL=${REDIS_URL}
 YOUTUBE_SEARCH_URL=https://www.googleapis.com/youtube/v3/search
 EENV

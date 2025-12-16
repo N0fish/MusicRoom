@@ -104,6 +104,8 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(srv.authMiddleware)
 		r.Get("/auth/me", srv.handleMe)
+		r.Post("/auth/link/{provider}", srv.handleLinkProvider)
+		r.Delete("/auth/link/{provider}", srv.handleUnlinkProvider)
 	})
 
 	port := getenv("PORT", "3001")

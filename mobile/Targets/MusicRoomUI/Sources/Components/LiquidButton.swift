@@ -1,9 +1,5 @@
 import SwiftUI
 
-#if canImport(UIKit)
-    import UIKit  // Needed for UIImpactFeedbackGenerator
-#endif
-
 public struct LiquidButton<Label: View>: View {
     let action: () -> Void
     let label: Label
@@ -25,11 +21,7 @@ public struct LiquidButton<Label: View>: View {
 
     public var body: some View {
         Button(action: {
-            // Trigger impact feedback
-            #if canImport(UIKit)
-                let generator = UIImpactFeedbackGenerator(style: .medium)
-                generator.impactOccurred()
-            #endif
+            // Trigger impact feedback (Removed)
 
             action()
         }) {

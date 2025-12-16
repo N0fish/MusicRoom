@@ -264,3 +264,36 @@ func (s *Server) resetPasswordByToken(ctx context.Context, token, newHash string
 	)
 	return scanAuthUser(row)
 }
+
+func (s *Server) deleteUser(ctx context.Context, userID string) error {
+	_, err := s.db.Exec(ctx, `DELETE FROM auth_users WHERE id = $1`, userID)
+	return err
+}
+
+func (s *Server) updateGoogleID(ctx context.Context, userID string, googleID *string) (AuthUser, error) {
+	row := s.db.QueryRow(ctx, `UPDATE auth_users
+        SET google_id = $1, updated_at = now()
+        WHERE id = $2
+        RETURNING id, email, password, email_verified,
+                  google_id, ft_id,
+                  verification_token, verification_sent_at,
+                  reset_token, reset_sent_at, reset_expires_at,
+                  created_at, updated_at`,
+		googleID, userID,
+	)
+	return scanAuthUser(row)
+}
+
+func (s *Server) updateFTID(ctx context.Context, userID string, ftID *string) (AuthUser, error) {
+	row := s.db.QueryRow(ctx, `UPDATE auth_users
+        SET ft_id = $1, updated_at = now()
+        WHERE id = $2
+        RETURNING id, email, password, email_verified,
+                  google_id, ft_id,
+                  verification_token, verification_sent_at,
+                  reset_token, reset_sent_at, reset_expires_at,
+                  created_at, updated_at`,
+		ftID, userID,
+	)
+	return scanAuthUser(row)
+}

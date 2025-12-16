@@ -89,6 +89,10 @@ func main() {
 
 	// /auth/me можно либо через прямой proxy, либо через gateway JWT
 	r.Method(http.MethodGet, "/auth/me", authProxy)
+	r.Method(http.MethodPost, "/auth/link/{provider}", authProxy)
+	r.Method(http.MethodDelete, "/auth/link/{provider}", authProxy)
+
+	log.Printf("api-gateway: registering auth link routes")
 
 	// User-service (JWT required)
 	r.Method(http.MethodGet, "/avatars/*", userProxy)

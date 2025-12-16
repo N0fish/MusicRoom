@@ -9,12 +9,15 @@ public struct ProfileFeature: Sendable {
         public var userProfile: UserProfile?
         public var isEditing: Bool = false
         public var isLoading: Bool = false
+        public var isAvatarLoading: Bool = false
         public var errorMessage: String?
 
         // Editable fields
         public var editableDisplayName: String = ""
         public var editableUsername: String = ""
         public var editableEmail: String = ""
+        public var editableBio: String = ""
+        public var editableVisibility: String = "public"
         public var editableMusicPreferences: String = ""
 
         // Password change fields
@@ -42,6 +45,8 @@ public struct ProfileFeature: Sendable {
         case changePasswordButtonTapped
         case changePasswordResponse(TaskResult<Bool>)
         case toggleChangePasswordMode
+        case generateRandomAvatarTapped
+        case generateRandomAvatarResponse(TaskResult<UserProfile>)
     }
 
     @Dependency(\.user) var userClient
@@ -88,6 +93,8 @@ public struct ProfileFeature: Sendable {
                     state.editableDisplayName = profile.displayName
                     state.editableUsername = profile.username
                     state.editableEmail = profile.email ?? ""
+                    state.editableBio = profile.bio ?? ""
+                    state.editableVisibility = profile.visibility
                     state.editableMusicPreferences =
                         profile.preferences.genres?.joined(separator: ",") ?? ""
                 }
@@ -117,12 +124,18 @@ public struct ProfileFeature: Sendable {
                     displayName: state.editableDisplayName,
                     avatarUrl: currentProfile.avatarUrl,
                     hasCustomAvatar: currentProfile.hasCustomAvatar,
-                    bio: currentProfile.bio,
-                    visibility: currentProfile.visibility,
+                    bio: state.editableBio,
+                    visibility: state.editableVisibility,
                     preferences: preferences,
                     linkedProviders: currentProfile.linkedProviders,
                     email: state.editableEmail.isEmpty ? nil : state.editableEmail
                 )
+
+                if updatedProfile == currentProfile {
+                    state.isEditing = false
+                    state.isLoading = false
+                    return .none
+                }
 
                 return .run { [userClient] send in
                     await send(
@@ -261,9 +274,58 @@ public struct ProfileFeature: Sendable {
                 state.errorMessage = "Failed to change password: \(error.localizedDescription)"
                 return .none
 
+            case .generateRandomAvatarTapped:
+                if state.isOffline {
+                    state.errorMessage = "You cannot generate avatar while offline."
+                    return .none
+                }
+                state.isAvatarLoading = true
+                return .run { [userClient] send in
+                    await send(
+                        .generateRandomAvatarResponse(
+                            TaskResult { try await userClient.generateRandomAvatar() }
+                        )
+                    )
+                }
+
+            case .generateRandomAvatarResponse(.success(let profile)):
+                state.isAvatarLoading = false
+                var normalized = normalizeAvatarUrl(profile)
+
+                // Force UI update by appending a unique query parameter to bypass cache/id check
+                if let url = normalized.avatarUrl, !url.isEmpty {
+                    let separator = url.contains("?") ? "&" : "?"
+                    let newUrl = "\(url)\(separator)v=\(UUID().uuidString)"
+
+                    normalized = UserProfile(
+                        id: normalized.id,
+                        userId: normalized.userId,
+                        username: normalized.username,
+                        displayName: normalized.displayName,
+                        avatarUrl: newUrl,
+                        hasCustomAvatar: normalized.hasCustomAvatar,
+                        bio: normalized.bio,
+                        visibility: normalized.visibility,
+                        preferences: normalized.preferences,
+                        linkedProviders: normalized.linkedProviders,
+                        email: normalized.email
+                    )
+                }
+                state.userProfile = normalized
+                return .none
+
+            case .generateRandomAvatarResponse(.failure(let error)):
+                state.isAvatarLoading = false
+                state.errorMessage = "Failed to generate avatar: \(error.localizedDescription)"
+                return .none
+
             case .binding:
                 return .none
             }
         }
+    }
+
+    private func normalizeAvatarUrl(_ profile: UserProfile) -> UserProfile {
+        return profile
     }
 }

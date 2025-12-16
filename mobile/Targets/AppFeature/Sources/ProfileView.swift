@@ -11,155 +11,244 @@ public struct ProfileView: View {
     }
 
     public var body: some View {
-        NavigationStack {
-            ZStack {
-                LiquidBackground()
-                    .ignoresSafeArea()
+        // NavigationStack removed as it is provided by AppView
+        ZStack {
+            LiquidBackground()
+                .ignoresSafeArea()
 
-                if store.isLoading {
-                    ProgressView()
-                        .tint(.white)
-                } else if let errorMessage = store.errorMessage {
-                    VStack {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.yellow)
-                            .font(.largeTitle)
-                        Text(errorMessage)
-                            .foregroundStyle(.white)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding()
-                } else if let profile = store.userProfile {
-                    ScrollView {
-                        VStack(spacing: 24) {
-                            // Header
-                            VStack(spacing: 16) {
-                                AsyncImage(url: URL(string: profile.avatarUrl ?? "")) { image in
-                                    image
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                } placeholder: {
-                                    Image(systemName: "person.circle.fill")
-                                        .resizable()
-                                        .foregroundStyle(.white.opacity(0.3))
+            if store.isLoading && !store.isAvatarLoading {
+                // Do not show full screen loader if only avatar is loading (randomize)
+                ProgressView()
+                    .tint(.white)
+            } else if let errorMessage = store.errorMessage {
+                VStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.yellow)
+                        .font(.largeTitle)
+                    Text(errorMessage)
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
+                }
+                .padding()
+            } else if let profile = store.userProfile {
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Header
+                        VStack(spacing: 16) {
+                            ZStack {
+                                if store.isAvatarLoading {
+                                    ShimmerView()
+                                        .frame(width: 120, height: 120)
+                                        .clipShape(Circle())
+                                } else {
+                                    AsyncImage(url: URL(string: profile.avatarUrl ?? "")) { image in
+                                        image
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                    } placeholder: {
+                                        Image(systemName: "person.circle.fill")
+                                            .resizable()
+                                            .foregroundStyle(.white.opacity(0.3))
+                                    }
+                                    .frame(width: 120, height: 120)
+                                    .clipShape(Circle())
                                 }
-                                .frame(width: 120, height: 120)
-                                .clipShape(Circle())
-                                .overlay(Circle().stroke(.white.opacity(0.2), lineWidth: 2))
+                            }
+                            .overlay(Circle().stroke(.white.opacity(0.2), lineWidth: 2))
 
-                                VStack(spacing: 4) {
-                                    Text(profile.displayName)
-                                        .font(.liquidH2)
+                            if store.isEditing {
+                                Button(action: { store.send(.generateRandomAvatarTapped) }) {
+                                    HStack(spacing: 4) {
+                                        if store.isAvatarLoading {
+                                            ProgressView().controlSize(.mini).tint(.white)
+                                        } else {
+                                            Image(systemName: "dice.fill")
+                                        }
+                                        Text("Randomize")
+                                    }
+                                    .font(.caption)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Color.blue)
+                                    .foregroundColor(.white)
+                                    .clipShape(Capsule())
+                                }
+                                .disabled(store.isAvatarLoading)
+                                .padding(.top, 4)
+                            }
+
+                            VStack(spacing: 4) {
+                                Text(profile.displayName)
+                                    .font(.liquidH2)
+                                    .foregroundStyle(.white)
+
+                                Text("@\(profile.username)")
+                                    .font(.liquidBody)
+                                    .foregroundStyle(.white.opacity(0.6))
+                            }
+
+                        }
+                        .padding(.top, 20)
+
+                        // Public Info
+                        profileSection("Public Information") {
+                            if store.isEditing {
+                                LiquidTextField(
+                                    "Display Name", text: $store.editableDisplayName)
+                                // Username is generally not editable easily as verified by user request to keep it fixed,
+                                // but backend `ensureUsername` suggests it MIGHT be.
+                                // User said: "Сменять юзернейм мы не будем, пускай это будет невозможно."
+                                // So I will make it READ ONLY in edit mode too, or just don't show it as editable.
+                                infoRow("Username", value: store.editableUsername)
+                                    .opacity(0.6)
+
+                                VStack(alignment: .leading) {
+                                    Text("Bio")
+                                        .foregroundStyle(.white.opacity(0.8))
+                                        .font(.caption)
+                                    ZStack(alignment: .topLeading) {
+                                        if store.editableBio.isEmpty {
+                                            Text("Tell us about yourself...")
+                                                .foregroundStyle(.white.opacity(0.4))
+                                                .padding(.top, 8)
+                                                .padding(.leading, 5)
+                                        }
+                                        TextField(
+                                            "", text: $store.editableBio,
+                                            axis: .vertical
+                                        )
                                         .foregroundStyle(.white)
+                                    }
+                                    .padding()
+                                    .background(Color.white.opacity(0.1))
+                                    .cornerRadius(8)
+                                    .lineLimit(3...6)
+                                }
 
-                                    Text("@\(profile.username)")
-                                        .font(.liquidBody)
+                                VStack(alignment: .leading) {
+                                    Text("Visibility")
+                                        .foregroundStyle(.white.opacity(0.8))
+                                        .font(.caption)
+                                    Picker("Visibility", selection: $store.editableVisibility) {
+                                        Text("Public").tag("public")
+                                        Text("Friends Only").tag("friends")
+                                        Text("Private").tag("private")
+                                    }
+                                    .pickerStyle(.segmented)
+                                    .environment(\.colorScheme, .dark)
+                                }
+                            } else {
+                                infoRow("Display Name", value: profile.displayName)
+                                infoRow("Username", value: profile.username)
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Bio")
                                         .foregroundStyle(.white.opacity(0.6))
-                                }
-                            }
-                            .padding(.top, 20)
-
-                            // Public Info
-                            profileSection("Public Information") {
-                                if store.isEditing {
-                                    LiquidTextField(
-                                        "Display Name", text: $store.editableDisplayName)
-                                    LiquidTextField("Username", text: $store.editableUsername)
-                                } else {
-                                    infoRow("Display Name", value: profile.displayName)
-                                    infoRow("Username", value: profile.username)
-                                }
-                            }
-
-                            // Private Info
-                            profileSection("Private Information") {
-                                if store.isEditing {
-                                    LiquidTextField("Email", text: $store.editableEmail)
-                                        .textInputAutocapitalization(.never)
-                                        .keyboardType(.emailAddress)
-                                } else {
-                                    infoRow("Email", value: profile.email ?? "Not set")
-                                }
-                            }
-
-                            // Preferences
-                            profileSection("Preferences") {
-                                if store.isEditing {
-                                    LiquidTextField(
-                                        "Genres (comma separated)",
-                                        text: $store.editableMusicPreferences)
-                                } else {
-                                    infoRow(
-                                        "Music Genres",
-                                        value: profile.preferences.genres?.joined(separator: ", ")
-                                            ?? "None"
+                                        .font(.caption)
+                                    Text(
+                                        profile.bio?.isEmpty == false
+                                            ? profile.bio! : "No bio set"
                                     )
+                                    .foregroundStyle(
+                                        profile.bio?.isEmpty == false
+                                            ? .white : .white.opacity(0.4)
+                                    )
+                                    .italic(profile.bio?.isEmpty != false)
+                                    .fixedSize(horizontal: false, vertical: true)
                                 }
-                            }
+                                .padding(.top, 4)
+                                .frame(maxWidth: .infinity, alignment: .leading)
 
-                            // Security & Linked Accounts
-                            profileSection("Security & Accounts") {
-                                VStack(spacing: 12) {
-                                    if !store.isChangingPassword {
-                                        Button("Change Password") {
+                                infoRow("Visibility", value: profile.visibility.capitalized)
+                            }
+                        }
+
+                        // Private Info
+                        profileSection("Private Information") {
+                            // Email is not editable via profile update
+                            infoRow("Email", value: profile.email ?? "Not set")
+                                .opacity(store.isEditing ? 0.6 : 1.0)
+                        }
+
+                        // Preferences
+                        profileSection("Preferences") {
+                            if store.isEditing {
+                                LiquidTextField(
+                                    "Genres (comma separated)",
+                                    text: $store.editableMusicPreferences)
+                            } else {
+                                infoRow(
+                                    "Music Genres",
+                                    value: profile.preferences.genres?.joined(separator: ", ")
+                                        ?? "None"
+                                )
+                            }
+                        }
+
+                        // Security & Linked Accounts
+                        profileSection("Security & Accounts") {
+                            VStack(spacing: 12) {
+                                if !store.isChangingPassword {
+                                    Button("Change Password") {
+                                        store.send(.toggleChangePasswordMode)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(.white)
+                                } else {
+                                    SecureField(
+                                        "Current Password", text: $store.currentPassword
+                                    )
+                                    .textFieldStyle(.roundedBorder)
+                                    SecureField("New Password", text: $store.newPassword)
+                                        .textFieldStyle(.roundedBorder)
+                                    SecureField("Confirm New", text: $store.confirmNewPassword)
+                                        .textFieldStyle(.roundedBorder)
+
+                                    HStack {
+                                        Button("Cancel") {
                                             store.send(.toggleChangePasswordMode)
                                         }
-                                        .buttonStyle(.bordered)
-                                        .tint(.white)
-                                    } else {
-                                        SecureField(
-                                            "Current Password", text: $store.currentPassword
-                                        )
-                                        .textFieldStyle(.roundedBorder)
-                                        SecureField("New Password", text: $store.newPassword)
-                                            .textFieldStyle(.roundedBorder)
-                                        SecureField("Confirm New", text: $store.confirmNewPassword)
-                                            .textFieldStyle(.roundedBorder)
-
-                                        HStack {
-                                            Button("Cancel") {
-                                                store.send(.toggleChangePasswordMode)
-                                            }
-                                            .foregroundStyle(.red)
-                                            Spacer()
-                                            Button("Update") {
-                                                store.send(.changePasswordButtonTapped)
-                                            }
+                                        .foregroundStyle(.red)
+                                        Spacer()
+                                        Button("Update") {
+                                            store.send(.changePasswordButtonTapped)
                                         }
                                     }
+                                }
 
-                                    Divider().background(.white.opacity(0.2))
+                                Divider().background(.white.opacity(0.2))
 
-                                    ForEach(
-                                        [
-                                            AuthenticationClient.SocialHelper.SocialProvider.google,
-                                            .intra42,
-                                        ], id: \.self
-                                    ) { provider in
-                                        HStack {
-                                            Text(
-                                                provider == .intra42
-                                                    ? "Intra 42" : provider.rawValue.capitalized
-                                            )
-                                            .foregroundStyle(.white)
-                                            Spacer()
-                                            if profile.linkedProviders.contains(provider.rawValue) {
-                                                Button("Unlink", role: .destructive) {
-                                                    store.send(.unlinkAccount(provider))
-                                                }
-                                                .foregroundStyle(.red)
-                                            } else {
-                                                Button("Link") {
-                                                    store.send(.linkAccount(provider))
-                                                }
-                                                .foregroundStyle(.blue)
+                                ForEach(
+                                    [
+                                        AuthenticationClient.SocialHelper.SocialProvider.google,
+                                        .intra42,
+                                    ], id: \.self
+                                ) { provider in
+                                    HStack {
+                                        Text(
+                                            provider == .intra42
+                                                ? "Intra 42" : provider.rawValue.capitalized
+                                        )
+                                        .foregroundStyle(.white)
+                                        Spacer()
+                                        if profile.linkedProviders.contains(provider.rawValue) {
+                                            Button("Unlink", role: .destructive) {
+                                                store.send(.unlinkAccount(provider))
                                             }
+                                            .foregroundStyle(.red)
+                                        } else {
+                                            Button("Link") {
+                                                store.send(.linkAccount(provider))
+                                            }
+                                            .foregroundStyle(.blue)
                                         }
                                     }
                                 }
                             }
+                        }
 
-                            // Logout
+                        // Logout
+                        if !store.isEditing {
                             Button {
                                 store.send(.logoutButtonTapped)
                             } label: {
@@ -173,36 +262,37 @@ public struct ProfileView: View {
                             }
                             .padding(.top, 20)
                         }
-                        .padding()
-                        .padding(.bottom, 80)
                     }
+                    .padding()
+                    .padding(.bottom, 80)
                 }
-            }
-            .navigationTitle("Profile")
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbarBackground(.hidden, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(store.isEditing ? "Save" : "Edit") {
-                        if store.isEditing {
-                            store.send(.saveButtonTapped)
-                        } else {
-                            store.send(.toggleEditMode)
-                        }
-                    }
-                    .foregroundStyle(.white)
-                }
-                if store.isEditing {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("Cancel") { store.send(.toggleEditMode) }
-                            .foregroundStyle(.white)
-                    }
-                }
-            }
-            .onAppear {
-                store.send(.onAppear)
             }
         }
+        .navigationTitle("Profile")
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(store.isEditing ? "Save" : "Edit") {
+                    if store.isEditing {
+                        store.send(.saveButtonTapped)
+                    } else {
+                        store.send(.toggleEditMode)
+                    }
+                }
+                .foregroundStyle(.white)
+            }
+            if store.isEditing {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { store.send(.toggleEditMode) }
+                        .foregroundStyle(.white)
+                }
+            }
+        }
+        .onAppear {
+            store.send(.onAppear)
+        }
+
     }
 
     private func profileSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content)
@@ -244,11 +334,50 @@ public struct ProfileView: View {
         }
 
         var body: some View {
-            TextField(title, text: $text)
-                .padding()
-                .background(Color.white.opacity(0.1))
-                .cornerRadius(8)
-                .foregroundStyle(.white)
+            ZStack(alignment: .leading) {
+                if text.isEmpty {
+                    Text(title)
+                        .foregroundStyle(.white.opacity(0.4))
+                }
+                TextField("", text: $text)
+                    .foregroundStyle(.white)
+            }
+            .padding()
+            .background(Color.white.opacity(0.1))
+            .cornerRadius(8)
+        }
+    }
+
+    struct ShimmerView: View {
+        @State private var phase: CGFloat = 0
+
+        var body: some View {
+            Rectangle()
+                .fill(Color.white.opacity(0.1))
+                .overlay {
+                    GeometryReader { geometry in
+                        LinearGradient(
+                            colors: [
+                                .clear,
+                                .white.opacity(0.2),
+                                .clear,
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        .frame(width: geometry.size.width * 2)
+                        .offset(x: phase)
+                        .onAppear {
+                            withAnimation(
+                                .linear(duration: 1.5)
+                                    .repeatForever(autoreverses: false)
+                            ) {
+                                phase = geometry.size.width
+                            }
+                        }
+                    }
+                }
+                .mask(Rectangle())
         }
     }
 }

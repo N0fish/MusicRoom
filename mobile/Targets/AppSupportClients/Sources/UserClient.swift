@@ -82,6 +82,7 @@ public struct UserClient: Sendable {
     public var link: @Sendable (String, String) async throws -> UserProfile
     public var unlink: @Sendable (String) async throws -> UserProfile
     public var changePassword: @Sendable (_ current: String, _ new: String) async throws -> Void
+    public var generateRandomAvatar: @Sendable () async throws -> UserProfile
 }
 
 extension UserClient: DependencyKey {
@@ -136,7 +137,22 @@ extension UserClient: DependencyKey {
                 email: "preview@example.com"
             )
         },
-        changePassword: { _, _ in }
+        changePassword: { _, _ in },
+        generateRandomAvatar: {
+            UserProfile(
+                id: "mock-id",
+                userId: "mock-user-id",
+                username: "Preview User",
+                displayName: "Preview Display Name",
+                avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=new",
+                hasCustomAvatar: false,
+                bio: "Music lover",
+                visibility: "public",
+                preferences: UserPreferences(genres: ["Pop", "Rock"]),
+                linkedProviders: ["google"],
+                email: "preview@example.com"
+            )
+        }
     )
 
     public static let testValue = UserClient(
@@ -188,7 +204,22 @@ extension UserClient: DependencyKey {
                 email: "test@example.com"
             )
         },
-        changePassword: { _, _ in }
+        changePassword: { _, _ in },
+        generateRandomAvatar: {
+            UserProfile(
+                id: "test-id",
+                userId: "test-user-id",
+                username: "Test User",
+                displayName: "Test Display Name",
+                avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=new",
+                hasCustomAvatar: false,
+                bio: nil,
+                visibility: "public",
+                preferences: UserPreferences(),
+                linkedProviders: ["google"],
+                email: "test@example.com"
+            )
+        }
     )
 }
 
@@ -240,6 +271,7 @@ extension UserClient {
 
                 struct AuthMeResponse: Decodable {
                     let linkedProviders: [String]?
+                    let email: String?
                 }
 
                 do {
@@ -249,6 +281,7 @@ extension UserClient {
                     {
                         let authData = try JSONDecoder().decode(AuthMeResponse.self, from: dataAuth)
                         profile.linkedProviders = authData.linkedProviders ?? []
+                        profile.email = authData.email
                     }
                 } catch {
                     print("UserClient: Failed to fetch auth/me: \(error)")
@@ -260,14 +293,28 @@ extension UserClient {
             updateProfile: { profile in
                 let url = URL(string: "http://localhost:8080/users/me")!
                 var request = URLRequest(url: url)
-                request.httpMethod = "PUT"
+                request.httpMethod = "PATCH"
                 request.addValue("application/json", forHTTPHeaderField: "Content-Type")
 
                 if let token = KeychainHelper().read("accessToken") {
                     request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
                 }
 
-                request.httpBody = try JSONEncoder().encode(profile)
+                struct UpdateRequest: Encodable {
+                    let displayName: String
+                    let bio: String
+                    let visibility: String
+                    let preferences: UserPreferences
+                }
+
+                let updateReq = UpdateRequest(
+                    displayName: profile.displayName,
+                    bio: profile.bio ?? "",
+                    visibility: profile.visibility,
+                    preferences: profile.preferences
+                )
+
+                request.httpBody = try JSONEncoder().encode(updateReq)
 
                 let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -280,7 +327,7 @@ extension UserClient {
                 return try JSONDecoder().decode(UserProfile.self, from: data)
             },
             link: { provider, token in
-                let url = URL(string: "http://localhost:8080/users/me/link/\(provider)")!
+                let url = URL(string: "http://localhost:8080/auth/link/\(provider)")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.addValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -293,7 +340,7 @@ extension UserClient {
                 let body = ["token": token]
                 request.httpBody = try JSONEncoder().encode(body)
 
-                let (data, response) = try await URLSession.shared.data(for: request)
+                let (_, response) = try await URLSession.shared.data(for: request)
 
                 guard let httpResponse = response as? HTTPURLResponse,
                     (200...299).contains(httpResponse.statusCode)
@@ -301,10 +348,56 @@ extension UserClient {
                     throw URLError(.badServerResponse)
                 }
 
-                return try JSONDecoder().decode(UserProfile.self, from: data)
+                // After linking, fetch updated profile to reflect changes
+                // We recursively call self.me() if we could, but here we'll just fetch manually
+                // to match the expected return type.
+
+                // Note: The caller (ProfileFeature) will reload profile anyway if we return success.
+                // But we must return a UserProfile.
+                // Let's refactor `me` logic into a reusable private helper if possible,
+                // but `live` is a static function.
+
+                // Hack: We'll copy-paste the 'me()' logic or just return a placeholder
+                // and rely on ProfileFeature refreshing (which it does not do automatically on link response?
+                // ProfileFeature updates state with the returned profile).
+                // So we MUST return the fresh profile.
+
+                // Re-fetch /users/me
+                let meUrl = URL(string: "http://localhost:8080/users/me")!
+                var meReq = URLRequest(url: meUrl)
+                meReq.httpMethod = "GET"
+                if let accessToken = KeychainHelper().read("accessToken") {
+                    meReq.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+                }
+                let (meData, _) = try await URLSession.shared.data(for: meReq)
+                var profile = try JSONDecoder().decode(UserProfile.self, from: meData)
+
+                // Re-fetch /auth/me for linked providers
+                let authUrl = URL(string: "http://localhost:8080/auth/me")!
+                var authReq = URLRequest(url: authUrl)
+                authReq.httpMethod = "GET"
+                if let accessToken = KeychainHelper().read("accessToken") {
+                    authReq.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+                }
+
+                struct AuthMeResponse: Decodable {
+                    let linkedProviders: [String]?
+                    let email: String?
+                }
+
+                do {
+                    let (authData, _) = try await URLSession.shared.data(for: authReq)
+                    let authInfo = try JSONDecoder().decode(AuthMeResponse.self, from: authData)
+                    profile.linkedProviders = authInfo.linkedProviders ?? []
+                    profile.email = authInfo.email
+                } catch {
+                    print("UserClient: Failed to fetch auth/me after link: \(error)")
+                }
+
+                return profile
             },
             unlink: { provider in
-                let url = URL(string: "http://localhost:8080/users/me/link/\(provider)")!
+                let url = URL(string: "http://localhost:8080/auth/link/\(provider)")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "DELETE"
 
@@ -312,7 +405,7 @@ extension UserClient {
                     request.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
                 }
 
-                let (data, response) = try await URLSession.shared.data(for: request)
+                let (_, response) = try await URLSession.shared.data(for: request)
 
                 guard let httpResponse = response as? HTTPURLResponse,
                     (200...299).contains(httpResponse.statusCode)
@@ -320,7 +413,38 @@ extension UserClient {
                     throw URLError(.badServerResponse)
                 }
 
-                return try JSONDecoder().decode(UserProfile.self, from: data)
+                // Re-fetch /users/me
+                let meUrl = URL(string: "http://localhost:8080/users/me")!
+                var meReq = URLRequest(url: meUrl)
+                meReq.httpMethod = "GET"
+                if let accessToken = KeychainHelper().read("accessToken") {
+                    meReq.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+                }
+                let (meData, _) = try await URLSession.shared.data(for: meReq)
+                var profile = try JSONDecoder().decode(UserProfile.self, from: meData)
+
+                // Re-fetch /auth/me
+                let authUrl = URL(string: "http://localhost:8080/auth/me")!
+                var authReq = URLRequest(url: authUrl)
+                authReq.httpMethod = "GET"
+                if let accessToken = KeychainHelper().read("accessToken") {
+                    authReq.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+                }
+
+                struct AuthMeResponse: Decodable {
+                    let linkedProviders: [String]?
+                    let email: String?
+                }
+
+                do {
+                    let (authData, _) = try await URLSession.shared.data(for: authReq)
+                    let authInfo = try JSONDecoder().decode(AuthMeResponse.self, from: authData)
+                    profile.linkedProviders = authInfo.linkedProviders ?? []
+                    profile.email = authInfo.email
+                } catch {
+                    print("UserClient: Failed to fetch auth/me after unlink: \(error)")
+                }
+                return profile
             },
             changePassword: { current, new in
                 let url = URL(string: "http://localhost:8080/users/me/password")!
@@ -342,6 +466,39 @@ extension UserClient {
                 else {
                     throw URLError(.badServerResponse)
                 }
+            },
+            generateRandomAvatar: {
+                let url = URL(string: "http://localhost:8080/users/me/avatar/random")!
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+
+                if let accessToken = KeychainHelper().read("accessToken") {
+                    request.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+                }
+
+                // Assuming POST to /random returns the updated profile OR just succeeds.
+                // We will try to decode UserProfile. If it fails (empty body?), we might need to fetch /me.
+                // But generally resource updates return the resource.
+
+                let (data, response) = try await URLSession.shared.data(for: request)
+
+                guard let httpResponse = response as? HTTPURLResponse,
+                    (200...299).contains(httpResponse.statusCode)
+                else {
+                    throw URLError(.badServerResponse)
+                }
+
+                // If the response is empty, fetch me. If not, decode.
+                if data.isEmpty {
+                    // Fallback if backend returns 200 OK but no body
+                    // Recursively call self.me() – but we can't easily access self.me here inside strict closure.
+                    // Because `live()` creates the struct.
+                    // Instead, let's assume it returns JSON. If not, we might need a separate client function.
+                    // But for now, let's try decode.
+                    throw URLError(.cannotDecodeContentData)
+                }
+
+                return try JSONDecoder().decode(UserProfile.self, from: data)
             }
         )
     }

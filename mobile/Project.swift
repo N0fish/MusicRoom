@@ -117,6 +117,9 @@ let project = Project(
                         "CFBundleURLSchemes": ["musicroom"],
                     ]
                 ],
+                "NSAppTransportSecurity": [
+                    "NSAllowsArbitraryLoads": true
+                ],
             ]),
             sources: ["Targets/MusicRoomMobile/Sources/**"],
             resources: ["Targets/MusicRoomMobile/Resources/**"],
@@ -237,6 +240,8 @@ let project = Project(
                 .package(product: "ConcurrencyExtras"),
                 .package(product: "Dependencies"),
                 .package(product: "Clocks"),
+                .target(name: "AppSettingsClient"),
+                .target(name: "AppSupportClients"),
             ]
         ),
     ]

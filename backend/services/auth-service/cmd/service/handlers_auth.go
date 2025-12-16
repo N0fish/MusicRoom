@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -342,4 +343,142 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), ctxClaimsKey{}, claims)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func (s *Server) handleLinkProvider(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value(ctxClaimsKey{}).(*TokenClaims)
+	if !ok || claims == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	provider := chi.URLParam(r, "provider")
+	if provider != "google" && provider != "42" {
+		writeError(w, http.StatusBadRequest, "invalid provider")
+		return
+	}
+
+	var body struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	// Parse valid token (User B)
+	targetClaims := &TokenClaims{}
+	token, err := jwt.ParseWithClaims(body.Token, targetClaims, func(t *jwt.Token) (interface{}, error) {
+		return s.jwtSecret, nil
+	})
+	if err != nil || !token.Valid {
+		writeError(w, http.StatusBadRequest, "invalid target token")
+		return
+	}
+
+	if claims.UserID == targetClaims.UserID {
+		// Already logged in as same user, nothing to link
+		// Just return current profile
+		writeJSON(w, http.StatusOK, map[string]string{"status": "already linked"})
+		return
+	}
+
+	// Find target user (User B)
+	targetUser, err := s.findUserByID(r.Context(), targetClaims.UserID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "target user not found")
+		return
+	}
+
+	// Find current user (User A)
+	currentUser, err := s.findUserByID(r.Context(), claims.UserID)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "user not found")
+		return
+	}
+
+	if provider == "google" {
+		if targetUser.GoogleID == nil {
+			writeError(w, http.StatusBadRequest, "target account has no google link")
+			return
+		}
+		if currentUser.GoogleID != nil {
+			writeError(w, http.StatusConflict, "current user already linked to google")
+			return
+		}
+		// Move GoogleID from B to A
+		// First: Unlink from B to avoid unique constraint violation
+		if _, err := s.updateGoogleID(r.Context(), targetUser.ID, nil); err != nil {
+			log.Printf("link google: unlink target: %v", err)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		// Second: Link to A
+		if _, err := s.updateGoogleID(r.Context(), currentUser.ID, targetUser.GoogleID); err != nil {
+			log.Printf("link google: link current: %v", err)
+			// Attempt to restore? For now just fail. User B is now unlinked but distinct.
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+	} else if provider == "42" {
+		if targetUser.FTID == nil {
+			writeError(w, http.StatusBadRequest, "target account has no 42 link")
+			return
+		}
+		if currentUser.FTID != nil {
+			writeError(w, http.StatusConflict, "current user already linked to 42")
+			return
+		}
+		// Move FTID from B to A
+		// First: Unlink from B to avoid unique constraint violation
+		if _, err := s.updateFTID(r.Context(), targetUser.ID, nil); err != nil {
+			log.Printf("link 42: unlink target: %v", err)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		// Second: Link to A
+		if _, err := s.updateFTID(r.Context(), currentUser.ID, targetUser.FTID); err != nil {
+			log.Printf("link 42: link current: %v", err)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+	}
+
+	// Delete target user (User B)
+	if err := s.deleteUser(r.Context(), targetUser.ID); err != nil {
+		// Log but don't fail, since link succeeded
+		log.Printf("link provider: failed to delete temp user %s: %v", targetUser.ID, err)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "linked"})
+}
+
+func (s *Server) handleUnlinkProvider(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value(ctxClaimsKey{}).(*TokenClaims)
+	if !ok || claims == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	provider := chi.URLParam(r, "provider")
+	if provider != "google" && provider != "42" {
+		writeError(w, http.StatusBadRequest, "invalid provider")
+		return
+	}
+
+	if provider == "google" {
+		if _, err := s.updateGoogleID(r.Context(), claims.UserID, nil); err != nil {
+			log.Printf("unlink google: %v", err)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+	} else if provider == "42" {
+		if _, err := s.updateFTID(r.Context(), claims.UserID, nil); err != nil {
+			log.Printf("unlink 42: %v", err)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "unlinked"})
 }

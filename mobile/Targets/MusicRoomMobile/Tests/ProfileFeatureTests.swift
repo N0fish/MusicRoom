@@ -1,3 +1,4 @@
+import AppSettingsClient
 import ComposableArchitecture
 import XCTest
 
@@ -6,6 +7,8 @@ import XCTest
 
 @MainActor
 final class ProfileFeatureTests: XCTestCase {
+    // ... existing tests ...
+
     func testOnAppear_LoadsProfile() async {
         let profile = UserProfile(
             id: "1",
@@ -262,6 +265,39 @@ final class ProfileFeatureTests: XCTestCase {
 
         await store.send(.changePasswordButtonTapped) {
             $0.errorMessage = "New passwords do not match."
+        }
+    }
+    func testRandomizeAvatar() async {
+        let backendURL = URL(string: "http://test.backend")!
+
+        // The random avatar returns a relative URL
+        let randomProfile = UserProfile(
+            id: "1", userId: "u1", username: "u", displayName: "d",
+            avatarUrl: "/avatars/random.svg",
+            hasCustomAvatar: false, preferences: UserPreferences(), linkedProviders: [], email: nil
+        )
+
+        // Expected normalized profile
+        let normalizedProfile = UserProfile(
+            id: "1", userId: "u1", username: "u", displayName: "d",
+            avatarUrl: "http://test.backend/avatars/random.svg",
+            hasCustomAvatar: false, preferences: UserPreferences(), linkedProviders: [], email: nil
+        )
+
+        let store = TestStore(initialState: ProfileFeature.State()) {
+            ProfileFeature()
+        } withDependencies: {
+            $0.user.generateRandomAvatar = { randomProfile }
+            $0.appSettings.load = { AppSettings(backendURL: backendURL) }
+        }
+
+        await store.send(.generateRandomAvatarTapped) {
+            $0.isAvatarLoading = true
+        }
+
+        await store.receive(.generateRandomAvatarResponse(.success(randomProfile))) {
+            $0.isAvatarLoading = false
+            $0.userProfile = normalizedProfile
         }
     }
 }

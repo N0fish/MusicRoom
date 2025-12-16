@@ -15,8 +15,9 @@ public struct AppFeature: Sendable {
         public enum Destination: Equatable {
             case login
             case app
+            case splash
         }
-        public var destination: Destination = .login
+        public var destination: Destination = .splash
         public var authentication = AuthenticationFeature.State()
         public var settings: SettingsFeature.State
         public var eventList = EventListFeature.State()
@@ -120,6 +121,9 @@ public struct AppFeature: Sendable {
 
             case .task:
                 return .run { [authentication = self.authentication] send in
+                    // Show Splash for at least 2 seconds
+                    try? await Task.sleep(for: .seconds(2))
+
                     if authentication.isAuthenticated() {
                         await send(.destinationChanged(.app))
                         await send(.startApp)
