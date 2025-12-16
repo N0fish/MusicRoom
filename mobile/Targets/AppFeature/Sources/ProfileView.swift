@@ -267,6 +267,11 @@ public struct ProfileView: View {
                     .padding(.bottom, 80)
                 }
                 .animation(.easeInOut, value: store.isEditing)
+                .transition(
+                    .asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .bottom)),
+                        removal: .opacity
+                    ))
             }
         }
         .navigationTitle("Profile")

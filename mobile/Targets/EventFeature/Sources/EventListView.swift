@@ -125,18 +125,28 @@ public struct EventListView: View {
         ScrollView {
             LazyVStack(spacing: 16) {
                 ForEach(Array(store.events.enumerated()), id: \.element.id) { index, event in
-                    EventCard(event: event)
-                        .onTapGesture {
-                            store.send(.eventTapped(event))
-                        }
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                        .animation(
-                            .spring(duration: 0.5, bounce: 0.3).delay(Double(index) * 0.05),
-                            value: store.events)
+                    Button(action: {
+                        store.send(.eventTapped(event))
+                    }) {
+                        EventCard(event: event)
+                    }
+                    .buttonStyle(BouncyScaleButtonStyle())
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .animation(
+                        .spring(duration: 0.5, bounce: 0.3).delay(Double(index) * 0.05),
+                        value: store.events)
                 }
             }
             .padding()
         }
+    }
+}
+
+struct BouncyScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
     }
 }
 

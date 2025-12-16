@@ -11,6 +11,8 @@ public struct EventDetailView: View {
         self.store = store
     }
 
+    @Namespace private var animation
+
     public var body: some View {
         ZStack {
             LiquidBackground()
@@ -55,7 +57,8 @@ public struct EventDetailView: View {
                                     timeRemaining: store.timeRemaining,
                                     totalDuration: store.currentTrackDuration
                                 )
-
+                                .matchedGeometryEffect(id: currentTrack.id, in: animation)
+                                .transition(.scale(scale: 0.9).combined(with: .opacity))
                                 .padding(.horizontal)
 
                                 // Next Track Control (Play/Skip)
@@ -108,7 +111,7 @@ public struct EventDetailView: View {
                                         .font(.liquidH2)
                                         .foregroundStyle(Color.white)
 
-                                    Text("Add more tracks to keep the party going!")
+                                    Text("You can start anew!")
                                         .font(.liquidCaption)
                                         .foregroundStyle(Color.white.opacity(0.7))
                                 }
@@ -156,6 +159,7 @@ public struct EventDetailView: View {
                                             store.send(.voteButtonTapped(trackId: track.id))
                                         }
                                     )
+                                    .matchedGeometryEffect(id: track.id, in: animation)
                                     .transition(.scale.combined(with: .opacity))
                                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                         Button(role: .destructive) {
@@ -166,6 +170,9 @@ public struct EventDetailView: View {
                                     }
                                 }
                             }
+                            .animation(
+                                .spring(response: 0.6, dampingFraction: 0.8), value: store.tracks
+                            )
                             .padding(.horizontal)
                         }
 
