@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 	"user-service/cmd/service/utils"
 
 	"github.com/go-chi/chi/v5"
@@ -259,4 +260,63 @@ func (s *Server) handleRemoveFriend(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status": "removed",
 	})
+}
+
+func (s *Server) handleListIncomingFriendRequests(w http.ResponseWriter, r *http.Request) {
+	me, ok := userIDFromContext(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	rows, err := s.db.Query(r.Context(), `
+      SELECT p.user_id, p.username, p.display_name,
+             p.avatar_url, p.has_custom_avatar, p.visibility,
+             fr.created_at
+      FROM friend_requests fr
+      JOIN user_profiles p ON p.user_id = fr.from_user_id
+      WHERE fr.to_user_id = $1 AND fr.status = 'pending'
+      ORDER BY fr.created_at DESC
+  `, me)
+	if err != nil {
+		log.Printf("user-service: list incoming friend requests: %v", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	defer rows.Close()
+
+	var items []IncomingFriendRequestItem
+	for rows.Next() {
+		var p UserProfile
+		var createdAt time.Time
+
+		if err := rows.Scan(
+			&p.UserID,
+			&p.Username,
+			&p.DisplayName,
+			&p.AvatarURL,
+			&p.HasCustomAvatar,
+			&p.Visibility,
+			&createdAt,
+		); err != nil {
+			log.Printf("user-service: scan incoming friend request: %v", err)
+			continue
+		}
+
+		items = append(items, IncomingFriendRequestItem{
+			From: FriendItem{
+				UserID:      p.UserID,
+				Username:    p.Username,
+				DisplayName: p.DisplayName,
+				AvatarURL:   resolveAvatarForViewer(p, false, false),
+			},
+			CreatedAt: createdAt,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, IncomingFriendRequestsResponse{Items: items})
 }

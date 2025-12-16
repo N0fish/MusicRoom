@@ -110,6 +110,7 @@ func main() {
 
 		// friends
 		r.Method(http.MethodGet, "/users/me/friends", userProxy)
+		r.Method(http.MethodGet, "/users/me/friends/requests/incoming", userProxy)
 		r.With(
 			bodySizeLimitMiddleware(2048),
 			rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5)),
