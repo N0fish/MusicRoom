@@ -40,6 +40,25 @@ func AutoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
 		return err
 	}
 
+	// --- Migrations for Playback Logic ---
+
+	// 1. Add columns to tracks
+	if _, err := pool.Exec(ctx, `
+		ALTER TABLE tracks ADD COLUMN IF NOT EXISTS duration_ms INT NOT NULL DEFAULT 0;
+		ALTER TABLE tracks ADD COLUMN IF NOT EXISTS vote_count INT NOT NULL DEFAULT 0;
+		ALTER TABLE tracks ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'queued';
+	`); err != nil {
+		return err
+	}
+
+	// 2. Add columns to playlists (circular reference handled by ALTER)
+	if _, err := pool.Exec(ctx, `
+		ALTER TABLE playlists ADD COLUMN IF NOT EXISTS current_track_id uuid REFERENCES tracks(id) ON DELETE SET NULL;
+		ALTER TABLE playlists ADD COLUMN IF NOT EXISTS playing_started_at TIMESTAMPTZ;
+	`); err != nil {
+		return err
+	}
+
 	if _, err := pool.Exec(ctx, `
       CREATE UNIQUE INDEX IF NOT EXISTS idx_tracks_playlist_position
       ON tracks(playlist_id, position)

@@ -43,6 +43,10 @@ func (s *Server) Router(middlewares ...func(http.Handler) http.Handler) chi.Rout
 		r.Get("/playlists/{id}/invites", s.handleListInvites)
 		r.Post("/playlists/{id}/invites", s.handleAddInvite)
 		r.Delete("/playlists/{id}/invites/{userId}", s.handleDeleteInvite)
+
+		// Playback & Voting
+		r.Post("/playlists/{id}/tracks/{trackId}/vote", s.handleVoteTrack)
+		r.Post("/playlists/{id}/next", s.handleNextTrack)
 	})
 
 	return r

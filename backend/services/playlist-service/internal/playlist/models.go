@@ -7,13 +7,15 @@ import (
 // Playlist represents a logical playlist used by the Playlist Editor service.
 // It intentionally contains only metadata; tracks are modelled separately.
 type Playlist struct {
-	ID          string    `json:"id"`
-	OwnerID     string    `json:"ownerId"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	IsPublic    bool      `json:"isPublic"`
-	EditMode    string    `json:"editMode"` // "everyone" | "invited"
-	CreatedAt   time.Time `json:"createdAt"`
+	ID               string     `json:"id"`
+	OwnerID          string     `json:"ownerId"`
+	Name             string     `json:"name"`
+	Description      string     `json:"description"`
+	IsPublic         bool       `json:"isPublic"`
+	EditMode         string     `json:"editMode"` // "everyone" | "invited"
+	CreatedAt        time.Time  `json:"createdAt"`
+	CurrentTrackID   *string    `json:"currentTrackId,omitempty"`
+	PlayingStartedAt *time.Time `json:"playingStartedAt,omitempty"`
 }
 
 // Track belongs to a playlist. Tracks are ordered by Position (0-based).
@@ -28,6 +30,9 @@ type Track struct {
 	Provider        string `json:"provider,omitempty"`        // "youtube"
 	ProviderTrackID string `json:"providerTrackId,omitempty"` // ID ролика/трека у провайдера
 	ThumbnailURL    string `json:"thumbnailUrl,omitempty"`    // постер с YouTube
+	DurationMs      int    `json:"durationMs"`
+	VoteCount       int    `json:"voteCount"`
+	Status          string `json:"status"` // "queued", "playing", "played"
 }
 
 // PlaylistInvite represents an invited user to a playlist.
