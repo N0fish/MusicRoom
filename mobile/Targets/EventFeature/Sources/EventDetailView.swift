@@ -80,23 +80,24 @@ public struct EventDetailView: View {
                         } else {
                             LazyVStack(spacing: 12) {
                                 // Sort tracks by vote count descending
-                                let sortedTracks = store.tracks.map { track -> (Track, Int) in
-                                    let count =
-                                        store.tally.first(where: {
-                                            $0.track == track.id
-                                                || $0.track == track.providerTrackId
-                                        })?.count ?? 0
-                                    return (track, count)
+                                let sortedTracks = store.tracks.map { track -> (Track, Int, Bool) in
+                                    let tallyItem = store.tally.first(where: {
+                                        $0.track == track.id
+                                            || $0.track == track.providerTrackId
+                                    })
+                                    let count = tallyItem?.count ?? 0
+                                    let isMyVote = tallyItem?.isMyVote ?? false
+                                    return (track, count, isMyVote)
                                 }.sorted { $0.1 > $1.1 }
 
                                 ForEach(Array(sortedTracks.enumerated()), id: \.element.0.id) {
                                     index, pair in
-                                    let (track, count) = pair
+                                    let (track, count, isMyVote) = pair
                                     TrackRow(
                                         index: index + 1,
                                         track: track,
                                         voteCount: count,
-                                        isMyVote: false,
+                                        isMyVote: isMyVote,
                                         isOffline: store.isOffline,
                                         onVote: {
                                             store.send(.voteButtonTapped(trackId: track.id))
@@ -167,6 +168,8 @@ struct TrackRow: View {
     let isOffline: Bool
     let onVote: () -> Void
 
+    @State private var isAnimating = false
+
     var body: some View {
         GlassView(cornerRadius: 16)
             .frame(height: 80)
@@ -207,20 +210,35 @@ struct TrackRow: View {
                             .foregroundStyle(Color.white.opacity(0.7))
                             .lineLimit(1)
 
-                        Text("\(voteCount) votes")
+                        Text("\(voteCount) \(voteCount == 1 ? "vote" : "votes")")
                             .font(.caption2)
                             .foregroundStyle(Color.liquidAccent)
                     }
 
                     Spacer()
 
-                    Button(action: onVote) {
+                    Button(action: {
+                        withAnimation(
+                            .spring(response: 0.3, dampingFraction: 0.4, blendDuration: 0)
+                        ) {
+                            isAnimating = true
+                        }
+                        onVote()
+                        // Reset animation
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            withAnimation {
+                                isAnimating = false
+                            }
+                        }
+                    }) {
                         Image(systemName: isMyVote ? "arrow.up.circle.fill" : "arrow.up.circle")
                             .font(.system(size: 28))
                             .foregroundStyle(
-                                isOffline ? Color.gray : (isMyVote ? Color.green : Color.white))
+                                isOffline ? Color.gray : (isMyVote ? Color.green : Color.white)
+                            )
+                            .scaleEffect(isAnimating ? 1.3 : 1.0)
                     }
-                    .disabled(isOffline)
+                    .disabled(isOffline || isMyVote)
                 }
                 .padding(.horizontal, 16)
             )

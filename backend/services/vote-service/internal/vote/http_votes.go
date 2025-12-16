@@ -8,8 +8,9 @@ import (
 )
 
 type Row struct {
-	Track string `json:"track"`
-	Count int    `json:"count"`
+	Track    string `json:"track"`
+	Count    int    `json:"count"`
+	IsMyVote bool   `json:"isMyVote"`
 }
 
 func (s *HTTPServer) handleVote(w http.ResponseWriter, r *http.Request) {
@@ -40,13 +41,21 @@ func (s *HTTPServer) handleVote(w http.ResponseWriter, r *http.Request) {
 
 func (s *HTTPServer) handleTally(w http.ResponseWriter, r *http.Request) {
 	eventID := chi.URLParam(r, "id")
+	voterID := r.Header.Get("X-User-Id") // Optional? If missing, isMyVote is false.
+
+	// Use bool_or to check if specific voter exists in the group
+	// If voterID is empty, $2 will be empty string, so voter_id = '' will be false (assuming UUIDs)
+
 	rows, err := s.pool.Query(r.Context(), `
-        SELECT track, COUNT(*) AS c
+        SELECT 
+            track, 
+            COUNT(*) AS c,
+            COALESCE(BOOL_OR(voter_id = $2), false) as is_my_vote
         FROM votes
         WHERE event_id = $1
         GROUP BY track
         ORDER BY c DESC, track ASC
-    `, eventID)
+    `, eventID, voterID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -56,7 +65,7 @@ func (s *HTTPServer) handleTally(w http.ResponseWriter, r *http.Request) {
 	out := []Row{}
 	for rows.Next() {
 		var row Row
-		if err := rows.Scan(&row.Track, &row.Count); err != nil {
+		if err := rows.Scan(&row.Track, &row.Count, &row.IsMyVote); err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}

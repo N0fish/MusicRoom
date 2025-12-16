@@ -29,8 +29,8 @@ public struct EventDetailFeature: Sendable {
         case loadTally
         case tallyLoaded(TaskResult<[MusicRoomAPIClient.TallyItem]>)
         case voteButtonTapped(trackId: String)
-        case voteResponse(TaskResult<VoteResponse>)
-        case internalVoteFailure(String)
+        case voteResponse(TaskResult<VoteResponse>, trackId: String)
+        case internalVoteFailure(String, trackId: String)
         case dismissInfo
         case binding(BindingAction<State>)
 
@@ -184,12 +184,16 @@ public struct EventDetailFeature: Sendable {
                 // Optimistic Update
                 if let index = state.tally.firstIndex(where: { $0.track == trackId }) {
                     let item = state.tally[index]
+                    if item.isMyVote == true {
+                        // Already voted? (Should be blocked by UI, but safety check)
+                    }
                     let newItem = MusicRoomAPIClient.TallyItem(
-                        track: item.track, count: item.count + 1)
+                        track: item.track, count: item.count + 1, isMyVote: true)
                     state.tally[index] = newItem
                     state.tally.sort { $0.count > $1.count }
                 } else {
-                    let newItem = MusicRoomAPIClient.TallyItem(track: trackId, count: 1)
+                    let newItem = MusicRoomAPIClient.TallyItem(
+                        track: trackId, count: 1, isMyVote: true)
                     state.tally.append(newItem)
                     state.tally.sort { $0.count > $1.count }
                 }
@@ -221,7 +225,7 @@ public struct EventDetailFeature: Sendable {
                             lat = loc.latitude
                             lng = loc.longitude
                         } catch {
-                            await send(.voteResponse(.failure(error)))  // Location error
+                            await send(.voteResponse(.failure(error), trackId: trackId))  // Location error
                             return
                         }
                     }
@@ -233,10 +237,10 @@ public struct EventDetailFeature: Sendable {
                         .voteResponse(
                             TaskResult {
                                 try await musicRoomAPI.vote(event.id, trackId, finalLat, finalLng)
-                            }))
+                            }, trackId: trackId))
                 }
 
-            case .voteResponse(.success(let response)):
+            case .voteResponse(.success(let response), _):
                 state.isVoting = false
                 state.userAlert = UserAlert(
                     title: "Success",
@@ -251,21 +255,40 @@ public struct EventDetailFeature: Sendable {
                     await send(.dismissInfo)
                 }
 
-            case .voteResponse(.failure(let error)):
+            case .voteResponse(.failure(let error), let trackId):
                 return .run { [telemetry] send in
                     await telemetry.log("event.vote.failure", ["error": error.localizedDescription])
                     // Re-send to handle UI update
-                    await send(.internalVoteFailure(error.localizedDescription))
+                    await send(.internalVoteFailure(error.localizedDescription, trackId: trackId))
                 }
 
-            case .internalVoteFailure(let message):
+            case .internalVoteFailure(let message, let trackId):
                 state.isVoting = false
+
+                // Revert optimistic update
+                if let index = state.tally.firstIndex(where: { $0.track == trackId }) {
+                    let item = state.tally[index]
+                    if item.count > 1 {
+                        let newItem = MusicRoomAPIClient.TallyItem(
+                            track: item.track, count: item.count - 1, isMyVote: false)  // Revert isMyVote
+                        state.tally[index] = newItem
+                    } else {
+                        state.tally.remove(at: index)
+                    }
+                    state.tally.sort { $0.count > $1.count }
+                }
+
                 // Detailed Map for user-friendly errors
                 if message.contains("403") {
                     state.userAlert = UserAlert(
                         title: "Permission Denied",
                         message: "You are not allowed to vote on this event (License restriction).",
                         type: .error)
+                } else if message.contains("409") || message.lowercased().contains("duplicate") {
+                    state.userAlert = UserAlert(
+                        title: "Already Voted",
+                        message: "You have already voted for this track.",
+                        type: .info)
                 } else {
                     state.userAlert = UserAlert(
                         title: "Vote Failed", message: message, type: .error)

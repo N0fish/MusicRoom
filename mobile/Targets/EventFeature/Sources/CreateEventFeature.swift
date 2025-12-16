@@ -19,6 +19,7 @@ public struct CreateEventFeature: Sendable {
     public enum Action: BindableAction, Sendable, Equatable {
         case binding(BindingAction<State>)
         case createButtonTapped
+        case cancelButtonTapped
         case createResponse(Result<Event, Error>)
     }
 
@@ -66,7 +67,11 @@ public struct CreateEventFeature: Sendable {
             case .createResponse(.failure(let error)):
                 state.isLoading = false
                 state.errorMessage = error.localizedDescription
+                state.errorMessage = error.localizedDescription
                 return .none
+
+            case .cancelButtonTapped:
+                return .run { _ in await dismiss() }
             }
         }
     }
@@ -78,6 +83,8 @@ extension CreateEventFeature.Action {
         case (.binding(let l), .binding(let r)):
             return l == r
         case (.createButtonTapped, .createButtonTapped):
+            return true
+        case (.cancelButtonTapped, .cancelButtonTapped):
             return true
         case (.createResponse(.success(let l)), .createResponse(.success(let r))):
             return l == r

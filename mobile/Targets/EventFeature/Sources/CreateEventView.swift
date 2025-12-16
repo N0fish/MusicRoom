@@ -94,10 +94,11 @@ public struct CreateEventView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
-                        // Dismiss handled by parent or environment
+                        store.send(.cancelButtonTapped)
                     }
                 }
             }
         }
+        .colorScheme(.dark)
     }
 }

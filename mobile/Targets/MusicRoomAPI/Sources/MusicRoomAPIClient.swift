@@ -31,10 +31,12 @@ public struct MusicRoomAPIClient: Sendable {
     public struct TallyItem: Codable, Sendable, Equatable {
         public let track: String
         public let count: Int
+        public let isMyVote: Bool?
 
-        public init(track: String, count: Int) {
+        public init(track: String, count: Int, isMyVote: Bool? = nil) {
             self.track = track
             self.count = count
+            self.isMyVote = isMyVote
         }
     }
 

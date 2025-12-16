@@ -65,8 +65,9 @@ func AutoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
     `); err != nil {
 		return err
 	}
-	// one vote per user per event (cannot change vote)
-	_, _ = pool.Exec(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_votes_event_voter ON votes(event_id, voter_id)`)
+	// one vote per user per event (cannot change vote) -> We want multi votes now
+	// _, _ = pool.Exec(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_votes_event_voter ON votes(event_id, voter_id)`)
+	_, _ = pool.Exec(ctx, `DROP INDEX IF EXISTS idx_votes_event_voter`)
 
 	if _, err := pool.Exec(ctx, `
         CREATE TABLE IF NOT EXISTS event_invites(
