@@ -37,6 +37,8 @@ public struct AppFeature: Sendable {
                     testedURL: URL(string: "http://localhost:8080")!,
                     status: .reachable,
                     latencyMs: 0,
+                    wsStatus: .reachable,
+                    wsLatencyMs: 0,
                     measuredAt: Date()
                 ),
                 metadata: AppMetadata(

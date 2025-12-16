@@ -1,6 +1,6 @@
-import SwiftUI
-import ComposableArchitecture
 import AppSettingsClient
+import ComposableArchitecture
+import SwiftUI
 
 public struct SettingsView: View {
     private let store: StoreOf<SettingsFeature>
@@ -21,7 +21,9 @@ public struct SettingsView: View {
                             send: SettingsFeature.Action.presetChanged
                         )
                     ) {
-                        ForEach(BackendEnvironmentPreset.allCases, id: \BackendEnvironmentPreset.self) { preset in
+                        ForEach(
+                            BackendEnvironmentPreset.allCases, id: \BackendEnvironmentPreset.self
+                        ) { preset in
                             Text(preset.title).tag(preset)
                         }
                     }
@@ -60,21 +62,38 @@ public struct SettingsView: View {
                     Text("Backend API")
                 } footer: {
                     if !viewStore.canEditBackendURL {
-                        Text("Switch to Custom to edit the URL manually.")
+                        Text("Switch to Hosted to edit the URL manually.")
                     }
                 }
 
                 Section {
                     if viewStore.isDiagnosticsInFlight {
-                        ProgressView("Running mock ping…")
+                        ProgressView("Running connection test…")
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
-                        HStack {
-                            Label("Status", systemImage: "waveform.badge.exclamationmark")
-                            Spacer()
-                            Text(viewStore.diagnosticsDescription)
-                                .multilineTextAlignment(.trailing)
-                                .font(.subheadline)
+                        VStack(spacing: 8) {
+                            HStack {
+                                Label("API", systemImage: "network")
+                                Spacer()
+                                Text(viewStore.apiStatusText)
+                                    .font(.subheadline)
+                                    .foregroundStyle(
+                                        viewStore.apiStatusColor == "green"
+                                            ? .green
+                                            : (viewStore.apiStatusColor == "red"
+                                                ? .red : .secondary))
+                            }
+                            HStack {
+                                Label("Realtime", systemImage: "bolt.horizontal")
+                                Spacer()
+                                Text(viewStore.wsStatusText)
+                                    .font(.subheadline)
+                                    .foregroundStyle(
+                                        viewStore.wsStatusColor == "green"
+                                            ? .green
+                                            : (viewStore.wsStatusColor == "red" ? .red : .secondary)
+                                    )
+                            }
                         }
                     }
 
@@ -87,7 +106,9 @@ public struct SettingsView: View {
                 } header: {
                     Text("Diagnostics")
                 } footer: {
-                    Text("Mocks a /health ping so QA can verify URLs before the backend is online.")
+                    Text(
+                        "Checks connectivity to the /health API endpoint and the /ws WebSocket service."
+                    )
                 }
 
                 Section {
@@ -119,7 +140,9 @@ public struct SettingsView: View {
                 } header: {
                     Text("Actions")
                 } footer: {
-                    Text("Point the remote-control client to staging, local, or production without recompiling.")
+                    Text(
+                        "Point the remote-control client to staging, local, or production without recompiling."
+                    )
                 }
             }
             .navigationTitle("Backend Settings")

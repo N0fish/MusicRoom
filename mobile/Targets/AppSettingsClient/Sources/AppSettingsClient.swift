@@ -8,7 +8,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
 
     public init(
         backendURL: URL,
-        selectedPreset: BackendEnvironmentPreset = .custom,
+        selectedPreset: BackendEnvironmentPreset = .hosted,
         lastCustomURL: URL? = nil
     ) {
         self.backendURL = backendURL
@@ -16,23 +16,19 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.lastCustomURL = lastCustomURL
     }
 
-    public var canEditBackendURL: Bool { selectedPreset == .custom }
+    public var canEditBackendURL: Bool { selectedPreset == .hosted }
 
     public var backendURLSummary: String { backendURL.absoluteString }
 }
 
 public enum BackendEnvironmentPreset: String, CaseIterable, Codable, Sendable {
     case local
-    case staging
-    case production
-    case custom
+    case hosted
 
     public var title: String {
         switch self {
         case .local: return "Local"
-        case .staging: return "Staging"
-        case .production: return "Production"
-        case .custom: return "Custom"
+        case .hosted: return "Hosted"
         }
     }
 
@@ -40,12 +36,8 @@ public enum BackendEnvironmentPreset: String, CaseIterable, Codable, Sendable {
         switch self {
         case .local:
             return "Uses localhost with default dev port."
-        case .staging:
-            return "Points to the shared staging cluster."
-        case .production:
-            return "Routes to api.musicroom.app."
-        case .custom:
-            return "Provide any reachable URL manually."
+        case .hosted:
+            return "Connect to an existing Musicroom server."
         }
     }
 
@@ -53,12 +45,8 @@ public enum BackendEnvironmentPreset: String, CaseIterable, Codable, Sendable {
         switch self {
         case .local:
             return URL(string: "http://localhost:8080")!
-        case .staging:
-            return URL(string: "https://staging.api.musicroom.app")!
-        case .production:
+        case .hosted:
             return URL(string: "https://api.musicroom.app")!
-        case .custom:
-            return URL(string: "http://localhost:8080")!
         }
     }
 }
@@ -123,10 +111,10 @@ private enum AppSettingsClientKey: DependencyKey, TestDependencyKey {
             let backendURL = storedURLString.flatMap(URL.init(string:)) ?? fallbackURL
             let customURL = customURLString.flatMap(URL.init(string:))
 
-            if preset == .custom {
+            if preset == .hosted {
                 return AppSettings(
                     backendURL: customURL ?? backendURL,
-                    selectedPreset: .custom,
+                    selectedPreset: .hosted,
                     lastCustomURL: customURL ?? backendURL
                 )
             } else {
@@ -148,7 +136,7 @@ private enum AppSettingsClientKey: DependencyKey, TestDependencyKey {
                 forKey: AppSettingsStorageKey.preset
             )
             let customURLString: String?
-            if settings.selectedPreset == .custom {
+            if settings.selectedPreset == .hosted {
                 customURLString = settings.backendURL.absoluteString
             } else {
                 customURLString = settings.lastCustomURL?.absoluteString

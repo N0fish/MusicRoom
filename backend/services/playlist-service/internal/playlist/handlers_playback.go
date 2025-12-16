@@ -1,6 +1,7 @@
 package playlist
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
@@ -12,89 +13,34 @@ import (
 
 // handleNextTrack skips to the next track in the queue.
 // POST /playlists/{id}/next
-func (s *Server) handleNextTrack(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	userID := r.Header.Get("X-User-Id")
-	if userID == "" {
-		writeError(w, http.StatusUnauthorized, "missing user context")
-		return
-	}
-
-	playlistID := chi.URLParam(r, "id")
-	if playlistID == "" {
-		writeError(w, http.StatusBadRequest, "missing playlist id")
-		return
-	}
-
-	// 1. Check access
-	ownerID, isPublic, editMode, err := s.getPlaylistAccessInfo(ctx, playlistID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		writeError(w, http.StatusNotFound, "playlist not found")
-		return
-	}
-	if err != nil {
-		log.Printf("playlist-service: next track fetch playlist: %v", err)
-		writeError(w, http.StatusInternalServerError, "database error")
-		return
-	}
-
-	invited := false
-	if userID != "" && userID != ownerID {
-		invited, err = s.userIsInvited(ctx, playlistID, userID)
-		if err != nil {
-			log.Printf("playlist-service: next track invited check: %v", err)
-			writeError(w, http.StatusInternalServerError, "database error")
-			return
-		}
-	}
-
-	if !isPublic && userID != ownerID && !invited {
-		writeError(w, http.StatusForbidden, "forbidden")
-		return
-	}
-	// For controlling playback, we probably require write access?
-	allowControl := false
-	if userID == ownerID {
-		allowControl = true
-	} else if editMode == editModeEveryone {
-		allowControl = true
-	} else if editMode == editModeInvited && invited {
-		allowControl = true
-	}
-
-	if !allowControl {
-		writeError(w, http.StatusForbidden, "forbidden")
-		return
-	}
-
+// NextTrack advances the playlist to the next track.
+// This is used by the HTTP handler and the background ticker.
+func (s *Server) NextTrack(ctx context.Context, playlistID string) (map[string]any, error) {
 	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		log.Printf("playlist-service: next track begin tx: %v", err)
-		writeError(w, http.StatusInternalServerError, "database error")
-		return
+		return nil, err
 	}
 	defer tx.Rollback(ctx)
 
-	// 2. Get current state
+	// 1. Get current state
 	var currentTrackID *string
 	err = tx.QueryRow(ctx, `SELECT current_track_id FROM playlists WHERE id = $1 FOR UPDATE`, playlistID).Scan(&currentTrackID)
 	if err != nil {
 		log.Printf("playlist-service: next track get current: %v", err)
-		writeError(w, http.StatusInternalServerError, "database error")
-		return
+		return nil, err
 	}
 
-	// 3. Update old track to 'played'
+	// 2. Update old track to 'played'
 	if currentTrackID != nil {
 		_, err = tx.Exec(ctx, `UPDATE tracks SET status = 'played' WHERE id = $1`, *currentTrackID)
 		if err != nil {
 			log.Printf("playlist-service: next track update old: %v", err)
-			writeError(w, http.StatusInternalServerError, "database error")
-			return
+			return nil, err
 		}
 	}
 
-	// 4. Find next 'queued' track
+	// 3. Find next 'queued' track
 	var nextTrackID string
 	var nextTrackDurationMs int
 	err = tx.QueryRow(ctx, `
@@ -122,13 +68,11 @@ func (s *Server) handleNextTrack(w http.ResponseWriter, r *http.Request) {
 		`, playlistID)
 		if err != nil {
 			log.Printf("playlist-service: next track clear playlist: %v", err)
-			writeError(w, http.StatusInternalServerError, "database error")
-			return
+			return nil, err
 		}
 	} else if err != nil {
 		log.Printf("playlist-service: next track find next: %v", err)
-		writeError(w, http.StatusInternalServerError, "database error")
-		return
+		return nil, err
 	} else {
 		// Found next track
 		now := time.Now()
@@ -137,8 +81,7 @@ func (s *Server) handleNextTrack(w http.ResponseWriter, r *http.Request) {
 		`, nextTrackID)
 		if err != nil {
 			log.Printf("playlist-service: next track set playing: %v", err)
-			writeError(w, http.StatusInternalServerError, "database error")
-			return
+			return nil, err
 		}
 
 		_, err = tx.Exec(ctx, `
@@ -148,8 +91,7 @@ func (s *Server) handleNextTrack(w http.ResponseWriter, r *http.Request) {
 		`, playlistID, nextTrackID, now)
 		if err != nil {
 			log.Printf("playlist-service: next track update playlist: %v", err)
-			writeError(w, http.StatusInternalServerError, "database error")
-			return
+			return nil, err
 		}
 
 		updatedState["currentTrackId"] = nextTrackID
@@ -159,8 +101,7 @@ func (s *Server) handleNextTrack(w http.ResponseWriter, r *http.Request) {
 
 	if err := tx.Commit(ctx); err != nil {
 		log.Printf("playlist-service: next track commit: %v", err)
-		writeError(w, http.StatusInternalServerError, "database error")
-		return
+		return nil, err
 	}
 
 	s.publishEvent(ctx, map[string]any{
@@ -168,8 +109,71 @@ func (s *Server) handleNextTrack(w http.ResponseWriter, r *http.Request) {
 		"payload": updatedState,
 	})
 
-	// Also re-fetch playlist info to ensure clients stay in sync?
-	// The event should be enough.
+	return updatedState, nil
+}
+
+// handleNextTrack skips to the next track in the queue.
+// POST /playlists/{id}/next
+func (s *Server) handleNextTrack(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := r.Header.Get("X-User-Id")
+	if userID == "" {
+		writeError(w, http.StatusUnauthorized, "missing user context")
+		return
+	}
+
+	playlistID := chi.URLParam(r, "id")
+	if playlistID == "" {
+		writeError(w, http.StatusBadRequest, "missing playlist id")
+		return
+	}
+
+	// 1. Check access (HTTP only)
+	ownerID, isPublic, editMode, err := s.getPlaylistAccessInfo(ctx, playlistID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "playlist not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+
+	invited := false
+	if userID != "" && userID != ownerID {
+		invited, err = s.userIsInvited(ctx, playlistID, userID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+	}
+
+	if !isPublic && userID != ownerID && !invited {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	allowControl := false
+	if userID == ownerID {
+		allowControl = true
+	} else if editMode == editModeEveryone {
+		allowControl = true
+	} else if editMode == editModeInvited && invited {
+		allowControl = true
+	}
+
+	if !allowControl {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	// 2. Invoke reuseable logic
+	updatedState, err := s.NextTrack(ctx, playlistID)
+	if err != nil {
+		// Assuming logged inside NextTrack
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
 
 	writeJSON(w, http.StatusOK, updatedState)
 }

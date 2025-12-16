@@ -8,5 +8,6 @@ use (
 	./backend/services/realtime-service
 	./backend/services/api-gateway
 	./backend/services/mock-service
+	./backend/services/music-provider-service
 	./frontend
 )

@@ -10,8 +10,9 @@ public struct MusicRoomAPIClient: Sendable {
     public var listEvents: @Sendable () async throws -> [Event]
     public var getEvent: @Sendable (UUID) async throws -> Event
     public var vote:
-        @Sendable (_ eventId: UUID, _ trackId: String, _ lat: Double?, _ lng: Double?) async throws
+        @Sendable (_ playlistId: String, _ trackId: String) async throws
             -> VoteResponse
+    public var nextTrack: @Sendable (_ playlistId: String) async throws -> NextTrackResponse
     public var tally: @Sendable (UUID) async throws -> [TallyItem]
     public var search: @Sendable (_ query: String) async throws -> [MusicSearchItem]
     public var createEvent: @Sendable (CreateEventRequest) async throws -> Event
@@ -194,15 +195,27 @@ extension MusicRoomAPIClient: DependencyKey {
                 request.httpMethod = "GET"
                 return try await performRequest(request)
             },
-            vote: { eventId, trackId, lat, lng in
-                let url = settings.load().backendURL.appendingPathComponent(
-                    "events/\(eventId.uuidString)/vote")
+            vote: { playlistId, trackId in
+                let url = settings.load().backendURL
+                    .appendingPathComponent("playlists")
+                    .appendingPathComponent(playlistId)
+                    .appendingPathComponent("tracks")
+                    .appendingPathComponent(trackId)
+                    .appendingPathComponent("vote")
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-                let body = VoteRequest(trackId: trackId, lat: lat, lng: lng)
-                request.httpBody = try JSONEncoder().encode(body)
+                return try await performRequest(request)
+            },
+            nextTrack: { playlistId in
+                let url = settings.load().backendURL
+                    .appendingPathComponent("playlists")
+                    .appendingPathComponent(playlistId)
+                    .appendingPathComponent("next")
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
                 return try await performRequest(request)
             },
@@ -349,7 +362,12 @@ extension MusicRoomAPIClient: DependencyKey {
             fetchSampleEvents: { [] },
             listEvents: { MockDataFactory.sampleEvents() },
             getEvent: { _ in MockDataFactory.sampleEvents().first! },
-            vote: { _, _, _, _ in VoteResponse(status: "ok", trackId: "1", totalVotes: 5) },
+            vote: { _, _ in VoteResponse(voteCount: 5) },
+            nextTrack: { _ in
+                NextTrackResponse(
+                    playlistId: "1", currentTrackId: "2", playingStartedAt: Date(),
+                    status: "playing")
+            },
             tally: { _ in [] },
             search: { _ in
                 [
@@ -395,7 +413,12 @@ extension MusicRoomAPIClient: DependencyKey {
             fetchSampleEvents: { [] },
             listEvents: { [] },
             getEvent: { _ in throw MusicRoomAPIError.networkError("Test unimplemented") },
-            vote: { _, _, _, _ in VoteResponse(status: "ok", trackId: "1", totalVotes: 1) },
+            vote: { _, _ in VoteResponse(voteCount: 1) },
+            nextTrack: { _ in
+                NextTrackResponse(
+                    playlistId: "1", currentTrackId: "2", playingStartedAt: Date(),
+                    status: "playing")
+            },
             tally: { _ in [] },
             search: { _ in [] },
             createEvent: { _ in throw MusicRoomAPIError.networkError("Test unimplemented") },

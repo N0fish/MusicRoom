@@ -33,6 +33,7 @@ type Track struct {
 	DurationMs      int    `json:"durationMs"`
 	VoteCount       int    `json:"voteCount"`
 	Status          string `json:"status"` // "queued", "playing", "played"
+	IsVoted         bool   `json:"isVoted,omitempty"`
 }
 
 // PlaylistInvite represents an invited user to a playlist.

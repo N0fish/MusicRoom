@@ -266,6 +266,7 @@ public struct ProfileView: View {
                     .padding()
                     .padding(.bottom, 80)
                 }
+                .animation(.easeInOut, value: store.isEditing)
             }
         }
         .navigationTitle("Profile")
@@ -274,25 +275,31 @@ public struct ProfileView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(store.isEditing ? "Save" : "Edit") {
-                    if store.isEditing {
-                        store.send(.saveButtonTapped)
-                    } else {
-                        store.send(.toggleEditMode)
+                    withAnimation {
+                        if store.isEditing {
+                            _ = store.send(.saveButtonTapped)
+                        } else {
+                            _ = store.send(.toggleEditMode)
+                        }
                     }
                 }
                 .foregroundStyle(.white)
             }
             if store.isEditing {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { store.send(.toggleEditMode) }
-                        .foregroundStyle(.white)
+                    Button("Cancel") {
+                        withAnimation {
+                            _ = store.send(.toggleEditMode)
+                        }
+                    }
+                    .foregroundStyle(.white)
                 }
             }
         }
         .onAppear {
             store.send(.onAppear)
         }
-
+        .preferredColorScheme(.dark)
     }
 
     private func profileSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content)

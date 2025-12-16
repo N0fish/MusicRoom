@@ -18,7 +18,7 @@ final class SettingsFeatureTests: XCTestCase {
             $0.appSettings.load = {
                 AppSettings(
                     backendURL: storedURL,
-                    selectedPreset: .staging,
+                    selectedPreset: .hosted,
                     lastCustomURL: URL(string: "https://custom.musicroom.dev")
                 )
             }
@@ -32,11 +32,11 @@ final class SettingsFeatureTests: XCTestCase {
         await store.receive(
             .loadResponse(
                 AppSettings(
-                    backendURL: storedURL, selectedPreset: .staging,
+                    backendURL: storedURL, selectedPreset: .hosted,
                     lastCustomURL: URL(string: "https://custom.musicroom.dev")))
         ) {
             $0.isLoading = false
-            $0.selectedPreset = .staging
+            $0.selectedPreset = .hosted
             $0.backendURLText = storedURL.absoluteString
             $0.savedBackendURL = storedURL
             $0.lastCustomURLText = "https://custom.musicroom.dev"
@@ -50,7 +50,7 @@ final class SettingsFeatureTests: XCTestCase {
     func testInvalidURLShowsAlert() async {
         let store = TestStore(
             initialState: SettingsFeature.State(
-                backendURLText: "invalid", selectedPreset: .custom, lastCustomURLText: "invalid")
+                backendURLText: "invalid", selectedPreset: .hosted, lastCustomURLText: "invalid")
         ) {
             SettingsFeature()
         }
@@ -68,13 +68,13 @@ final class SettingsFeatureTests: XCTestCase {
         }
     }
 
-    func testSavePersistsCustomURL() async {
+    func testSavePersistsHostedURL() async {
         let newURL = URL(string: "https://prod.musicroom.app")!
         let savedURL = LockIsolated<URL?>(nil)
 
         let store = TestStore(
             initialState: SettingsFeature.State(
-                backendURLText: newURL.absoluteString, selectedPreset: .custom,
+                backendURLText: newURL.absoluteString, selectedPreset: .hosted,
                 lastCustomURLText: newURL.absoluteString)
         ) {
             SettingsFeature()
@@ -90,10 +90,10 @@ final class SettingsFeatureTests: XCTestCase {
 
         await store.receive(
             .settingsSaved(
-                AppSettings(backendURL: newURL, selectedPreset: .custom, lastCustomURL: newURL))
+                AppSettings(backendURL: newURL, selectedPreset: .hosted, lastCustomURL: newURL))
         ) {
             $0.isPersisting = false
-            $0.selectedPreset = .custom
+            $0.selectedPreset = .hosted
             $0.savedBackendURL = newURL
             $0.backendURLText = newURL.absoluteString
             $0.lastCustomURLText = newURL.absoluteString
@@ -108,12 +108,14 @@ final class SettingsFeatureTests: XCTestCase {
             testedURL: targetURL,
             status: .reachable,
             latencyMs: 42,
+            wsStatus: .reachable,
+            wsLatencyMs: 35,
             measuredAt: Date()
         )
 
         let store = TestStore(
             initialState: SettingsFeature.State(
-                backendURLText: targetURL.absoluteString, selectedPreset: .custom,
+                backendURLText: targetURL.absoluteString, selectedPreset: .hosted,
                 lastCustomURLText: targetURL.absoluteString)
         ) {
             SettingsFeature()
@@ -135,25 +137,25 @@ final class SettingsFeatureTests: XCTestCase {
     func testPresetChangeUpdatesText() async {
         let store = TestStore(
             initialState: SettingsFeature.State(
-                backendURLText: "https://custom", selectedPreset: .custom,
-                lastCustomURLText: "https://custom")
+                backendURLText: "https://hosted", selectedPreset: .hosted,
+                lastCustomURLText: "https://hosted")
         ) {
             SettingsFeature()
         }
 
-        await store.send(.presetChanged(.staging)) {
-            $0.selectedPreset = .staging
-            $0.backendURLText = BackendEnvironmentPreset.staging.defaultURL.absoluteString
+        await store.send(.presetChanged(.local)) {
+            $0.selectedPreset = .local
+            $0.backendURLText = BackendEnvironmentPreset.local.defaultURL.absoluteString
         }
 
-        await store.send(.presetChanged(.custom)) {
-            $0.selectedPreset = .custom
-            $0.backendURLText = "https://custom"
+        await store.send(.presetChanged(.hosted)) {
+            $0.selectedPreset = .hosted
+            $0.backendURLText = "https://hosted"
         }
     }
     func testBackendURLTextChanged() async {
         let store = TestStore(
-            initialState: SettingsFeature.State(backendURLText: "", selectedPreset: .custom)
+            initialState: SettingsFeature.State(backendURLText: "", selectedPreset: .hosted)
         ) {
             SettingsFeature()
         }
@@ -164,9 +166,9 @@ final class SettingsFeatureTests: XCTestCase {
         }
     }
 
-    func testBackendURLTextChanged_WhenPresetNotCustom_DoesNotUpdateLastCustomURL() async {
+    func testBackendURLTextChanged_WhenPresetNotHosted_DoesNotUpdateLastCustomURL() async {
         let store = TestStore(
-            initialState: SettingsFeature.State(backendURLText: "", selectedPreset: .staging)
+            initialState: SettingsFeature.State(backendURLText: "", selectedPreset: .local)
         ) {
             SettingsFeature()
         }
@@ -179,7 +181,7 @@ final class SettingsFeatureTests: XCTestCase {
 
     func testResetButtonTapped() async {
         let store = TestStore(
-            initialState: SettingsFeature.State(backendURLText: "custom", selectedPreset: .custom)
+            initialState: SettingsFeature.State(backendURLText: "hosted", selectedPreset: .hosted)
         ) {
             SettingsFeature()
         } withDependencies: {
@@ -192,10 +194,52 @@ final class SettingsFeatureTests: XCTestCase {
 
         await store.receive(.settingsSaved(AppSettings.default)) {
             $0.isPersisting = false
+            // Default is now .hosted per my previous change? No, wait, default was updated to .hosted in init, but reset returns .default from AppSettingsClient
+            // Let's check AppSettingsClient.default implementation.
+            // It was: static let `default` = AppSettings(backendURL: BackendEnvironmentPreset.local.defaultURL, selectedPreset: .local, lastCustomURL: nil)
+            // So reset should go to .local
             $0.selectedPreset = .local
             $0.savedBackendURL = AppSettings.default.backendURL
             $0.backendURLText = AppSettings.default.backendURL.absoluteString
             $0.lastCustomURLText = AppSettings.default.backendURL.absoluteString
+        }
+    }
+
+    // Removing testSaveStandardPreset_PreservesLastCustomURL because we only have local/hosted and hosted IS the custom one.
+    // Logic for 'staging' preserving custom URL is not relevant for 'local' in the same way, or can be tested if needed.
+    // Actually, local preset should preserve lastCustomURL.
+
+    func testSaveLocalPreset_PreservesLastCustomURL() async {
+        let customURL = URL(string: "https://my-custom.com")!
+        let localURL = BackendEnvironmentPreset.local.defaultURL
+        let savedSettings = LockIsolated<AppSettings?>(nil)
+
+        let store = TestStore(
+            initialState: SettingsFeature.State(
+                backendURLText: localURL.absoluteString,
+                selectedPreset: .local,
+                lastCustomURLText: customURL.absoluteString
+            )
+        ) {
+            SettingsFeature()
+        } withDependencies: {
+            $0.appSettings.save = { settings in savedSettings.setValue(settings) }
+        }
+
+        await store.send(.saveButtonTapped) {
+            $0.isPersisting = true
+        }
+
+        await store.receive(
+            .settingsSaved(
+                AppSettings(
+                    backendURL: localURL, selectedPreset: .local, lastCustomURL: customURL))
+        ) {
+            $0.isPersisting = false
+            $0.selectedPreset = .local
+            $0.savedBackendURL = localURL
+            $0.backendURLText = localURL.absoluteString
+            // lastCustomURLText remains unchanged
         }
     }
 
@@ -214,7 +258,7 @@ final class SettingsFeatureTests: XCTestCase {
         let store = TestStore(
             initialState: SettingsFeature.State(
                 backendURLText: targetURL.absoluteString,
-                selectedPreset: .custom,
+                selectedPreset: .hosted,
                 isDiagnosticsInFlight: true
             )
         ) {
@@ -241,42 +285,10 @@ final class SettingsFeatureTests: XCTestCase {
                 testedURL: targetURL,
                 status: .unreachable(reason: "Network error"),
                 latencyMs: 0,
+                wsStatus: .unreachable(reason: "Network error"),
+                wsLatencyMs: 0,
                 measuredAt: now
             )
-        }
-    }
-
-    func testSaveStandardPreset_PreservesLastCustomURL() async {
-        let customURL = URL(string: "https://my-custom.com")!
-        let standardURL = BackendEnvironmentPreset.staging.defaultURL
-        let savedSettings = LockIsolated<AppSettings?>(nil)
-
-        let store = TestStore(
-            initialState: SettingsFeature.State(
-                backendURLText: standardURL.absoluteString,
-                selectedPreset: .staging,
-                lastCustomURLText: customURL.absoluteString
-            )
-        ) {
-            SettingsFeature()
-        } withDependencies: {
-            $0.appSettings.save = { settings in savedSettings.setValue(settings) }
-        }
-
-        await store.send(.saveButtonTapped) {
-            $0.isPersisting = true
-        }
-
-        await store.receive(
-            .settingsSaved(
-                AppSettings(
-                    backendURL: standardURL, selectedPreset: .staging, lastCustomURL: customURL))
-        ) {
-            $0.isPersisting = false
-            $0.selectedPreset = .staging
-            $0.savedBackendURL = standardURL
-            $0.backendURLText = standardURL.absoluteString
-            // lastCustomURLText remains unchanged
         }
     }
 }

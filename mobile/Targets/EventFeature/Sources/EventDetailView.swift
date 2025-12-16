@@ -35,69 +35,122 @@ public struct EventDetailView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
 
-                        // Alert Overlay
-                        if let alert = store.userAlert {
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Image(
-                                        systemName: alert.type == .error
-                                            ? "exclamationmark.triangle.fill"
-                                            : (alert.type == .success
-                                                ? "checkmark.circle.fill" : "info.circle.fill")
-                                    )
+                        // Now Playing Section
+                        if let currentTrack = store.tracks.first(where: { $0.status == "playing" })
+                        {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Now Playing")
+                                    .font(.liquidTitle)
+                                    .foregroundStyle(Color.white)
+                                    .padding(.horizontal)
+
+                                TrackRow(
+                                    index: 0,
+                                    track: currentTrack,
+                                    voteCount: currentTrack.voteCount ?? 0,
+                                    isMyVote: false,  // Can't vote on playing
+                                    isOffline: store.isOffline,
+                                    onVote: {},
+                                    showVote: false,
+                                    timeRemaining: store.timeRemaining,
+                                    totalDuration: store.currentTrackDuration
+                                )
+
+                                .padding(.horizontal)
+
+                                // Next Track Control (Play/Skip)
+                                Button {
+                                    store.send(.nextTrackButtonTapped)
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "forward.end.fill")
+                                        Text("Next Track")
+                                    }
+                                    .font(.liquidBody.bold())
                                     .foregroundStyle(.white)
-                                    Text(alert.title)
-                                        .font(.liquidBody.bold())
-                                        .foregroundStyle(.white)
+                                    .padding()
+                                    .background(Color.white.opacity(0.2))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
                                 }
-                                Text(alert.message)
-                                    .font(.liquidCaption)
-                                    .foregroundStyle(.white.opacity(0.8))
+                                .padding(.horizontal)
                             }
-                            .padding()
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(
-                                alert.type == .error
-                                    ? Color.red.opacity(0.8)
-                                    : alert.type == .success
-                                        ? Color.green.opacity(0.8) : Color.blue.opacity(0.8)
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            .padding(.horizontal)
+                        } else {
+                            // Check if we have tracks ready to play
+                            let queuedTracks = store.tracks.filter {
+                                $0.status == "queued" || $0.status == nil
+                            }
+
+                            if !queuedTracks.isEmpty {
+                                Button {
+                                    store.send(.nextTrackButtonTapped)
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "play.fill")
+                                        Text("Start Radio")
+                                    }
+                                    .font(.liquidBody.bold())
+                                    .foregroundStyle(.white)
+                                    .padding()
+                                    .frame(maxWidth: .infinity)
+                                    .background(Color.green.opacity(0.8))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                }
+                                .padding(.horizontal)
+                            } else if !store.isLoading && !store.tracks.isEmpty {
+                                // Tracks exist but none are queued (all played) -> Event Finished
+                                VStack(spacing: 8) {
+                                    Image(systemName: "flag.checkered")
+                                        .font(.system(size: 32))
+                                        .foregroundStyle(Color.white.opacity(0.8))
+                                        .padding(.bottom, 4)
+
+                                    Text("Event Finished")
+                                        .font(.liquidH2)
+                                        .foregroundStyle(Color.white)
+
+                                    Text("Add more tracks to keep the party going!")
+                                        .font(.liquidCaption)
+                                        .foregroundStyle(Color.white.opacity(0.7))
+                                }
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(Color.black.opacity(0.3))
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                                .padding(.horizontal)
+                            }
                         }
 
                         // Leaderboard / Playlist
-                        Text("Playlist")
+                        Text("Up Next")
                             .font(.liquidTitle)
                             .foregroundStyle(Color.white)
                             .padding(.horizontal)
 
-                        if store.tracks.isEmpty && !store.isLoading {
-                            Text("No tracks yet. Add one!")
+                        if store.tracks.filter({ $0.status == "queued" || $0.status == nil })
+                            .isEmpty && !store.isLoading
+                        {
+                            Text("Queue empty. Add tracks!")
                                 .font(.liquidBody)
                                 .foregroundStyle(Color.white.opacity(0.6))
                                 .padding(.horizontal)
                         } else {
                             LazyVStack(spacing: 12) {
-                                // Sort tracks by vote count descending
-                                let sortedTracks = store.tracks.map { track -> (Track, Int, Bool) in
-                                    let tallyItem = store.tally.first(where: {
-                                        $0.track == track.id
-                                            || $0.track == track.providerTrackId
-                                    })
-                                    let count = tallyItem?.count ?? 0
-                                    let isMyVote = tallyItem?.isMyVote ?? false
-                                    return (track, count, isMyVote)
-                                }.sorted { $0.1 > $1.1 }
+                                // Filter only queued (or nil status if legacy)
+                                let queuedTracks = store.tracks.filter {
+                                    $0.status == "queued" || $0.status == nil
+                                }
 
-                                ForEach(Array(sortedTracks.enumerated()), id: \.element.0.id) {
-                                    index, pair in
-                                    let (track, count, isMyVote) = pair
+                                // Sort tracks by vote count descending
+                                let sortedTracks = queuedTracks.sorted {
+                                    ($0.voteCount ?? 0) > ($1.voteCount ?? 0)
+                                }
+
+                                ForEach(sortedTracks) { track in
                                     TrackRow(
-                                        index: index + 1,
+                                        index: (sortedTracks.firstIndex(of: track) ?? 0) + 1,
                                         track: track,
-                                        voteCount: count,
-                                        isMyVote: isMyVote,
+                                        voteCount: track.voteCount ?? 0,
+                                        isMyVote: track.isVoted ?? false,
                                         isOffline: store.isOffline,
                                         onVote: {
                                             store.send(.voteButtonTapped(trackId: track.id))
@@ -150,6 +203,52 @@ public struct EventDetailView: View {
                     .tint(.white)
             }
         }
+        .overlay(alignment: .top) {
+            if let alert = store.userAlert {
+                HStack(spacing: 12) {
+                    Image(
+                        systemName: alert.type == .error
+                            ? "exclamationmark.triangle.fill"
+                            : (alert.type == .success
+                                ? "checkmark.circle.fill" : "info.circle.fill")
+                    )
+                    .font(.system(size: 20))
+                    .foregroundStyle(.white)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(alert.title)
+                            .font(.liquidBody.bold())
+                            .foregroundStyle(.white)
+                        Text(alert.message)
+                            .font(.liquidCaption)
+                            .foregroundStyle(.white.opacity(0.8))
+                    }
+                    Spacer()
+                }
+                .padding()
+                .background(
+                    (alert.type == .error
+                        ? Color.red
+                        : alert.type == .success
+                            ? Color.green : Color.blue)
+                        .opacity(0.9)
+                        .shadow(.drop(radius: 10, y: 5))
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .padding(.horizontal)
+                .padding(.top, 8)  // Add some safe area padding
+                .transition(
+                    .asymmetric(
+                        insertion: .move(edge: .top).combined(with: .opacity),
+                        removal: .move(edge: .top).combined(with: .opacity)
+                    )
+                )
+                .onTapGesture {
+                    store.send(.dismissInfo, animation: .spring())
+                }
+            }
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.7), value: store.userAlert)
         .onAppear {
             store.send(.onAppear)
         }
@@ -167,18 +266,39 @@ struct TrackRow: View {
     let isMyVote: Bool
     let isOffline: Bool
     let onVote: () -> Void
+    var showVote: Bool = true  // Parameter to hide vote button
+    var timeRemaining: TimeInterval? = nil
+    var totalDuration: TimeInterval? = nil
 
     @State private var isAnimating = false
+
+    private func formatDuration(ms: Int) -> String {
+        let duration = TimeInterval(ms) / 1000
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.minute, .second]
+        formatter.unitsStyle = .positional
+        formatter.zeroFormattingBehavior = .pad
+        return formatter.string(from: duration) ?? "0:00"
+    }
 
     var body: some View {
         GlassView(cornerRadius: 16)
             .frame(height: 80)
             .overlay(
                 HStack(spacing: 12) {
-                    Text("#\(index)")
-                        .font(.liquidTitle)
-                        .foregroundStyle(Color.white.opacity(0.5))
-                        .frame(width: 35)
+                    // Index / Playing Icon
+                    if index == 0 {
+                        Image(systemName: "speaker.wave.3.fill")
+                            .font(.system(size: 20))
+                            .foregroundStyle(Color.liquidAccent)
+                            .frame(width: 35)
+                    } else {
+                        Text("#\(index)")
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .minimumScaleFactor(0.8)
+                            .foregroundStyle(Color.white.opacity(0.5))
+                            .frame(width: 35)
+                    }
 
                     // Thumbnail
                     if let url = track.thumbnailUrl {
@@ -205,40 +325,72 @@ struct TrackRow: View {
                             .foregroundStyle(Color.white)
                             .lineLimit(1)
 
-                        Text(track.artist)
-                            .font(.liquidCaption)
-                            .foregroundStyle(Color.white.opacity(0.7))
-                            .lineLimit(1)
+                        HStack {
+                            Text(track.artist)
+                                .font(.liquidCaption)
+                                .foregroundStyle(Color.white.opacity(0.7))
+                                .lineLimit(1)
 
-                        Text("\(voteCount) \(voteCount == 1 ? "vote" : "votes")")
-                            .font(.caption2)
-                            .foregroundStyle(Color.liquidAccent)
+                            if let remaining = timeRemaining, let total = totalDuration, total > 0 {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    ProgressView(value: total - remaining, total: total)
+                                        .tint(.liquidAccent)
+                                        .scaleEffect(y: 0.5)
+
+                                    HStack {
+                                        Text(formatDuration(ms: Int((total - remaining) * 1000)))
+                                        Spacer()
+                                        Text("-" + formatDuration(ms: Int(remaining * 1000)))
+                                    }
+                                    .font(.caption2)
+                                    .monospacedDigit()
+                                    .foregroundStyle(Color.white.opacity(0.6))
+                                }
+                                .padding(.top, 4)
+                            } else if let durationMs = track.durationMs {
+                                Text("• " + formatDuration(ms: durationMs))
+                                    .font(.liquidCaption)
+                                    .foregroundStyle(Color.white.opacity(0.5))
+                            }
+                        }
+
+                        if timeRemaining == nil {
+                            Text("\(voteCount) \(voteCount == 1 ? "vote" : "votes")")
+                                .font(.caption2)
+                                .foregroundStyle(Color.liquidAccent)
+                        }
                     }
 
                     Spacer()
 
-                    Button(action: {
-                        withAnimation(
-                            .spring(response: 0.3, dampingFraction: 0.4, blendDuration: 0)
-                        ) {
-                            isAnimating = true
-                        }
-                        onVote()
-                        // Reset animation
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            withAnimation {
-                                isAnimating = false
+                    if showVote {
+                        Button(action: {
+                            withAnimation(
+                                .spring(response: 0.3, dampingFraction: 0.4, blendDuration: 0)
+                            ) {
+                                isAnimating = true
                             }
+                            onVote()
+                            // Reset animation
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                withAnimation {
+                                    isAnimating = false
+                                }
+                            }
+                        }) {
+                            Image(systemName: isMyVote ? "arrow.up.circle.fill" : "arrow.up.circle")
+                                .font(.system(size: 28))
+                                .foregroundStyle(
+                                    isOffline ? Color.gray : (isMyVote ? Color.green : Color.white)
+                                )
+                                .scaleEffect(isAnimating ? 1.3 : 1.0)
                         }
-                    }) {
-                        Image(systemName: isMyVote ? "arrow.up.circle.fill" : "arrow.up.circle")
-                            .font(.system(size: 28))
-                            .foregroundStyle(
-                                isOffline ? Color.gray : (isMyVote ? Color.green : Color.white)
-                            )
-                            .scaleEffect(isAnimating ? 1.3 : 1.0)
+                        .disabled(isOffline || isMyVote)
+                    } else {
+                        Image(systemName: "waveform")  // Paying icon
+                            .foregroundStyle(.white)
+                            .font(.system(size: 24))
                     }
-                    .disabled(isOffline || isMyVote)
                 }
                 .padding(.horizontal, 16)
             )

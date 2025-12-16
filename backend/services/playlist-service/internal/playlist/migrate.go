@@ -77,5 +77,16 @@ func AutoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
 		return err
 	}
 
+	if _, err := pool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS track_votes (
+			track_id uuid NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+			user_id  TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			PRIMARY KEY (track_id, user_id)
+		)
+	`); err != nil {
+		return err
+	}
+
 	return nil
 }

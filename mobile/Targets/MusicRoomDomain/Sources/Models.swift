@@ -34,6 +34,10 @@ public struct Track: Identifiable, Equatable, Sendable, Codable {
     public var providerTrackId: String
     public var thumbnailUrl: URL?
     public var votes: Int?  // Optional, filled by Tally if needed
+    public var durationMs: Int?  // Added
+    public var voteCount: Int?  // Backend source of truth
+    public var status: String?  // "queued", "playing", "played"
+    public var isVoted: Bool?  // User specific vote status
 
     public init(
         id: String = UUID().uuidString,
@@ -42,7 +46,11 @@ public struct Track: Identifiable, Equatable, Sendable, Codable {
         provider: String,
         providerTrackId: String,
         thumbnailUrl: URL? = nil,
-        votes: Int? = 0
+        votes: Int? = 0,
+        durationMs: Int? = 0,
+        voteCount: Int? = 0,
+        status: String? = "queued",
+        isVoted: Bool? = false
     ) {
         self.id = id
         self.title = title
@@ -51,6 +59,26 @@ public struct Track: Identifiable, Equatable, Sendable, Codable {
         self.providerTrackId = providerTrackId
         self.thumbnailUrl = thumbnailUrl
         self.votes = votes
+        self.durationMs = durationMs
+        self.voteCount = voteCount
+        self.status = status
+        self.isVoted = isVoted
+    }
+}
+
+public struct NextTrackResponse: Decodable, Sendable, Equatable {
+    public let playlistId: String
+    public let currentTrackId: String?
+    public let playingStartedAt: Date?
+    public let status: String
+
+    public init(
+        playlistId: String, currentTrackId: String?, playingStartedAt: Date?, status: String
+    ) {
+        self.playlistId = playlistId
+        self.currentTrackId = currentTrackId
+        self.playingStartedAt = playingStartedAt
+        self.status = status
     }
 }
 
@@ -134,19 +162,22 @@ public struct AddTrackRequest: Codable, Sendable {
     public let provider: String
     public let providerTrackId: String
     public let thumbnailUrl: String
+    public let durationMs: Int?
 
     public init(
         title: String,
         artist: String,
         provider: String,
         providerTrackId: String,
-        thumbnailUrl: String
+        thumbnailUrl: String,
+        durationMs: Int? = 0
     ) {
         self.title = title
         self.artist = artist
         self.provider = provider
         self.providerTrackId = providerTrackId
         self.thumbnailUrl = thumbnailUrl
+        self.durationMs = durationMs
     }
 }
 
@@ -163,14 +194,10 @@ public struct VoteRequest: Codable, Sendable {
 }
 
 public struct VoteResponse: Codable, Sendable, Equatable {
-    public let status: String
-    public let trackId: String
-    public let totalVotes: Int
+    public let voteCount: Int
 
-    public init(status: String, trackId: String, totalVotes: Int) {
-        self.status = status
-        self.trackId = trackId
-        self.totalVotes = totalVotes
+    public init(voteCount: Int) {
+        self.voteCount = voteCount
     }
 }
 
@@ -181,19 +208,22 @@ public struct MusicSearchItem: Codable, Sendable, Identifiable, Equatable {
     public let provider: String
     public let providerTrackId: String
     public let thumbnailUrl: URL?
+    public let durationMs: Int?
 
     public init(
         title: String,
         artist: String,
         provider: String,
         providerTrackId: String,
-        thumbnailUrl: URL? = nil
+        thumbnailUrl: URL? = nil,
+        durationMs: Int? = 0
     ) {
         self.title = title
         self.artist = artist
         self.provider = provider
         self.providerTrackId = providerTrackId
         self.thumbnailUrl = thumbnailUrl
+        self.durationMs = durationMs
     }
 }
 
@@ -231,13 +261,20 @@ public struct PlaylistResponse: Codable, Sendable, Equatable {
         public let name: String
         public let isPublic: Bool
         public let editMode: String
+        public let currentTrackId: String?
+        public let playingStartedAt: Date?
 
-        public init(id: String, ownerId: String, name: String, isPublic: Bool, editMode: String) {
+        public init(
+            id: String, ownerId: String, name: String, isPublic: Bool, editMode: String,
+            currentTrackId: String? = nil, playingStartedAt: Date? = nil
+        ) {
             self.id = id
             self.ownerId = ownerId
             self.name = name
             self.isPublic = isPublic
             self.editMode = editMode
+            self.currentTrackId = currentTrackId
+            self.playingStartedAt = playingStartedAt
         }
     }
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // handleVoteTrack handles upvoting a track.
@@ -63,7 +64,26 @@ func (s *Server) handleVoteTrack(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(ctx)
 
-	// 2. Increment vote count
+	// 2. Prevent duplicate votes
+	_, err = tx.Exec(ctx, `
+		INSERT INTO track_votes (track_id, user_id)
+		VALUES ($1, $2)
+	`, trackID, userID)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			// Already voted. Return current vote count.
+			var currentVotes int
+			_ = tx.QueryRow(ctx, "SELECT vote_count FROM tracks WHERE id = $1", trackID).Scan(&currentVotes)
+			writeError(w, http.StatusConflict, "already voted") // 409
+			return
+		}
+		log.Printf("playlist-service: vote track insert vote: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+
+	// 3. Increment vote count
 	var newVoteCount int
 	var status string
 	err = tx.QueryRow(ctx, `

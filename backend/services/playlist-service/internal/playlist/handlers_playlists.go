@@ -268,7 +268,7 @@ func (s *Server) handleGetPlaylist(w http.ResponseWriter, r *http.Request) {
 
 	var pl Playlist
 	err := s.db.QueryRow(ctx, `
-		SELECT id, owner_id, name, description, is_public, edit_mode, created_at
+		SELECT id, owner_id, name, description, is_public, edit_mode, created_at, current_track_id, playing_started_at
 		FROM playlists
 		WHERE id = $1
 	`, playlistID).Scan(
@@ -279,6 +279,8 @@ func (s *Server) handleGetPlaylist(w http.ResponseWriter, r *http.Request) {
 		&pl.IsPublic,
 		&pl.EditMode,
 		&pl.CreatedAt,
+		&pl.CurrentTrackID,
+		&pl.PlayingStartedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "playlist not found")
@@ -307,12 +309,14 @@ func (s *Server) handleGetPlaylist(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := s.db.Query(ctx, `
-    SELECT id, playlist_id, title, artist, position, created_at,
-           provider, provider_track_id, thumbnail_url
-    FROM tracks
-    WHERE playlist_id = $1
-    ORDER BY position ASC
-  `, playlistID)
+    SELECT t.id, t.playlist_id, t.title, t.artist, t.position, t.created_at,
+           t.provider, t.provider_track_id, t.thumbnail_url, t.duration_ms, t.vote_count, t.status,
+           (tv.user_id IS NOT NULL) as is_voted
+    FROM tracks t
+    LEFT JOIN track_votes tv ON t.id = tv.track_id AND tv.user_id = $2
+    WHERE t.playlist_id = $1
+    ORDER BY t.position ASC
+  `, playlistID, userID)
 	if err != nil {
 		log.Printf("playlist-service: list tracks: %v", err)
 		writeError(w, http.StatusInternalServerError, "database error")
@@ -333,6 +337,10 @@ func (s *Server) handleGetPlaylist(w http.ResponseWriter, r *http.Request) {
 			&tr.Provider,
 			&tr.ProviderTrackID,
 			&tr.ThumbnailURL,
+			&tr.DurationMs,
+			&tr.VoteCount,
+			&tr.Status,
+			&tr.IsVoted,
 		); err != nil {
 			log.Printf("playlist-service: list tracks scan: %v", err)
 			writeError(w, http.StatusInternalServerError, "database error")
