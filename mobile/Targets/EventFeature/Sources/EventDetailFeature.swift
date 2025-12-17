@@ -462,8 +462,19 @@ public struct EventDetailFeature: Sendable {
 
             case .realtimeMessageReceived(let msg):
                 switch msg.type {
+                case "player.state_changed":
+                    // Immediate update for playback control logic
+                    if let data = try? JSONEncoder().encode(msg.payload),
+                        let payload = try? JSONDecoder.iso8601.decode(
+                            PlayerStateChangedPayload.self, from: data)
+                    {
+                        state.metadata?.currentTrackId = payload.currentTrackId
+                        state.metadata?.playingStartedAt = payload.playingStartedAt
+                    }
+                    return .send(.loadPlaylist)
+
                 case "vote.cast", "track.added", "track.deleted", "playlist.reordered",
-                    "player.state_changed", "playlist.updated", "track.updated":
+                    "playlist.updated", "track.updated":
                     return .send(.loadPlaylist)
                 default:
                     return .none

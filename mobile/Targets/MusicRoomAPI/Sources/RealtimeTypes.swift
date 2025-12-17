@@ -119,3 +119,10 @@ public struct PlaylistInvitedPayload: Decodable, Sendable, Equatable {
     public let playlistId: String
     public let userId: String
 }
+
+public struct PlayerStateChangedPayload: Decodable, Sendable, Equatable {
+    public let playlistId: String
+    public let currentTrackId: String?
+    public let playingStartedAt: Date?
+    public let status: String
+}
