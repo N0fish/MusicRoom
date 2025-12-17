@@ -24,6 +24,9 @@ let project = Project(
         .remote(
             url: "https://github.com/pointfreeco/swift-clocks",
             requirement: .upToNextMajor(from: "1.0.0")),
+        .remote(
+            url: "https://github.com/youtube/youtube-ios-player-helper",
+            requirement: .upToNextMajor(from: "1.0.4")),
     ],
     settings: .settings(base: [
         "SWIFT_VERSION": "6.0",
@@ -39,7 +42,9 @@ let project = Project(
             deploymentTargets: deploymentTargets,
             sources: ["Targets/MusicRoomUI/Sources/**"],
             resources: ["Targets/MusicRoomUI/Resources/**"],
-            dependencies: []
+            dependencies: [
+                .package(product: "YouTubeiOSPlayerHelper")
+            ]
         ),
         Target.target(
             name: "MusicRoomDomain",
@@ -130,6 +135,7 @@ let project = Project(
                 .package(product: "Dependencies"),
                 .package(product: "CasePaths"),
                 .package(product: "SwiftNavigation"),
+                .package(product: "Clocks"),
             ]
         ),
         Target.target(
@@ -151,6 +157,7 @@ let project = Project(
                 .target(name: "AppSupportClients"),
                 .target(name: "MusicRoomUI"),
                 .package(product: "ComposableArchitecture"),
+                .package(product: "YouTubeiOSPlayerHelper"),
             ]
         ),
         Target.target(
@@ -178,6 +185,7 @@ let project = Project(
                 .target(name: "AppSettingsClient"),
                 .target(name: "MusicRoomUI"),
                 .package(product: "ComposableArchitecture"),
+                .package(product: "YouTubeiOSPlayerHelper"),
             ]
         ),
         Target.target(
@@ -194,6 +202,8 @@ let project = Project(
                 .target(name: "MusicRoomAPI"),
                 .target(name: "AppSettingsClient"),
                 .package(product: "ComposableArchitecture"),
+                .package(product: "YouTubeiOSPlayerHelper"),
+                .package(product: "Clocks"),
             ]
         ),
         Target.target(
