@@ -20,8 +20,13 @@ public struct EventDetailFeature: Sendable {
         public var timeRemaining: TimeInterval?
         public var currentTrackDuration: TimeInterval?
 
-        // Navigation / Presentation
+        public var participants: [PublicUserProfile] = []
+        public var isLoadingParticipants: Bool = false
+        public var isShowingParticipants: Bool = false
+        // Navigation
         @Presents public var musicSearch: MusicSearchFeature.State?
+        @Presents public var participantProfile: FriendProfileFeature.State?
+        public var path = StackState<FriendProfileFeature.State>()
 
         public init(event: Event) {
             self.event = event
@@ -37,6 +42,14 @@ public struct EventDetailFeature: Sendable {
         case internalVoteFailure(String, trackId: String)
         case dismissInfo
         case binding(BindingAction<State>)
+
+        // Participants
+        case participantsButtonTapped
+        case loadParticipants
+        case participantsLoaded(TaskResult<[PublicUserProfile]>)
+        case participantTapped(PublicUserProfile)
+        case participantProfile(PresentationAction<FriendProfileFeature.Action>)
+        case path(StackAction<FriendProfileFeature.State, FriendProfileFeature.Action>)
 
         // Search
         case addTrackButtonTapped
@@ -432,7 +445,11 @@ public struct EventDetailFeature: Sendable {
                 )
                 state.tracks.append(track)
                 // Trigger reload to ensure sync and auto-dismiss
-                return .send(.loadPlaylist)
+                return .run { send in
+                    await send(.loadPlaylist)
+                    try await clock.sleep(for: .seconds(3))
+                    await send(.dismissInfo)
+                }
 
             case .addTrackResponse(.failure(let error)):
                 state.isLoading = false
@@ -498,10 +515,80 @@ public struct EventDetailFeature: Sendable {
 
                 return .none
 
+            case .participantsButtonTapped:
+                state.isShowingParticipants = true
+                return .send(.loadParticipants)
+
+            case .loadParticipants:
+                state.isLoadingParticipants = true
+                return .run { [eventId = state.event.id] send in
+                    await send(
+                        .participantsLoaded(
+                            TaskResult {
+                                // 1. Get user IDs from invites
+                                let invites = try await musicRoomAPI.listInvites(eventId)
+                                // 2. Fetch profiles for each user ID
+                                // Note: API might be rate limited or slow if many invites.
+                                // ideally backend returns full profiles on listInvites or a bulk endpoint.
+                                // For now, parallel fetch.
+                                return await withTaskGroup(of: PublicUserProfile?.self) { group in
+                                    for invite in invites {
+                                        group.addTask {
+                                            // TODO: friendsClient needs "getProfile(userId)" exposing PublicUserProfile
+                                            // OR use UserClient if it supported getting OTHER users (it doesn't, only /me)
+                                            // FriendsClient.getProfile was added in plan but not verified if exists.
+                                            // Checked FriendsClient.swift in step 279, it HAS getProfile!
+                                            // BUT dependency is not injected yet.
+                                            @Dependency(\.friendsClient) var friendsClient
+                                            return try? await friendsClient.getProfile(
+                                                invite.userId)
+                                        }
+                                    }
+                                    var profiles: [PublicUserProfile] = []
+                                    for await profile in group {
+                                        if let profile {
+                                            profiles.append(profile)
+                                        }
+                                    }
+                                    return profiles
+                                }
+                            }
+                        )
+                    )
+                }
+
+            case .participantsLoaded(.success(let profiles)):
+                state.isLoadingParticipants = false
+                state.participants = profiles
+                return .none
+
+            case .participantsLoaded(.failure):
+                state.isLoadingParticipants = false
+                // handle error?
+                return .none
+
+            case .participantTapped(let profile):
+                state.path.append(
+                    FriendProfileFeature.State(
+                        userId: profile.userId,
+                        isFriend: false,  // We don't know friendship status here easily without checking Friends list
+                        profile: profile
+                    )
+                )
+                return .none
+
+            case .path:
+                return .none
+
+            case .participantProfile:
+                return .none
             }
         }
         .ifLet(\.$musicSearch, action: \.musicSearch) {
             MusicSearchFeature()
+        }
+        .forEach(\.path, action: \.path) {
+            FriendProfileFeature()
         }
     }
 }

@@ -19,20 +19,7 @@ public struct EventDetailView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Header
-                VStack(spacing: 8) {
-                    Text(store.event.name)
-                        .font(.liquidTitle)
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
-
-                    Text(store.event.visibility.label + " • " + store.event.licenseMode.label)
-                        .font(.liquidCaption)
-                        .foregroundStyle(.white.opacity(0.8))
-                }
-                .padding()
-                .frame(maxWidth: .infinity)
-                .background(.ultraThinMaterial)
+                // Header removed in favor of standard toolbar
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
@@ -259,7 +246,9 @@ public struct EventDetailView: View {
         .onAppear {
             store.send(.onAppear)
         }
+        .navigationTitle(store.event.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
         .sheet(item: $store.scope(state: \.musicSearch, action: \.musicSearch)) { searchStore in
             MusicSearchView(store: searchStore)
         }
@@ -401,5 +390,54 @@ struct TrackRow: View {
                 }
                 .padding(.horizontal, 16)
             )
+    }
+}
+
+struct ParticipantsListView: View {
+    let store: StoreOf<EventDetailFeature>
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if store.isLoadingParticipants {
+                    ProgressView()
+                } else if store.participants.isEmpty {
+                    Text("No other participants.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(store.participants, id: \.userId) { participant in
+                        Button {
+                            store.send(.participantTapped(participant))
+                        } label: {
+                            HStack {
+                                AsyncImage(url: URL(string: participant.avatarUrl ?? "")) { image in
+                                    image.resizable()
+                                } placeholder: {
+                                    Image(systemName: "person.circle.fill")
+                                        .resizable()
+                                        .foregroundStyle(.gray)
+                                }
+                                .frame(width: 40, height: 40)
+                                .clipShape(Circle())
+
+                                Text(
+                                    participant.displayName.isEmpty
+                                        ? participant.username : participant.displayName
+                                )
+                                .foregroundStyle(.primary)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Participants")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") {
+                        store.send(.binding(.set(\.isShowingParticipants, false)))
+                    }
+                }
+            }
+        }
     }
 }

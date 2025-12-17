@@ -17,7 +17,6 @@ public struct EventListView: View {
                     .ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    header
 
                     if store.isLoading {
                         ProgressView()
@@ -46,6 +45,23 @@ public struct EventListView: View {
             .onAppear {
                 store.send(.onAppear)
             }
+            .navigationTitle("Events")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: {
+                        store.send(.createEventButtonTapped)
+                    }) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 40, height: 40)
+                    }
+                    .foregroundStyle(.white)
+                }
+            }
+            .preferredColorScheme(.dark)
         } destination: { store in
             EventDetailView(store: store)
         }
@@ -55,29 +71,7 @@ public struct EventListView: View {
         }
     }
 
-    private var header: some View {
-        HStack {
-            Text("Events")
-                .font(.liquidTitle)
-                .foregroundStyle(.white)
-            Spacer()
-
-            LiquidButton(
-                useGlass: true,
-                action: {
-                    store.send(.createEventButtonTapped)
-                }
-            ) {
-                Image(systemName: "plus")
-                    .font(.liquidButton)
-                    .foregroundStyle(.white)
-                    .frame(width: 24, height: 24)
-            }
-            .clipShape(Circle())
-        }
-        .padding()
-        .background(.ultraThinMaterial)
-    }
+    // Custom header removed in favor of standard toolbar
 
     private func errorView(message: String) -> some View {
         VStack(spacing: 16) {
@@ -125,12 +119,16 @@ public struct EventListView: View {
         ScrollView {
             LazyVStack(spacing: 16) {
                 ForEach(Array(store.events.enumerated()), id: \.element.id) { index, event in
-                    Button(action: {
-                        store.send(.eventTapped(event))
-                    }) {
-                        EventCard(event: event)
-                    }
-                    .buttonStyle(BouncyScaleButtonStyle())
+                    SwipeableEventRow(
+                        event: event,
+                        currentUserId: store.currentUserId,
+                        onTap: {
+                            store.send(.eventTapped(event))
+                        },
+                        onAction: {
+                            store.send(.deleteEvent(event))
+                        }
+                    )
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .animation(
                         .spring(duration: 0.5, bounce: 0.3).delay(Double(index) * 0.05),
@@ -138,6 +136,93 @@ public struct EventListView: View {
                 }
             }
             .padding()
+        }
+    }
+}
+
+struct SwipeableEventRow: View {
+    let event: Event
+    let currentUserId: String?
+    let onTap: () -> Void
+    let onAction: () -> Void
+
+    @State private var offset: CGFloat = 0
+    @State private var isSwiped = false
+    private let actionThreshold: CGFloat = 60
+    private let maxDrag: CGFloat = 100
+
+    private var isOwner: Bool {
+        event.ownerId == currentUserId
+    }
+
+    var body: some View {
+        ZStack {
+            // Background Action Layer
+            GeometryReader { geometry in
+                HStack {
+                    Spacer()
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(isOwner ? Color.red : Color.orange)
+
+                        VStack(spacing: 4) {
+                            Image(systemName: isOwner ? "trash.fill" : "door.left.hand.open")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                            Text(isOwner ? "Delete" : "Leave")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                        }
+                        .foregroundColor(.white)
+                        .padding(.trailing, 20)
+                    }
+                    .frame(width: max(offset * -1, 0))
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                    .opacity(offset < 0 ? 1 : 0)
+                }
+            }
+
+            // Foreground Card
+            EventCard(event: event)
+                .contentShape(Rectangle())  // Ensure entire area is hittable
+                .offset(x: offset)
+                .onTapGesture {
+                    if offset == 0 {
+                        onTap()
+                    } else {
+                        // If swiped, valid tap resets the swipe
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            offset = 0
+                        }
+                    }
+                }
+                .gesture(
+                    DragGesture()
+                        .onChanged { value in
+                            if value.translation.width < 0 {
+                                // Resistance curve
+                                let translation = value.translation.width
+                                offset =
+                                    translation > -maxDrag
+                                    ? translation
+                                    : -maxDrag - (pow(abs(translation + maxDrag), 0.7))
+                            } else {
+                                // No right swipe - strict limit
+                                offset = 0
+                            }
+                        }
+                        .onEnded { value in
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                if value.translation.width < -actionThreshold {
+                                    // Trigger action and reset
+                                    offset = 0
+                                    onAction()
+                                } else {
+                                    offset = 0
+                                }
+                            }
+                        }
+                )
         }
     }
 }

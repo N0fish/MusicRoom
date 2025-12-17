@@ -136,4 +136,141 @@ final class EventListFeatureTests: XCTestCase {
             $0.errorMessage = "Loaded from cache (API Failed)"
         }
     }
+
+    func testRealtimeInvite_ReloadsEvents() async {
+        let (stream, continuation) = AsyncStream.makeStream(of: RealtimeMessage.self)
+        let userId = "user123"
+        let event = Event(
+            id: UUID(),
+            name: "Initial Party",
+            visibility: .publicEvent,
+            ownerId: "other",
+            licenseMode: .everyone,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+
+        let store = TestStore(initialState: EventListFeature.State()) {
+            EventListFeature()
+        } withDependencies: {
+            $0.musicRoomAPI.authMe = {
+                .init(userId: userId, email: "x", emailVerified: true, linkedProviders: [])
+            }
+            $0.musicRoomAPI.connectToRealtime = { stream }
+            $0.musicRoomAPI.listEvents = { [event] }
+            $0.telemetry.log = { _, _ in }
+            $0.networkMonitor.start = { AsyncStream.never }
+            $0.persistence.saveEvents = { _ in }
+            $0.persistence.loadEvents = { [] }
+        }
+
+        await store.send(.onAppear)
+
+        // Parallel effects
+        await store.receive(.loadEvents) { $0.isLoading = true }
+        await store.receive(.fetchCurrentUser)
+        await store.receive(.startRealtimeConnection)
+
+        await store.receive(\.currentUserLoaded.success) {
+            $0.currentUserId = userId
+        }
+
+        await store.receive(\.eventsLoaded.success) {
+            $0.isLoading = false
+            $0.events = [event]
+        }
+
+        // Simulate invitation
+        let payload: [String: Any] = ["playlistId": "new_event_id", "userId": userId]
+        let message = RealtimeMessage(
+            type: "playlist.invited",
+            payload: AnyDecodable(payload)
+        )
+
+        continuation.yield(message)
+
+        await store.receive(.realtimeMessageReceived(message))
+
+        // Trigger reload
+        await store.receive(.loadEvents) {
+            $0.isLoading = true
+            $0.errorMessage = nil
+        }
+
+        await store.receive(\.eventsLoaded.success) {
+            $0.isLoading = false
+            // events didn't change in this mock test because listEvents mocked to return same
+        }
+
+        continuation.finish()
+    }
+
+    func testRealtimeCreation_ReloadsEvents() async {
+        let (stream, continuation) = AsyncStream.makeStream(of: RealtimeMessage.self)
+        let userId = "user123"
+        // Setup initial event list
+        let event = Event(
+            id: UUID(),
+            name: "Initial Party",
+            visibility: .publicEvent,
+            ownerId: "other",
+            licenseMode: .everyone,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+
+        let store = TestStore(initialState: EventListFeature.State()) {
+            EventListFeature()
+        } withDependencies: {
+            $0.musicRoomAPI.authMe = {
+                .init(userId: userId, email: "x", emailVerified: true, linkedProviders: [])
+            }
+            $0.musicRoomAPI.connectToRealtime = { stream }
+            $0.musicRoomAPI.listEvents = { [event] }
+            $0.telemetry.log = { _, _ in }
+            $0.networkMonitor.start = { AsyncStream.never }
+            $0.persistence.saveEvents = { _ in }
+            $0.persistence.loadEvents = { [] }
+        }
+
+        await store.send(.onAppear)
+
+        await store.receive(.loadEvents) { $0.isLoading = true }
+        await store.receive(.fetchCurrentUser)
+        await store.receive(.startRealtimeConnection)
+
+        await store.receive(\.currentUserLoaded.success) {
+            $0.currentUserId = userId
+        }
+        await store.receive(\.eventsLoaded.success) {
+            $0.isLoading = false
+            $0.events = [event]
+        }
+
+        // Simulate Creation (My Event on other device)
+        let playlistPayload: [String: Any] = [
+            "id": UUID().uuidString,
+            "ownerId": userId,
+            "name": "My New Event",
+            "description": "Desc",
+            "isPublic": false,
+        ]
+        let payload: [String: Any] = ["playlist": playlistPayload]
+        let message = RealtimeMessage(
+            type: "playlist.created",
+            payload: AnyDecodable(payload)
+        )
+
+        continuation.yield(message)
+        await store.receive(.realtimeMessageReceived(message))
+
+        // Trigger reload
+        await store.receive(.loadEvents) {
+            $0.isLoading = true
+            $0.errorMessage = nil
+        }
+        await store.receive(\.eventsLoaded.success)
+
+        continuation.finish()
+    }
 }
