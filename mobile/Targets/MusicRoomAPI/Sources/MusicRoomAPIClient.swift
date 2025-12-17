@@ -21,6 +21,15 @@ public struct MusicRoomAPIClient: Sendable {
     public var removeTrack: @Sendable (_ playlistId: String, _ trackId: String) async throws -> Void
     public var authMe: @Sendable () async throws -> AuthMeResponse
     public var getPlaylist: @Sendable (_ playlistId: String) async throws -> PlaylistResponse
+    public var inviteUser: @Sendable (_ eventId: UUID, _ userId: String) async throws -> Void
+    public var listInvites: @Sendable (_ eventId: UUID) async throws -> [Invite]
+    public var leaveEvent: @Sendable (_ eventId: UUID, _ userId: String) async throws -> Void
+    public var deleteEvent: @Sendable (_ eventId: UUID) async throws -> Void
+
+    public struct Invite: Decodable, Sendable, Equatable {
+        public let userId: String
+        public let createdAt: Date
+    }
 
     public struct AuthMeResponse: Decodable, Sendable {
         public let userId: String
@@ -353,8 +362,57 @@ extension MusicRoomAPIClient: DependencyKey {
                     "playlists/\(playlistId)")
                 let request = URLRequest(url: url)
                 return try await performRequest(request)
+            },
+            inviteUser: { eventId, userId in
+                let url = settings.load().backendURL.appendingPathComponent("events")
+                    .appendingPathComponent(eventId.uuidString)
+                    .appendingPathComponent(userId)
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                try await performRequestNoContent(request)
+            },
+            listInvites: { eventId in
+                let url = settings.load().backendURL.appendingPathComponent(
+                    "events/\(eventId.uuidString)/invites")
+                var request = URLRequest(url: url)
+                request.httpMethod = "GET"
+                return try await performRequest(request)
+            },
+            leaveEvent: { eventId, userId in
+                let url = settings.load().backendURL.appendingPathComponent("events")
+                    .appendingPathComponent(eventId.uuidString)
+                    .appendingPathComponent("invites")
+                    .appendingPathComponent(userId)
+                var request = URLRequest(url: url)
+                request.httpMethod = "DELETE"
+                try await performRequestNoContent(request)
+            },
+            deleteEvent: { eventId in
+                let url = settings.load().backendURL.appendingPathComponent("events")
+                    .appendingPathComponent(eventId.uuidString)
+                var request = URLRequest(url: url)
+                request.httpMethod = "DELETE"
+                try await performRequestNoContent(request)
             }
         )
+    }
+
+    private static func validate(response: URLResponse) throws {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw MusicRoomAPIError.networkError("Invalid response")
+        }
+        switch httpResponse.statusCode {
+        case 200...299:
+            break
+        case 401:
+            throw MusicRoomAPIError.sessionExpired
+        case 403:
+            throw MusicRoomAPIError.forbidden
+        case 404:
+            throw MusicRoomAPIError.notFound
+        default:
+            throw MusicRoomAPIError.serverError(statusCode: httpResponse.statusCode)
+        }
     }
 
     public static var previewValue: MusicRoomAPIClient {
@@ -404,7 +462,16 @@ extension MusicRoomAPIClient: DependencyKey {
                             providerTrackId: "1", thumbnailUrl: nil)
                     ]
                 )
-            }
+            },
+            inviteUser: { _, _ in },
+            listInvites: { _ in
+                [
+                    Invite(userId: "user2", createdAt: Date()),
+                    Invite(userId: "user3", createdAt: Date()),
+                ]
+            },
+            leaveEvent: { _, _ in },
+            deleteEvent: { _ in }
         )
     }
 
@@ -429,7 +496,11 @@ extension MusicRoomAPIClient: DependencyKey {
                 AuthMeResponse(
                     userId: "user1", email: "test@example.com", emailVerified: true,
                     linkedProviders: [])
-            }, getPlaylist: { _ in throw MusicRoomAPIError.networkError("Test unimplemented") }
+            }, getPlaylist: { _ in throw MusicRoomAPIError.networkError("Test unimplemented") },
+            inviteUser: { _, _ in },
+            listInvites: { _ in [] },
+            leaveEvent: { _, _ in },
+            deleteEvent: { _ in }
         )
     }
 }
