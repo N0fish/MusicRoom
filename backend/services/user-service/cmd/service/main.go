@@ -12,7 +12,7 @@ import (
 )
 
 type Server struct {
-	db *pgxpool.Pool
+	db DB
 }
 
 func main() {

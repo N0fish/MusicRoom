@@ -192,6 +192,7 @@ let project = Project(
                 .target(name: "MusicRoomUI"),
                 .target(name: "MusicRoomDomain"),
                 .target(name: "MusicRoomAPI"),
+                .target(name: "AppSettingsClient"),
                 .package(product: "ComposableArchitecture"),
             ]
         ),
