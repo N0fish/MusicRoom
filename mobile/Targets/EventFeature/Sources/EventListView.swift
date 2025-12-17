@@ -5,6 +5,7 @@ import SwiftUI
 
 public struct EventListView: View {
     @Bindable var store: StoreOf<EventListFeature>
+    @Namespace private var namespace
 
     public init(store: StoreOf<EventListFeature>) {
         self.store = store
@@ -117,26 +118,79 @@ public struct EventListView: View {
 
     private var eventList: some View {
         ScrollView {
-            LazyVStack(spacing: 16) {
-                ForEach(Array(store.events.enumerated()), id: \.element.id) { index, event in
-                    SwipeableEventRow(
-                        event: event,
-                        currentUserId: store.currentUserId,
-                        onTap: {
-                            store.send(.eventTapped(event))
-                        },
-                        onAction: {
-                            store.send(.deleteEvent(event))
+            LazyVStack(spacing: 24) {
+                // My Events Section
+                let myEvents = store.events.filter {
+                    $0.ownerId == store.currentUserId || ($0.isJoined ?? false)
+                }
+                if !myEvents.isEmpty {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("My Events")
+                            .font(.title2)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal)
+
+                        ForEach(Array(myEvents.enumerated()), id: \.element.id) { index, event in
+                            SwipeableEventRow(
+                                event: event,
+                                currentUserId: store.currentUserId,
+                                onTap: {
+                                    store.send(.eventTapped(event))
+                                },
+                                onAction: {
+                                    store.send(.deleteEvent(event))
+                                }
+                            )
+                            .matchedGeometryEffect(id: event.id, in: namespace)
                         }
-                    )
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .animation(
-                        .spring(duration: 0.5, bounce: 0.3).delay(Double(index) * 0.05),
-                        value: store.events)
+                    }
+                }
+
+                // Explore Section
+                let exploreEvents = store.events.filter {
+                    $0.ownerId != store.currentUserId && !($0.isJoined ?? false)
+                }
+                if !exploreEvents.isEmpty {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Explore")
+                            .font(.title2)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal)
+
+                        ForEach(Array(exploreEvents.enumerated()), id: \.element.id) {
+                            index, event in
+                            // Non-swipeable row for Explore events (or swipe to join?)
+                            // For now, just tap to enter (and potentially join via detail)
+                            // We disable the swipe action by not wrapping in SwipeableEventRow or passing no-op
+                            // But SwipeableEventRow provides the card UI.
+                            // Let's use SwipeableEventRow but perhaps disable swipe if not joined?
+                            // Currently SwipeableEventRow handles gesture.
+                            // Simplest: Use SwipeableEventRow but onAction does nothing or shows alert?
+                            // Better: Making Swipeable behavior conditional.
+
+                            // Since we don't have time to refactor Row deeply, we use it.
+                            // But maybe we should ONLY allow Leave on My Events.
+                            SwipeableEventRow(
+                                event: event,
+                                currentUserId: store.currentUserId,
+                                onTap: {
+                                    store.send(.eventTapped(event))
+                                },
+                                onAction: {
+                                    // No-op for explore events (can't leave what you haven't joined)
+                                    // Or maybe "Hide"?
+                                }
+                            )
+                            .matchedGeometryEffect(id: event.id, in: namespace)
+                            // We need to modify SwipeableEventRow to accept "canSwipe".
+                            // For now, we just pass the row.
+                        }
+                    }
                 }
             }
-            .padding()
+            .padding(.vertical)
         }
+        .animation(.default, value: store.events)
     }
 }
 
@@ -199,6 +253,9 @@ struct SwipeableEventRow: View {
                 .gesture(
                     DragGesture()
                         .onChanged { value in
+                            // Only allow swipe if owner or joined
+                            guard (event.isJoined ?? false) || isOwner else { return }
+
                             if value.translation.width < 0 {
                                 // Resistance curve
                                 let translation = value.translation.width
@@ -212,6 +269,8 @@ struct SwipeableEventRow: View {
                             }
                         }
                         .onEnded { value in
+                            guard (event.isJoined ?? false) || isOwner else { return }
+
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                 if value.translation.width < -actionThreshold {
                                     // Trigger action and reset
@@ -255,8 +314,6 @@ struct EventCard: View {
                         Image(systemName: "lock.fill")
                             .foregroundStyle(Color.liquidSecondary)
                     }
-
-                    StatusBadge(isActive: isEventActive(event))
                 }
 
                 HStack {
@@ -271,28 +328,5 @@ struct EventCard: View {
             }
             .padding()
         }
-    }
-
-    private func isEventActive(_ event: Event) -> Bool {
-        // Simple logic: if voteStart/End are nil, it's active "Always"
-        // If set, check current date
-        let now = Date()
-        if let start = event.voteStart, now < start { return false }
-        if let end = event.voteEnd, now > end { return false }
-        return true
-    }
-}
-
-struct StatusBadge: View {
-    let isActive: Bool
-
-    var body: some View {
-        Text(isActive ? "LIVE" : "ENDED")
-            .font(.caption.bold())
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(isActive ? Color.liquidAccent : Color.gray)
-            .foregroundStyle(.white)
-            .clipShape(Capsule())
     }
 }

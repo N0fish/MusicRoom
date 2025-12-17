@@ -95,6 +95,7 @@ public struct Event: Identifiable, Equatable, Sendable, Codable {
     public var voteEnd: Date?
     public var createdAt: Date
     public var updatedAt: Date
+    public var isJoined: Bool?
 
     public init(
         id: UUID,
@@ -108,7 +109,8 @@ public struct Event: Identifiable, Equatable, Sendable, Codable {
         voteStart: Date? = nil,
         voteEnd: Date? = nil,
         createdAt: Date,
-        updatedAt: Date
+        updatedAt: Date,
+        isJoined: Bool? = false
     ) {
         self.id = id
         self.name = name
@@ -122,6 +124,7 @@ public struct Event: Identifiable, Equatable, Sendable, Codable {
         self.voteEnd = voteEnd
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.isJoined = isJoined
     }
 }
 

@@ -25,6 +25,7 @@ public struct MusicRoomAPIClient: Sendable {
     public var listInvites: @Sendable (_ eventId: UUID) async throws -> [Invite]
     public var leaveEvent: @Sendable (_ eventId: UUID, _ userId: String) async throws -> Void
     public var deleteEvent: @Sendable (_ eventId: UUID) async throws -> Void
+    public var joinEvent: @Sendable (_ eventId: UUID) async throws -> Void
 
     public struct Invite: Decodable, Sendable, Equatable {
         public let userId: String
@@ -393,6 +394,25 @@ extension MusicRoomAPIClient: DependencyKey {
                 var request = URLRequest(url: url)
                 request.httpMethod = "DELETE"
                 try await performRequestNoContent(request)
+            },
+            joinEvent: { eventId in
+                let url = settings.load().backendURL.appendingPathComponent("events")
+                    .appendingPathComponent(eventId.uuidString)
+                    .appendingPathComponent("invites")
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+                // We need the user ID. Fetch from auth/me manually since we can't reference self.authMe here
+                let authUrl = settings.load().backendURL.appendingPathComponent("auth/me")
+                var authRequest = URLRequest(url: authUrl)
+                authRequest.httpMethod = "GET"
+                let me: AuthMeResponse = try await performRequest(authRequest)
+
+                let body = ["userId": me.userId]
+                request.httpBody = try JSONEncoder().encode(body)
+
+                try await performRequestNoContent(request)
             }
         )
     }
@@ -471,7 +491,8 @@ extension MusicRoomAPIClient: DependencyKey {
                 ]
             },
             leaveEvent: { _, _ in },
-            deleteEvent: { _ in }
+            deleteEvent: { _ in },
+            joinEvent: { _ in }
         )
     }
 
@@ -500,7 +521,8 @@ extension MusicRoomAPIClient: DependencyKey {
             inviteUser: { _, _ in },
             listInvites: { _ in [] },
             leaveEvent: { _, _ in },
-            deleteEvent: { _ in }
+            deleteEvent: { _ in },
+            joinEvent: { _ in }
         )
     }
 }

@@ -1,4 +1,6 @@
+import AppSupportClients
 @_spi(Presentation) import ComposableArchitecture
+import Dependencies
 import MusicRoomAPI
 import MusicRoomDomain
 import MusicRoomUI
@@ -18,11 +20,53 @@ public struct EventDetailView: View {
             LiquidBackground()
                 .ignoresSafeArea()
 
+            // Hidden YouTube Player
+            YouTubePlayerView(
+                videoId: Binding(
+                    get: { store.currentVideoId },
+                    set: { _ in }
+                ),
+                isPlaying: .constant(true),
+                startSeconds: store.metadata?.playingStartedAt.map { Date().timeIntervalSince($0) }
+                    ?? 0,
+                onEnded: {
+                    // Auto-next logic:
+                    // 1. Owner always triggers
+                    // 2. If no tracks queued (end of event), anyone triggers to ensure "Finished" state syncs
+                    let hasNextTrack = store.tracks.contains { $0.status == "queued" }
+                    if store.currentUserId == store.event.ownerId || !hasNextTrack {
+                        store.send(.nextTrackButtonTapped)
+                    }
+                }
+            )
+            .frame(width: 1, height: 1)
+            .opacity(0.01)  // Nearly invisible but active
+            .allowsHitTesting(false)
+
             VStack(spacing: 0) {
                 // Header removed in favor of standard toolbar
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
+
+                        // Join Button for Explore events
+                        if store.event.isJoined == false {
+                            Button {
+                                store.send(.joinEventTapped)
+                            } label: {
+                                HStack {
+                                    Image(systemName: "plus.circle.fill")
+                                    Text("Join Event")
+                                }
+                                .font(.liquidBody.bold())
+                                .foregroundStyle(.white)
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(Color.blue.opacity(0.8))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                            }
+                            .padding(.horizontal)
+                        }
 
                         // Now Playing Section
                         if let currentTrack = store.tracks.first(where: { $0.status == "playing" })
@@ -249,6 +293,16 @@ public struct EventDetailView: View {
         .navigationTitle(store.event.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    store.send(.participantsButtonTapped)
+                } label: {
+                    Image(systemName: "person.2.fill")
+                        .foregroundStyle(.white)
+                }
+            }
+        }
         .sheet(item: $store.scope(state: \.musicSearch, action: \.musicSearch)) { searchStore in
             MusicSearchView(store: searchStore)
         }
@@ -394,37 +448,42 @@ struct TrackRow: View {
 }
 
 struct ParticipantsListView: View {
-    let store: StoreOf<EventDetailFeature>
+    @Bindable var store: StoreOf<EventDetailFeature>
 
     var body: some View {
         NavigationStack {
             List {
                 if store.isLoadingParticipants {
-                    ProgressView()
-                } else if store.participants.isEmpty {
-                    Text("No other participants.")
-                        .foregroundStyle(.secondary)
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                        Spacer()
+                    }
+                    .listRowBackground(Color.clear)
                 } else {
-                    ForEach(store.participants, id: \.userId) { participant in
-                        Button {
-                            store.send(.participantTapped(participant))
-                        } label: {
-                            HStack {
-                                AsyncImage(url: URL(string: participant.avatarUrl ?? "")) { image in
-                                    image.resizable()
-                                } placeholder: {
-                                    Image(systemName: "person.circle.fill")
-                                        .resizable()
-                                        .foregroundStyle(.gray)
-                                }
-                                .frame(width: 40, height: 40)
-                                .clipShape(Circle())
+                    // Organizer Section
+                    if let owner = store.ownerProfile {
+                        Section("Organizer") {
+                            Button {
+                                store.send(.participantTapped(owner))
+                            } label: {
+                                ParticipantRow(profile: owner)
+                            }
+                        }
+                    }
 
-                                Text(
-                                    participant.displayName.isEmpty
-                                        ? participant.username : participant.displayName
-                                )
-                                .foregroundStyle(.primary)
+                    // Participants Section
+                    Section("Participants") {
+                        if store.participants.isEmpty {
+                            Text("No other participants joined yet.")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(store.participants, id: \.userId) { participant in
+                                Button {
+                                    store.send(.participantTapped(participant))
+                                } label: {
+                                    ParticipantRow(profile: participant)
+                                }
                             }
                         }
                     }
@@ -436,6 +495,35 @@ struct ParticipantsListView: View {
                     Button("Close") {
                         store.send(.binding(.set(\.isShowingParticipants, false)))
                     }
+                }
+            }
+        }
+    }
+}
+
+struct ParticipantRow: View {
+    let profile: PublicUserProfile
+
+    var body: some View {
+        HStack {
+            AsyncImage(url: URL(string: profile.avatarUrl ?? "")) { image in
+                image.resizable().aspectRatio(contentMode: .fill)
+            } placeholder: {
+                Image(systemName: "person.circle.fill")
+                    .resizable()
+                    .foregroundStyle(.gray)
+            }
+            .frame(width: 40, height: 40)
+            .clipShape(Circle())
+
+            VStack(alignment: .leading) {
+                Text(profile.displayName.isEmpty ? profile.username : profile.displayName)
+                    .foregroundStyle(.primary)
+                    .font(.headline)
+                if !profile.displayName.isEmpty {
+                    Text("@\(profile.username)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }

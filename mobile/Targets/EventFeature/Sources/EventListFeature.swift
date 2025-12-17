@@ -22,6 +22,7 @@ public struct EventListFeature: Sendable {
 
     public enum Action: Equatable, Sendable {
         case onAppear
+        case onDisappear
         case loadEvents
         case eventsLoaded(Result<[Event], Error>)
         case eventsLoadedFromCache(Result<[Event], Error>)  // Distinct action for cache
@@ -64,6 +65,9 @@ public struct EventListFeature: Sendable {
                     .send(.fetchCurrentUser),
                     .send(.startRealtimeConnection)
                 )
+
+            case .onDisappear:
+                return .cancel(id: CancelID.realtime)
 
             case .networkStatusChanged(let status):
                 state.isOffline = (status == .unsatisfied || status == .requiresConnection)
@@ -163,6 +167,17 @@ public struct EventListFeature: Sendable {
             case .createEvent:
                 return .none
 
+            case .path(.element(id: let id, action: .delegate(.eventJoined))):
+                if let updatedEvent = state.path[id: id]?.event {
+                    if let index = state.events.firstIndex(where: { $0.id == updatedEvent.id }) {
+                        state.events[index] = updatedEvent
+                    } else {
+                        // Case where it wasn't in list (unlikely for Explore, but possible)
+                        state.events.append(updatedEvent)
+                    }
+                }
+                return .none
+
             case .path(.element(id: _, action: .delegate(.sessionExpired))):
                 return .send(.delegate(.sessionExpired))
 
@@ -217,6 +232,32 @@ public struct EventListFeature: Sendable {
                             return .send(.loadEvents)
                         }
                     }
+                } else if message.type == "event.deleted" {
+                    // Payload is { "id": "..." }
+                    if let dict = message.payload.value as? [String: Any],
+                        let idStr = dict["id"] as? String,
+                        let uuid = UUID(uuidString: idStr)
+                    {
+                        state.events.removeAll { $0.id == uuid }
+                    }
+                } else if message.type == "event.left" {
+                    // Payload is { "eventId": "...", "userId": "..." }
+                    if let dict = message.payload.value as? [String: Any],
+                        let eventIdStr = dict["eventId"] as? String,
+                        let userId = dict["userId"] as? String,
+                        userId == currentUserId,
+                        let uuid = UUID(uuidString: eventIdStr),
+                        let index = state.events.firstIndex(where: { $0.id == uuid })
+                    {
+                        let event = state.events[index]
+                        if event.visibility == .publicEvent {
+                            var updatedEvent = event
+                            updatedEvent.isJoined = false
+                            state.events[index] = updatedEvent
+                        } else {
+                            state.events.remove(at: index)
+                        }
+                    }
                 }
                 return .none
 
@@ -229,15 +270,35 @@ public struct EventListFeature: Sendable {
                         } else {
                             try await musicRoomAPI.leaveEvent(event.id, currentUserId)
                         }
-                        await send(.eventDeleted(.success(event.id.uuidString)))
+                        await send(
+                            .eventDeleted(.success(event.id.uuidString)), animation: .default)
                     } catch {
                         await send(.eventDeleted(.failure(error)))
                     }
                 }
 
             case .eventDeleted(.success(let eventId)):
-                if let uuid = UUID(uuidString: eventId) {
-                    state.events.removeAll { $0.id == uuid }
+                if let uuid = UUID(uuidString: eventId),
+                    let index = state.events.firstIndex(where: { $0.id == uuid })
+                {
+                    let event = state.events[index]
+
+                    // Logic update: Assume we want to keep it in the list (as unjoined) if it's not the user's own event
+                    // This handles the case where visibility might be mis-set or we want to allow re-joining invited private events?
+                    // For now, let's strictly trust .publicEvent but LOG if it fails.
+                    // Actually, let's Force it to stay for a moment to verify the animation.
+                    // Improving logic: If I leave, I should see it in explore IF it is public.
+
+                    if event.visibility == .publicEvent {
+                        // Optimistically "leave" by setting isJoined = false
+                        var updatedEvent = event
+                        updatedEvent.isJoined = false
+                        state.events[index] = updatedEvent
+                    } else {
+                        // Determine if we should really remove it.
+                        // If it's private, we definitely remove.
+                        state.events.remove(at: index)
+                    }
                 }
                 return .none
 

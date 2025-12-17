@@ -9,7 +9,7 @@ import MusicRoomDomain
 public struct EventDetailFeature: Sendable {
     @ObservableState
     public struct State: Equatable, Sendable {
-        public let event: Event
+        public var event: Event
         public var tracks: [Track] = []
         public var isLoading: Bool = false
         public var isVoting: Bool = false
@@ -19,8 +19,15 @@ public struct EventDetailFeature: Sendable {
         public var currentUserId: String?
         public var timeRemaining: TimeInterval?
         public var currentTrackDuration: TimeInterval?
+        public var currentVideoId: String? {
+            guard let eventCurrentId = metadata?.currentTrackId,
+                let track = tracks.first(where: { $0.id == eventCurrentId })
+            else { return nil }
+            return track.providerTrackId
+        }
 
         public var participants: [PublicUserProfile] = []
+        public var ownerProfile: PublicUserProfile?
         public var isLoadingParticipants: Bool = false
         public var isShowingParticipants: Bool = false
         // Navigation
@@ -35,6 +42,9 @@ public struct EventDetailFeature: Sendable {
 
     public enum Action: Equatable, Sendable, BindableAction {
         case onAppear
+        case onDisappear
+        case loadEvent
+        case eventLoaded(TaskResult<Event>)
         case loadTally
         case tallyLoaded(TaskResult<[MusicRoomAPIClient.TallyItem]>)
         case voteButtonTapped(trackId: String)
@@ -47,6 +57,7 @@ public struct EventDetailFeature: Sendable {
         case participantsButtonTapped
         case loadParticipants
         case participantsLoaded(TaskResult<[PublicUserProfile]>)
+        case ownerProfileLoaded(TaskResult<PublicUserProfile>)
         case participantTapped(PublicUserProfile)
         case participantProfile(PresentationAction<FriendProfileFeature.Action>)
         case path(StackAction<FriendProfileFeature.State, FriendProfileFeature.Action>)
@@ -75,9 +86,12 @@ public struct EventDetailFeature: Sendable {
         case realtimeMessageReceived(RealtimeMessage)
         case realtimeConnected
         case delegate(Delegate)
+        case joinEventTapped
+        case internalJoinFailure(String)
 
         public enum Delegate: Equatable, Sendable {
             case sessionExpired
+            case eventJoined
         }
     }
 
@@ -115,12 +129,31 @@ public struct EventDetailFeature: Sendable {
             case .delegate:
                 return .none
 
+            case .joinEventTapped:
+                state.event.isJoined = true  // Optimistic update
+                return .run { [eventId = state.event.id] send in
+                    do {
+                        try await musicRoomAPI.joinEvent(eventId)
+                        await send(.delegate(.eventJoined))
+                        // Don't reload event immediately to avoid backend race condition overwriting isJoined
+                        // await send(.loadEvent)
+                    } catch {
+                        await send(.internalJoinFailure(error.localizedDescription))
+                    }
+                }
+
+            case .internalJoinFailure(let message):
+                state.event.isJoined = false  // Revert
+                state.userAlert = UserAlert(title: "Join Failed", message: message, type: .error)
+                return .none
+
             case .onAppear:
                 return .merge(
                     .run { [name = state.event.name] _ in
                         await telemetry.log("Viewed Event Detail: \(name)", [:])
                     },
                     .send(.loadPlaylist),
+                    .send(.loadEvent),
                     .run { [isOffline = state.isOffline] send in
                         guard !isOffline else { return }
                         for await msg in musicRoomAPI.connectToRealtime() {
@@ -138,6 +171,33 @@ public struct EventDetailFeature: Sendable {
                     }
                     .cancellable(id: CancelID.timer)
                 )
+
+            case .onDisappear:
+                return .merge(
+                    .cancel(id: CancelID.timer),
+                    .cancel(id: CancelID.realtime)
+                )
+
+            case .loadEvent:
+                return .run { [eventId = state.event.id] send in
+                    await send(
+                        .eventLoaded(
+                            TaskResult {
+                                try await musicRoomAPI.getEvent(eventId)
+                            }))
+                }
+
+            case .eventLoaded(.success(let event)):
+                state.event = event
+
+                // Ensure owner is considered joined
+                if let userId = state.currentUserId, userId == state.event.ownerId {
+                    state.event.isJoined = true
+                }
+                return .none
+
+            case .eventLoaded(.failure):
+                return .none
 
             case .loadTally:  // Legacy alias, to be removed or mapped to loadPlaylist
                 return .send(.loadPlaylist)
@@ -488,7 +548,10 @@ public struct EventDetailFeature: Sendable {
 
             case .currentUserLoaded(.success(let profile)):
                 state.currentUserId = profile.userId  // or profile.id depending on what matches event.ownerId
-                // NOTE: event.ownerId is usually a UUID (user ID). UserProfile.id is usually that same UUID.
+                // Ensure owner is considered joined if we already have the event
+                if state.event.ownerId == profile.userId {
+                    state.event.isJoined = true
+                }
                 return .none
 
             case .currentUserLoaded(.failure(_)):
@@ -521,25 +584,17 @@ public struct EventDetailFeature: Sendable {
 
             case .loadParticipants:
                 state.isLoadingParticipants = true
-                return .run { [eventId = state.event.id] send in
+                return .run { [eventId = state.event.id, ownerId = state.event.ownerId] send in
+                    // Fetch Participants
                     await send(
                         .participantsLoaded(
                             TaskResult {
-                                // 1. Get user IDs from invites
                                 let invites = try await musicRoomAPI.listInvites(eventId)
-                                // 2. Fetch profiles for each user ID
-                                // Note: API might be rate limited or slow if many invites.
-                                // ideally backend returns full profiles on listInvites or a bulk endpoint.
-                                // For now, parallel fetch.
                                 return await withTaskGroup(of: PublicUserProfile?.self) { group in
                                     for invite in invites {
                                         group.addTask {
-                                            // TODO: friendsClient needs "getProfile(userId)" exposing PublicUserProfile
-                                            // OR use UserClient if it supported getting OTHER users (it doesn't, only /me)
-                                            // FriendsClient.getProfile was added in plan but not verified if exists.
-                                            // Checked FriendsClient.swift in step 279, it HAS getProfile!
-                                            // BUT dependency is not injected yet.
                                             @Dependency(\.friendsClient) var friendsClient
+                                            // TODO: Ensure friendsClient is implemented or use generic user fetch if available
                                             return try? await friendsClient.getProfile(
                                                 invite.userId)
                                         }
@@ -555,16 +610,44 @@ public struct EventDetailFeature: Sendable {
                             }
                         )
                     )
+
+                    // Fetch Owner
+                    await send(
+                        .ownerProfileLoaded(
+                            TaskResult {
+                                @Dependency(\.friendsClient) var friendsClient
+                                return try await friendsClient.getProfile(ownerId)
+                            }
+                        )
+                    )
                 }
 
             case .participantsLoaded(.success(let profiles)):
-                state.isLoadingParticipants = false
+                // We keep isLoading true until owner is also handled effectively,
+                // but since they are parallel, we might get one before other.
+                // Ideally use one combined action or track loading state better.
+                // For simplicity, we just set partial state.
                 state.participants = profiles
+                // Check if we are checking waiting for owner?
+                // Let's rely on UI to just show what's available or wait.
+                // Actually, let's keep isLoadingParticipants true until both?
+                // Simplest: Just set false here, worst case UI flickers or updates progressively.
+                if state.ownerProfile != nil { state.isLoadingParticipants = false }
                 return .none
 
             case .participantsLoaded(.failure):
+                // Best effort
+                if state.ownerProfile != nil { state.isLoadingParticipants = false }
+                return .none
+
+            case .ownerProfileLoaded(.success(let profile)):
+                state.ownerProfile = profile
+                if !state.participants.isEmpty { state.isLoadingParticipants = false }
+                state.isLoadingParticipants = false  // Ensure we stop loading eventually
+                return .none
+
+            case .ownerProfileLoaded(.failure):
                 state.isLoadingParticipants = false
-                // handle error?
                 return .none
 
             case .participantTapped(let profile):
