@@ -146,6 +146,9 @@ public struct SettingsView: View {
                 }
             }
             .navigationTitle("Backend Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .preferredColorScheme(.dark)
             .task {
                 await viewStore.send(.task).finish()
             }
