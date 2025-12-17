@@ -15,6 +15,7 @@ public struct EventListFeature: Sendable {
         @Presents public var createEvent: CreateEventFeature.State?
 
         public var isOffline: Bool = false
+        public var currentUserId: String?
 
         public init() {}
     }
@@ -31,11 +32,19 @@ public struct EventListFeature: Sendable {
         case path(StackAction<EventDetailFeature.State, EventDetailFeature.Action>)
         case networkStatusChanged(NetworkStatus)
         case delegate(Delegate)
+        case fetchCurrentUser
+        case currentUserLoaded(Result<String, Error>)
+        case startRealtimeConnection
+        case realtimeMessageReceived(RealtimeMessage)
+        case deleteEvent(Event)
+        case eventDeleted(Result<String, Error>)
 
         public enum Delegate: Equatable, Sendable {
             case sessionExpired
         }
     }
+
+    private enum CancelID { case realtime }
 
     // Dependencies
     @Dependency(\.musicRoomAPI) var musicRoomAPI
@@ -50,7 +59,11 @@ public struct EventListFeature: Sendable {
             switch action {
             case .onAppear:
                 // Start network monitor
-                return .send(.loadEvents)
+                return .merge(
+                    .send(.loadEvents),
+                    .send(.fetchCurrentUser),
+                    .send(.startRealtimeConnection)
+                )
 
             case .networkStatusChanged(let status):
                 state.isOffline = (status == .unsatisfied || status == .requiresConnection)
@@ -158,6 +171,79 @@ public struct EventListFeature: Sendable {
 
             case .path:
                 return .none
+
+            case .fetchCurrentUser:
+                return .run { send in
+                    do {
+                        let response = try await musicRoomAPI.authMe()
+                        await send(.currentUserLoaded(.success(response.userId)))
+                    } catch {
+                        await send(.currentUserLoaded(.failure(error)))
+                    }
+                }
+
+            case .currentUserLoaded(.success(let userId)):
+                state.currentUserId = userId
+                return .none
+
+            case .currentUserLoaded(.failure):
+                // Silently fail, maybe retry later or rely on existing auth flows
+                return .none
+
+            case .startRealtimeConnection:
+                return .run { send in
+                    for await message in musicRoomAPI.connectToRealtime() {
+                        await send(.realtimeMessageReceived(message))
+                    }
+                }
+                .cancellable(id: CancelID.realtime, cancelInFlight: true)
+
+            case .realtimeMessageReceived(let message):
+                guard let currentUserId = state.currentUserId else { return .none }
+
+                if message.type == "playlist.invited" {
+                    if let payload = try? JSONDecoder().decode(
+                        PlaylistInvitedPayload.self, from: JSONEncoder().encode(message.payload))
+                    {
+                        if payload.userId == currentUserId {
+                            return .send(.loadEvents)
+                        }
+                    }
+                } else if message.type == "playlist.created" {
+                    if let payload = try? JSONDecoder().decode(
+                        PlaylistCreatedPayload.self, from: JSONEncoder().encode(message.payload))
+                    {
+                        if payload.playlist.ownerId == currentUserId || payload.playlist.isPublic {
+                            return .send(.loadEvents)
+                        }
+                    }
+                }
+                return .none
+
+            case .deleteEvent(let event):
+                guard let currentUserId = state.currentUserId else { return .none }
+                return .run { send in
+                    do {
+                        if event.ownerId == currentUserId {
+                            try await musicRoomAPI.deleteEvent(event.id)
+                        } else {
+                            try await musicRoomAPI.leaveEvent(event.id, currentUserId)
+                        }
+                        await send(.eventDeleted(.success(event.id.uuidString)))
+                    } catch {
+                        await send(.eventDeleted(.failure(error)))
+                    }
+                }
+
+            case .eventDeleted(.success(let eventId)):
+                if let uuid = UUID(uuidString: eventId) {
+                    state.events.removeAll { $0.id == uuid }
+                }
+                return .none
+
+            case .eventDeleted(.failure(let error)):
+                state.errorMessage = "Failed to remove event: \(error.localizedDescription)"
+                return .none
             }
         }
         .forEach(\.path, action: \.path) {
@@ -204,6 +290,31 @@ extension EventListFeature.Action {
             return lStatus == rStatus
         case (.delegate(let lDelegate), .delegate(let rDelegate)):
             return lDelegate == rDelegate
+        case (.fetchCurrentUser, .fetchCurrentUser),
+            (.startRealtimeConnection, .startRealtimeConnection):
+            return true
+        case (.currentUserLoaded(let lResult), .currentUserLoaded(let rResult)):
+            switch (lResult, rResult) {
+            case (.success(let lUser), .success(let rUser)):
+                return lUser == rUser
+            case (.failure(let lError), .failure(let rError)):
+                return lError.localizedDescription == rError.localizedDescription
+            default:
+                return false
+            }
+        case (.realtimeMessageReceived(let lMsg), .realtimeMessageReceived(let rMsg)):
+            return lMsg == rMsg
+        case (.deleteEvent(let lEvent), .deleteEvent(let rEvent)):
+            return lEvent == rEvent
+        case (.eventDeleted(let lResult), .eventDeleted(let rResult)):
+            switch (lResult, rResult) {
+            case (.success(let lId), .success(let rId)):
+                return lId == rId
+            case (.failure(let lError), .failure(let rError)):
+                return lError.localizedDescription == rError.localizedDescription
+            default:
+                return false
+            }
         default:
             return false
         }

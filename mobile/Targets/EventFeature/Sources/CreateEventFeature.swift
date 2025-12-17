@@ -1,7 +1,9 @@
+import AppSettingsClient
+import AppSupportClients  // For Friend model
 import ComposableArchitecture
-import Foundation
 import MusicRoomAPI
 import MusicRoomDomain
+import SwiftUI  // For Binding
 
 @Reducer
 public struct CreateEventFeature: Sendable {
@@ -13,26 +15,73 @@ public struct CreateEventFeature: Sendable {
         public var isLoading: Bool = false
         public var errorMessage: String?
 
+        // Invite Friends
+        public var friends: [Friend] = []
+        public var selectedFriendIDs: Set<String> = []
+
         public init() {}
     }
 
     public enum Action: BindableAction, Sendable, Equatable {
         case binding(BindingAction<State>)
+        case onAppear
+        case friendsLoaded(Result<[Friend], ErrorBinder>)  // Error needs to be Equatable
+        case toggleFriendSelection(String)
         case createButtonTapped
         case cancelButtonTapped
-        case createResponse(Result<Event, Error>)
+        case createResponse(Result<Event, ErrorBinder>)  // Use Wrapper for Error Equatable conformance if needed, or just standard Error (TCA handles it often, but explicit Equatable is safer)
+    }
+
+    // Simple Error Wrapper for Equatable
+    public struct ErrorBinder: Error, Equatable, Sendable {
+        let message: String
+        public init(_ error: Error) {
+            self.message = error.localizedDescription
+        }
     }
 
     @Dependency(\.musicRoomAPI) var musicRoomAPI
+    @Dependency(\.friendsClient) var friendsClient
+    @Dependency(\.appSettings) var appSettings
     @Dependency(\.dismiss) var dismiss
 
     public init() {}
 
     public var body: some ReducerOf<Self> {
+        let friendsClient = self.friendsClient
+        let musicRoomAPI = self.musicRoomAPI
+
         BindingReducer()
         Reduce { state, action in
             switch action {
             case .binding:
+                return .none
+
+            case .onAppear:
+                return .run { send in
+                    do {
+                        let friends = try await friendsClient.listFriends()
+                        await send(.friendsLoaded(.success(friends)))
+                    } catch {
+                        await send(.friendsLoaded(.failure(ErrorBinder(error))))
+                    }
+                }
+
+            case .friendsLoaded(.success(let friends)):
+                state.friends = friends
+                return .none
+
+            case .friendsLoaded(.failure(let error)):
+                // Just log or show error? Maybe failing to load friends shouldn't block creation.
+                print("Failed to load friends: \(error.message)")
+                return .none
+
+            case .toggleFriendSelection(let id):
+                if state.selectedFriendIDs.contains(id) {
+                    state.selectedFriendIDs.remove(id)
+                } else {
+                    state.selectedFriendIDs.insert(id)
+                }
                 return .none
 
             case .createButtonTapped:
@@ -46,18 +95,43 @@ public struct CreateEventFeature: Sendable {
                 return .run {
                     [
                         name = state.name, visibility = state.visibility,
-                        licenseMode = state.licenseMode
+                        licenseMode = state.licenseMode,
+                        selectedFriendIDs = state.selectedFriendIDs
                     ] send in
                     let request = CreateEventRequest(
                         name: name,
                         visibility: visibility,
                         licenseMode: licenseMode
                     )
-                    await send(
-                        .createResponse(
-                            Result {
-                                try await musicRoomAPI.createEvent(request)
-                            }))
+
+                    do {
+                        let event = try await musicRoomAPI.createEvent(request)
+
+                        // Send Invites if any
+                        // We do this in parallel or serial? Serial is safer.
+                        // Errors here? Should we fail the whole flow?
+                        // Ideally we warn user "Event created but failed to invite X".
+                        // For MVP, try best effort.
+
+                        if !selectedFriendIDs.isEmpty {
+                            await withTaskGroup(of: Void.self) { group in
+                                for friendID in selectedFriendIDs {
+                                    group.addTask {
+                                        do {
+                                            try await musicRoomAPI.inviteUser(event.id, friendID)
+                                        } catch {
+                                            print("Failed to invite \(friendID): \(error)")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        await send(.createResponse(.success(event)))
+
+                    } catch {
+                        await send(.createResponse(.failure(ErrorBinder(error))))
+                    }
                 }
 
             case .createResponse(.success):
@@ -66,8 +140,7 @@ public struct CreateEventFeature: Sendable {
 
             case .createResponse(.failure(let error)):
                 state.isLoading = false
-                state.errorMessage = error.localizedDescription
-                state.errorMessage = error.localizedDescription
+                state.errorMessage = error.message
                 return .none
 
             case .cancelButtonTapped:
@@ -75,23 +148,14 @@ public struct CreateEventFeature: Sendable {
             }
         }
     }
-}
 
-extension CreateEventFeature.Action {
-    public static func == (lhs: CreateEventFeature.Action, rhs: CreateEventFeature.Action) -> Bool {
-        switch (lhs, rhs) {
-        case (.binding(let l), .binding(let r)):
-            return l == r
-        case (.createButtonTapped, .createButtonTapped):
-            return true
-        case (.cancelButtonTapped, .cancelButtonTapped):
-            return true
-        case (.createResponse(.success(let l)), .createResponse(.success(let r))):
-            return l == r
-        case (.createResponse(.failure(let l)), .createResponse(.failure(let r))):
-            return l.localizedDescription == r.localizedDescription
-        default:
-            return false
-        }
+    private func normalizeUrl(_ url: String?) -> String? {
+        guard let url, !url.isEmpty else { return url }
+        if url.lowercased().hasPrefix("http") { return url }
+        let settings = appSettings.load()
+        let baseUrlString = settings.backendURL.absoluteString.trimmingCharacters(
+            in: .init(charactersIn: "/"))
+        let cleanPath = url.trimmingCharacters(in: .init(charactersIn: "/"))
+        return "\(baseUrlString)/\(cleanPath)"
     }
 }

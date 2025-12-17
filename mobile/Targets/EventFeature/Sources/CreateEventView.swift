@@ -1,3 +1,4 @@
+import AppSupportClients
 import ComposableArchitecture
 import MusicRoomDomain
 import MusicRoomUI
@@ -62,6 +63,55 @@ public struct CreateEventView: View {
                     .background(GlassView(cornerRadius: 20))
                     .padding(.horizontal)
 
+                    // Friend Selection
+                    if !store.friends.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Invite Friends")
+                                .font(.liquidBody.bold())
+                                .foregroundStyle(.white)
+                                .padding(.leading, 4)
+
+                            ScrollView {
+                                LazyVStack(spacing: 8) {
+                                    ForEach(store.friends) { friend in
+                                        Button(action: {
+                                            store.send(.toggleFriendSelection(friend.id))
+                                        }) {
+                                            HStack {
+                                                AsyncImage(url: URL(string: friend.avatarUrl ?? ""))
+                                                { image in
+                                                    image.resizable().scaledToFill()
+                                                } placeholder: {
+                                                    Color.gray.opacity(0.3)
+                                                }
+                                                .frame(width: 40, height: 40)
+                                                .clipShape(Circle())
+
+                                                Text(friend.username)
+                                                    .font(.liquidBody)
+                                                    .foregroundStyle(.white)
+
+                                                Spacer()
+
+                                                if store.selectedFriendIDs.contains(friend.id) {
+                                                    Image(systemName: "checkmark.circle.fill")
+                                                        .foregroundStyle(Color.liquidAccent)
+                                                } else {
+                                                    Image(systemName: "circle")
+                                                        .foregroundStyle(.gray)
+                                                }
+                                            }
+                                            .padding()
+                                            .background(GlassView(cornerRadius: 12))
+                                        }
+                                    }
+                                }
+                            }
+                            .frame(maxHeight: 200)  // Limit height
+                        }
+                        .padding(.horizontal)
+                    }
+
                     if let error = store.errorMessage {
                         Text(error)
                             .foregroundStyle(.red)
@@ -97,6 +147,9 @@ public struct CreateEventView: View {
                         store.send(.cancelButtonTapped)
                     }
                 }
+            }
+            .task {
+                store.send(.onAppear)
             }
         }
         .colorScheme(.dark)
