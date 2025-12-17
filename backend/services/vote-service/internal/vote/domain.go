@@ -24,6 +24,7 @@ type Event struct {
 	VoteEnd     *time.Time `json:"voteEnd,omitempty"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	UpdatedAt   time.Time  `json:"updatedAt"`
+	IsJoined    bool       `json:"isJoined"`
 }
 
 type VoteResponse struct {

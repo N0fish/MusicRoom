@@ -2,6 +2,7 @@ package vote
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
@@ -47,8 +48,13 @@ func (s *HTTPServer) handleCreateInvite(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if ev.OwnerID != userID {
-		writeError(w, http.StatusForbidden, "forbidden")
-		return
+		// Allow self-invite for public events (Joining)
+		if ev.Visibility == visibilityPublic && body.UserID == userID {
+			// Allowed
+		} else {
+			writeError(w, http.StatusForbidden, "forbidden")
+			return
+		}
 	}
 
 	if err := checkUserExists(r.Context(), s.userServiceURL, body.UserID); err != nil {
@@ -136,6 +142,11 @@ func (s *HTTPServer) handleDeleteInvite(w http.ResponseWriter, r *http.Request) 
 			}
 		}
 	}()
+
+	go s.publishEvent(context.Background(), "event.left", map[string]string{
+		"eventId": id,
+		"userId":  invitedID,
+	})
 
 	w.WriteHeader(http.StatusNoContent)
 }

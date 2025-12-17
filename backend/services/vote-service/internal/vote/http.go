@@ -13,14 +13,16 @@ type HTTPServer struct {
 	rdb                *redis.Client
 	userServiceURL     string
 	playlistServiceURL string
+	realtimeServiceURL string
 }
 
-func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, userServiceURL, playlistServiceURL string) http.Handler {
+func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, userServiceURL, playlistServiceURL, realtimeServiceURL string) http.Handler {
 	s := &HTTPServer{
 		pool:               pool,
 		rdb:                rdb,
 		userServiceURL:     userServiceURL,
 		playlistServiceURL: playlistServiceURL,
+		realtimeServiceURL: realtimeServiceURL,
 	}
 
 	r := chi.NewRouter()

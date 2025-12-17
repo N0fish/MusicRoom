@@ -1,6 +1,7 @@
 package playlist
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -30,6 +31,7 @@ func (s *Server) Router(middlewares ...func(http.Handler) http.Handler) chi.Rout
 	r.Get("/health", s.handleHealth)
 
 	r.Get("/playlists", s.handleListPublicPlaylists)
+	r.Post("/realtime/event", s.handleBroadcastEvent)
 
 	r.Group(func(r chi.Router) {
 		r.Post("/playlists", s.handleCreatePlaylist)
@@ -57,4 +59,18 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"status":  "ok",
 		"service": "playlist-service",
 	})
+}
+
+// POST /realtime/event
+// Internal endpoint to broadcast events from other services (e.g. vote-service)
+func (s *Server) handleBroadcastEvent(w http.ResponseWriter, r *http.Request) {
+	// Decoding arbitrary JSON map
+	var body map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+
+	s.publishEvent(r.Context(), body)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

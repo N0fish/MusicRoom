@@ -2,6 +2,7 @@ package vote
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -30,7 +31,8 @@ func (s *HTTPServer) handleListEvents(w http.ResponseWriter, r *http.Request) {
 		rows, err = s.pool.Query(ctx, `
             SELECT DISTINCT e.id, e.name, e.visibility, e.owner_id, e.license_mode,
                    e.geo_lat, e.geo_lng, e.geo_radius_m, e.vote_start, e.vote_end,
-                   e.created_at, e.updated_at
+                   e.created_at, e.updated_at,
+                   CASE WHEN i.user_id IS NOT NULL OR e.owner_id = $1 THEN true ELSE false END as is_joined
             FROM events e
             LEFT JOIN event_invites i
               ON i.event_id = e.id AND i.user_id = $1
@@ -52,14 +54,31 @@ func (s *HTTPServer) handleListEvents(w http.ResponseWriter, r *http.Request) {
 		var geoLat, geoLng *float64
 		var geoRadius *int
 		var voteStart, voteEnd *time.Time
-		if err := rows.Scan(
-			&ev.ID, &ev.Name, &ev.Visibility, &ev.OwnerID, &ev.LicenseMode,
-			&geoLat, &geoLng, &geoRadius, &voteStart, &voteEnd,
-			&ev.CreatedAt, &ev.UpdatedAt,
-		); err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
-			return
+
+		if userID == "" {
+			// Public view, no user context
+			if err := rows.Scan(
+				&ev.ID, &ev.Name, &ev.Visibility, &ev.OwnerID, &ev.LicenseMode,
+				&geoLat, &geoLng, &geoRadius, &voteStart, &voteEnd,
+				&ev.CreatedAt, &ev.UpdatedAt,
+			); err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			ev.IsJoined = false
+		} else {
+			// User context, scan is_joined
+			if err := rows.Scan(
+				&ev.ID, &ev.Name, &ev.Visibility, &ev.OwnerID, &ev.LicenseMode,
+				&geoLat, &geoLng, &geoRadius, &voteStart, &voteEnd,
+				&ev.CreatedAt, &ev.UpdatedAt,
+				&ev.IsJoined,
+			); err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
 		}
+
 		ev.GeoLat = geoLat
 		ev.GeoLng = geoLng
 		ev.GeoRadiusM = geoRadius
@@ -259,6 +278,9 @@ func (s *HTTPServer) handleDeleteEvent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	go s.publishEvent(context.Background(), "event.deleted", map[string]string{"id": id})
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
