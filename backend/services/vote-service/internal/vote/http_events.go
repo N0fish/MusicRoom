@@ -249,6 +249,19 @@ func (s *HTTPServer) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if userID != "" {
+		if ev.OwnerID == userID {
+			ev.IsJoined = true
+		} else {
+			invited, err := isInvited(r.Context(), s.pool, ev.ID, userID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			ev.IsJoined = invited
+		}
+	}
+
 	writeJSON(w, http.StatusOK, ev)
 }
 

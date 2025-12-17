@@ -93,20 +93,22 @@ public struct EventDetailView: View {
                                 .padding(.horizontal)
 
                                 // Next Track Control (Play/Skip)
-                                Button {
-                                    store.send(.nextTrackButtonTapped)
-                                } label: {
-                                    HStack {
-                                        Image(systemName: "forward.end.fill")
-                                        Text("Next Track")
+                                if store.currentUserId == store.event.ownerId {
+                                    Button {
+                                        store.send(.nextTrackButtonTapped)
+                                    } label: {
+                                        HStack {
+                                            Image(systemName: "forward.end.fill")
+                                            Text("Next Track")
+                                        }
+                                        .font(.liquidBody.bold())
+                                        .foregroundStyle(.white)
+                                        .padding()
+                                        .background(Color.white.opacity(0.2))
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
                                     }
-                                    .font(.liquidBody.bold())
-                                    .foregroundStyle(.white)
-                                    .padding()
-                                    .background(Color.white.opacity(0.2))
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .padding(.horizontal)
                                 }
-                                .padding(.horizontal)
                             }
                         } else {
                             // Check if we have tracks ready to play
@@ -306,6 +308,10 @@ public struct EventDetailView: View {
         .sheet(item: $store.scope(state: \.musicSearch, action: \.musicSearch)) { searchStore in
             MusicSearchView(store: searchStore)
         }
+        .sheet(isPresented: $store.isShowingParticipants) {
+            ParticipantsListView(store: store)
+                .presentationDetents([.medium, .large])
+        }
     }
 }
 
@@ -451,7 +457,7 @@ struct ParticipantsListView: View {
     @Bindable var store: StoreOf<EventDetailFeature>
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $store.scope(state: \.path, action: \.path)) {
             List {
                 if store.isLoadingParticipants {
                     HStack {
@@ -497,6 +503,8 @@ struct ParticipantsListView: View {
                     }
                 }
             }
+        } destination: { store in
+            FriendProfileView(store: store)
         }
     }
 }

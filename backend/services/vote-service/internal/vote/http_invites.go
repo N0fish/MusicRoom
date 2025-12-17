@@ -169,8 +169,15 @@ func (s *HTTPServer) handleListInvites(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if ev.OwnerID != userID {
-		writeError(w, http.StatusForbidden, "forbidden")
-		return
+		invited, err := isInvited(r.Context(), s.pool, id, userID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if !invited {
+			writeError(w, http.StatusForbidden, "forbidden")
+			return
+		}
 	}
 
 	rows, err := s.pool.Query(r.Context(), `SELECT user_id, created_at FROM event_invites WHERE event_id=$1 ORDER BY created_at`, id)
