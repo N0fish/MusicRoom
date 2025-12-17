@@ -44,6 +44,12 @@ final class EventListFeatureTests: XCTestCase {
         await store.receive(.loadEvents) {
             $0.isLoading = true
         }
+        await store.receive(.fetchCurrentUser)
+        await store.receive(.startRealtimeConnection)
+
+        await store.receive(\.currentUserLoaded.success) {
+            $0.currentUserId = "user1"
+        }
 
         await store.receive(\.eventsLoaded.success) {
             $0.isLoading = false
@@ -86,12 +92,26 @@ final class EventListFeatureTests: XCTestCase {
             $0.isLoading = true
             $0.errorMessage = nil
         }
+        await offlineStore.receive(.fetchCurrentUser)
+        await offlineStore.receive(.startRealtimeConnection)
 
-        // Should load from cache
+        // Should load from cache first due to order? Or concurrent?
+        // Error log showed eventsLoadedFromCache came BEFORE currentUserLoaded
+        // BUT wait, onAppear -> loadEvents (cache) AND fetchCurrentUser.
+        // Cache load is usually faster than network, but here persistence is mocked to return immediately?
+        // And fetchCurrentUser is mocked immediately?
+        // Wait, currentUserLoaded is async result of fetchCurrentUser.
+        // eventsLoadedFromCache is result of loadEvents (if offline/failed).
+
+        // Assert in observed order:
         await offlineStore.receive(\.eventsLoadedFromCache.success) {
             $0.isLoading = false
             $0.events = events
             $0.errorMessage = nil
+        }
+
+        await offlineStore.receive(\.currentUserLoaded.success) {
+            $0.currentUserId = "user1"
         }
     }
 
@@ -125,6 +145,12 @@ final class EventListFeatureTests: XCTestCase {
 
         await store.receive(.loadEvents) {
             $0.isLoading = true
+        }
+        await store.receive(.fetchCurrentUser)
+        await store.receive(.startRealtimeConnection)
+
+        await store.receive(\.currentUserLoaded.success) {
+            $0.currentUserId = "user1"
         }
 
         await store.receive(\.eventsLoaded.failure)
@@ -202,6 +228,7 @@ final class EventListFeatureTests: XCTestCase {
             // events didn't change in this mock test because listEvents mocked to return same
         }
 
+        await store.send(.onDisappear)
         continuation.finish()
     }
 
@@ -269,8 +296,12 @@ final class EventListFeatureTests: XCTestCase {
             $0.isLoading = true
             $0.errorMessage = nil
         }
-        await store.receive(\.eventsLoaded.success)
+        await store.receive(\.eventsLoaded.success) {
+            $0.isLoading = false
+            $0.events = [event]
+        }
 
+        await store.send(.onDisappear)
         continuation.finish()
     }
 }

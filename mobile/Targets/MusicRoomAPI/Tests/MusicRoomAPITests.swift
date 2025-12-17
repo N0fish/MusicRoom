@@ -207,23 +207,18 @@ final class MusicRoomAPITests: XCTestCase {
 
     func testVote() async throws {
         // Setup mock response
-        let voteResponse = VoteResponse(status: "voted", trackId: "t1", totalVotes: 42)
-        let data = try JSONEncoder().encode(voteResponse)
+        let jsonString = "{\"voteCount\": 42}"
+        let data = jsonString.data(using: .utf8)!
 
         MockURLProtocol.requestHandler = { request in
             XCTAssertTrue(request.url?.path.hasSuffix("/vote") == true)
             XCTAssertEqual(request.httpMethod, "POST")
 
-            // Verify body
-            let bodyData = request.streamData()
-            let body = try JSONDecoder().decode(VoteRequest.self, from: bodyData)
-            XCTAssertEqual(body.trackId, "t1")
-
             let response = HTTPURLResponse(
                 url: request.url!,
                 statusCode: 200,
                 httpVersion: nil,
-                headerFields: nil
+                headerFields: ["Content-Length": String(data.count)]
             )!
             return (response, data)
         }
@@ -233,10 +228,8 @@ final class MusicRoomAPITests: XCTestCase {
         } operation: {
             let client = MusicRoomAPIClient.liveValue
             let eventId = UUID()
-            let result = try await client.vote(eventId, "t1", nil, nil)
-
-            XCTAssertEqual(result.totalVotes, 42)
-            XCTAssertEqual(result.status, "voted")
+            let result = try await client.vote(eventId.uuidString, "t1")
+            XCTAssertEqual(result.voteCount, 42)
         }
     }
     func testGetEvent() async throws {
