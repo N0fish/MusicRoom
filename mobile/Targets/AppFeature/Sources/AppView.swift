@@ -61,6 +61,14 @@ public struct AppView: View {
                 Label("Profile", systemImage: "person.crop.circle")
             }
 
+            // Tab 3: Friends
+            FriendsView(
+                store: store.scope(state: \.friends, action: \.friends)
+            )
+            .tabItem {
+                Label("Friends", systemImage: "person.2.fill")
+            }
+
             // Tab 3: Settings
             NavigationStack {
                 SettingsView(

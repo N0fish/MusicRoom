@@ -69,7 +69,7 @@ public struct ProfileFeature: Sendable {
 
             case .profileResponse(.success(let profile)):
                 state.isLoading = false
-                state.userProfile = profile
+                state.userProfile = normalizeAvatarUrl(profile)
                 state.editableDisplayName = profile.displayName
                 state.editableUsername = profile.username
                 state.editableEmail = profile.email ?? ""
@@ -146,7 +146,7 @@ public struct ProfileFeature: Sendable {
             case .updateProfileResponse(.success(let profile)):
                 state.isLoading = false
                 state.isEditing = false
-                state.userProfile = profile
+                state.userProfile = normalizeAvatarUrl(profile)
                 state.errorMessage = nil
                 return .run { [telemetry] _ in
                     await telemetry.log("user.profile.update.success", [:])
@@ -210,7 +210,7 @@ public struct ProfileFeature: Sendable {
 
             case .linkAccountResponse(.success(let profile)):
                 state.isLoading = false
-                state.userProfile = profile
+                state.userProfile = normalizeAvatarUrl(profile)
                 state.errorMessage = nil
                 return .run { [telemetry] _ in
                     await telemetry.log("user.account.link.success", [:])
@@ -326,6 +326,32 @@ public struct ProfileFeature: Sendable {
     }
 
     private func normalizeAvatarUrl(_ profile: UserProfile) -> UserProfile {
-        return profile
+        guard let avatarUrl = profile.avatarUrl, !avatarUrl.isEmpty else {
+            return profile
+        }
+
+        if avatarUrl.lowercased().hasPrefix("http") {
+            return profile
+        }
+
+        let settings = appSettings.load()
+        let baseUrlString = settings.backendURL.absoluteString.trimmingCharacters(
+            in: .init(charactersIn: "/"))
+        let cleanPath = avatarUrl.trimmingCharacters(in: .init(charactersIn: "/"))
+        let fullUrl = "\(baseUrlString)/\(cleanPath)"
+
+        return UserProfile(
+            id: profile.id,
+            userId: profile.userId,
+            username: profile.username,
+            displayName: profile.displayName,
+            avatarUrl: fullUrl,
+            hasCustomAvatar: profile.hasCustomAvatar,
+            bio: profile.bio,
+            visibility: profile.visibility,
+            preferences: profile.preferences,
+            linkedProviders: profile.linkedProviders,
+            email: profile.email
+        )
     }
 }

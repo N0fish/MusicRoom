@@ -22,6 +22,7 @@ public struct AppFeature: Sendable {
         public var settings: SettingsFeature.State
         public var eventList = EventListFeature.State()
         public var profile = ProfileFeature.State()
+        public var friends = FriendsFeature.State()
 
         // Legacy/Stream State (To be refactored into EventDetail later)
         public var latestStreamMessage: String
@@ -58,6 +59,7 @@ public struct AppFeature: Sendable {
         case authentication(AuthenticationFeature.Action)
         case eventList(EventListFeature.Action)
         case profile(ProfileFeature.Action)
+        case friends(FriendsFeature.Action)
         case task
         case destinationChanged(State.Destination)
         case startApp
@@ -92,6 +94,10 @@ public struct AppFeature: Sendable {
             ProfileFeature()
         }
 
+        Scope(state: \.friends, action: \.friends) {
+            FriendsFeature()
+        }
+
         Reduce { state, action in
             switch action {
             case .settings:
@@ -112,6 +118,9 @@ public struct AppFeature: Sendable {
                 }
 
             case .profile:
+                return .none
+
+            case .friends:
                 return .none
 
             case .authentication(.authResponse(.success)):

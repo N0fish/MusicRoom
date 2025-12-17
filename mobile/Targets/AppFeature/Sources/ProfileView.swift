@@ -275,8 +275,6 @@ public struct ProfileView: View {
             }
         }
         .navigationTitle("Profile")
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(store.isEditing ? "Save" : "Edit") {
