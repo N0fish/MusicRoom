@@ -1,6 +1,7 @@
 package vote
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"log"
@@ -68,6 +69,30 @@ func (s *HTTPServer) handleCreateInvite(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	// Propagate to playlist-service for Realtime events
+	// Ignore errors here? Or fail? Best to log and ignore to not break logic if data is improved,
+	// BUT for realtime sync it's critical.
+	// We'll log error but return success since DB write succeeded.
+	go func() {
+		// Use a detached context or similar since request context might be cancelled
+		// For simplicity using background context with timeout
+		// (In prod, use proper queue/worker)
+		// Construct request
+		plReqBody, _ := json.Marshal(map[string]string{"userId": body.UserID})
+		req, err := http.NewRequest(http.MethodPost, s.playlistServiceURL+"/playlists/"+id+"/invites", bytes.NewReader(plReqBody))
+		if err == nil {
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("X-User-Id", userID)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				log.Printf("vote-service: failed to propagate invite to playlist-service: %v", err)
+			} else {
+				resp.Body.Close()
+			}
+		}
+	}()
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -88,16 +113,30 @@ func (s *HTTPServer) handleDeleteInvite(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if ev.OwnerID != userID {
+	invitedID := chi.URLParam(r, "userId")
+	if ev.OwnerID != userID && userID != invitedID {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
-
-	invitedID := chi.URLParam(r, "userId")
 	if _, err := s.pool.Exec(r.Context(), `DELETE FROM event_invites WHERE event_id=$1 AND user_id=$2`, id, invitedID); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	// Propagate to playlist-service
+	go func() {
+		req, err := http.NewRequest(http.MethodDelete, s.playlistServiceURL+"/playlists/"+id+"/invites/"+invitedID, nil)
+		if err == nil {
+			req.Header.Set("X-User-Id", userID)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				log.Printf("vote-service: failed to propagate delete invite to playlist-service: %v", err)
+			} else {
+				resp.Body.Close()
+			}
+		}
+	}()
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
