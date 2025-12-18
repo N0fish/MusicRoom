@@ -6,7 +6,9 @@ async function loadPlaylist(playlistId) {
     alert('Failed to load playlist.')
     return
   }
-  const playlist = await res.json()
+  const data = await res.json() // The response is PlaylistWithTracks
+  const playlist = data.playlist;
+  const tracks = data.tracks;
 
   document.getElementById('current-playlist').style.display = 'block'
   document.getElementById('pl-name').textContent = playlist.name
@@ -14,8 +16,8 @@ async function loadPlaylist(playlistId) {
 
   const tracksUl = document.getElementById('pl-tracks')
   tracksUl.innerHTML = ''
-  if (playlist.tracks && playlist.tracks.length > 0) {
-    playlist.tracks.forEach(track => {
+  if (tracks && tracks.length > 0) {
+    tracks.forEach(track => {
       const li = document.createElement('li')
       li.textContent = `${track.title} — ${track.artist}`
       tracksUl.appendChild(li)
@@ -100,11 +102,21 @@ function createPlaylist() {
         body: JSON.stringify({ name: name, isPublic: true }) // Make it public by default for now
       })
 
+      const newPlaylist = await res.json()
+      console.log('New Playlist created response:', newPlaylist); // Debug log
+
       if (res.ok) {
         alert('Playlist created successfully!')
-        location.reload()
+        // Instead of reloading, auto-load the newly created playlist
+        if (newPlaylist && newPlaylist.id) {
+            loadPlaylist(newPlaylist.id);
+            // Optionally, refresh the public playlists list if needed
+            // location.reload(); // Removed to avoid losing context
+        } else {
+            location.reload(); // Fallback if ID is not returned
+        }
       } else {
-        const errorJson = await res.json()
+        const errorJson = newPlaylist // Error is already parsed here
         alert('Failed to create playlist: ' + (errorJson.error || 'Unknown error'))
       }
     }
