@@ -1,13 +1,13 @@
 SHELL := /bin/bash
-SERVICES := backend/services/api-gateway/cmd/service \
-						backend/services/auth-service/cmd/service \
-						backend/services/user-service/cmd/service \
-						backend/services/playlist-service/cmd/service \
-						backend/services/realtime-service/cmd/service \
-						backend/services/vote-service/cmd/service \
-						backend/services/mock-service/cmd/service \
-						backend/services/music-provider-service/cmd/service \
-						frontend/cmd/server
+SERVICES := backend/services/api-gateway \
+						backend/services/auth-service \
+						backend/services/user-service \
+						backend/services/playlist-service \
+						backend/services/realtime-service \
+						backend/services/vote-service \
+						backend/services/mock-service \
+						backend/services/music-provider-service \
+						frontend
 
 
 .PHONY: help
@@ -104,7 +104,7 @@ test-gateway:
 
 test-go:
 	@echo "Running Go tests (web/backend)..."
-	for s in $(SERVICES); do (cd $$s && go test ./...); done
+	for s in $(SERVICES); do (cd $$s && go test -cover ./...); done
 
 test-mobile:
 	@echo "Running mobile tests..."

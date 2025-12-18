@@ -17,12 +17,13 @@ build:
 
 test:
 	rm -rf TestResults.xcresult
-	xcodebuild test \
+	set -o pipefail && xcodebuild test \
 		-workspace $(WORKSPACE) \
 		-scheme $(SCHEME) \
 		-destination $(DESTINATION) \
 		-enableCodeCoverage YES \
-		-resultBundlePath TestResults.xcresult
+		-resultBundlePath TestResults.xcresult \
+		| xcbeautify
 
 clean:
 	xcodebuild clean \

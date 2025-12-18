@@ -5,62 +5,27 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// setupIntegrationTest connects to local DB or spins up a container.
+// setupIntegrationTest connects to local DB if available.
 // Returns a Server, a cleanup function, and the db pool.
 func setupIntegrationTest(t *testing.T) (*Server, func(), *pgxpool.Pool) {
 	ctx := context.Background()
 
 	var dbURL string
-	var container *postgres.PostgresContainer
-	var err error
 
 	// If DATABASE_URL is set, use it (Local dev or CI service)
 	if os.Getenv("DATABASE_URL") != "" {
 		dbURL = os.Getenv("DATABASE_URL")
 	} else {
-		// Otherwise, spin up a Testcontainer
-		msg := "Starting Postgres Testcontainer..."
-		if testing.Short() {
-			t.Skip("Skipping integration test in short mode (container required)")
-		}
-		t.Log(msg)
-
-		dbName := "musicroom_test"
-		dbUser := "user"
-		dbPassword := "password"
-
-		container, err = postgres.RunContainer(ctx,
-			testcontainers.WithImage("postgres:16-alpine"),
-			postgres.WithDatabase(dbName),
-			postgres.WithUsername(dbUser),
-			postgres.WithPassword(dbPassword),
-			testcontainers.WithWaitStrategy(
-				wait.ForLog("database system is ready to accept connections").
-					WithOccurrence(2).
-					WithStartupTimeout(20*time.Second)),
-		)
-		if err != nil {
-			t.Fatalf("failed to start postgres container: %v", err)
-		}
-
-		dbURL, err = container.ConnectionString(ctx, "sslmode=disable")
-		if err != nil {
-			t.Fatalf("failed to get connection string: %v", err)
-		}
+		t.Skip("Skipping integration test: DATABASE_URL not set (testcontainers removed)")
 	}
 
 	poolConfig, err := pgxpool.ParseConfig(dbURL)
@@ -92,11 +57,6 @@ func setupIntegrationTest(t *testing.T) (*Server, func(), *pgxpool.Pool) {
 	// Cleanup callback
 	cleanup := func() {
 		pool.Close()
-		if container != nil {
-			if err := container.Terminate(ctx); err != nil {
-				log.Printf("failed to terminate container: %v", err)
-			}
-		}
 	}
 
 	return srv, cleanup, pool
