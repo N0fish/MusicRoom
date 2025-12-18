@@ -686,7 +686,7 @@ public struct EventDetailFeature: Sendable {
 
             case .requestTransferOwnership(let newOwner):
                 #if DEBUG
-                print("Audit: Requesting Transfer to \(newOwner.username)")
+                    print("Audit: Requesting Transfer to \(newOwner.username)")
                 #endif
                 state.confirmationDialog = ConfirmationDialogState {
                     TextState("Transfer Ownership?")
@@ -706,7 +706,7 @@ public struct EventDetailFeature: Sendable {
 
             case .transferOwnership(let newOwner):
                 #if DEBUG
-                print("Audit: Executing Transfer to \(newOwner.userId)")
+                    print("Audit: Executing Transfer to \(newOwner.userId)")
                 #endif
                 state.confirmationDialog = nil
                 return .run { [eventId = state.event.id] send in
@@ -722,18 +722,16 @@ public struct EventDetailFeature: Sendable {
 
             case .transferOwnershipResponse(.success):
                 #if DEBUG
-                print("Audit: Transfer Success")
+                    print("Audit: Transfer Success")
                 #endif
-                state.userAlert = UserAlert(
                 state.userAlert = UserAlert(
                     title: "Success", message: "Ownership transferred.", type: .success)
                 return .send(.loadEvent)
 
             case .transferOwnershipResponse(.failure(let error)):
                 #if DEBUG
-                print("Audit: Transfer Failure: \(error.localizedDescription)")
+                    print("Audit: Transfer Failure: \(error.localizedDescription)")
                 #endif
-                state.userAlert = UserAlert(
                 state.userAlert = UserAlert(
                     title: "Transfer Failed", message: error.localizedDescription, type: .error)
                 return .none
