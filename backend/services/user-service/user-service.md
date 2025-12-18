@@ -100,7 +100,7 @@ ex responce :
 	"userId": "target-user-id",
 	"username": "wild-lemur",
 	"displayName": "",
-	"avatarUrl": "/static/avatars/default.svg",
+	"avatarUrl": "/static/avatars/default.png",
 	"visibility": "friends",
 	"preferences": {}
 }
@@ -121,13 +121,13 @@ ex responce :
 			"userId": "32dee96c-6da1-4671-b4a3-1a126169eb0f",
 			"username": "noisy-comet",
 			"displayName": "lofafa",
-			"avatarUrl": "/static/avatars/default.svg"
+			"avatarUrl": "/static/avatars/default.png"
 		},
 		{
 			"userId": "5234712b-3db3-4778-987a-e66ca5c628f1",
 			"username": "shiny-dragon",
 			"displayName": "lolo",
-			"avatarUrl": "/static/avatars/default.svg"
+			"avatarUrl": "/static/avatars/default.png"
 		}
 	]
 }
@@ -152,7 +152,7 @@ ex :
     "userId": "5234712b-3db3-4778-987a-e66ca5c628f1",
     "username": "shiny-dragon",
     "displayName": "lolo",
-    "avatarUrl": "/static/avatars/default.svg"
+    "avatarUrl": "/static/avatars/default.png"
   }
 }
 ```

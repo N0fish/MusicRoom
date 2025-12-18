@@ -8,7 +8,7 @@ import (
 )
 
 func defaultAvatarURL() string {
-	return getenv("DEFAULT_AVATAR_URL", "/avatars/default.svg")
+	return getenv("DEFAULT_AVATAR_URL", "/avatars/default.png")
 }
 
 func avatarDir() string {

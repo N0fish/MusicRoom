@@ -72,6 +72,7 @@ func main() {
 
 		// friends
 		r.Get("/users/me/friends", srv.handleListFriends)
+		r.Get("/users/me/friends/requests/incoming", srv.handleListIncomingFriendRequests)
 		r.Post("/users/me/friends/{id}/request", srv.handleSendFriendRequest)
 		r.Post("/users/me/friends/{id}/accept", srv.handleAcceptFriendRequest)
 		r.Post("/users/me/friends/{id}/reject", srv.handleRejectFriendRequest)

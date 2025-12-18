@@ -148,3 +148,12 @@ func PublicUserProfileFromModel(p UserProfile) PublicUserProfileResponse {
 		},
 	}
 }
+
+type IncomingFriendRequestItem struct {
+	From      FriendItem `json:"from"`
+	CreatedAt time.Time  `json:"createdAt"`
+}
+
+type IncomingFriendRequestsResponse struct {
+	Items []IncomingFriendRequestItem `json:"items"`
+}
