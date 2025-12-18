@@ -1,0 +1,1762 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>vote: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">vote-service/internal/vote/domain.go (66.7%)</option>
+				
+				<option value="file1">vote-service/internal/vote/http.go (100.0%)</option>
+				
+				<option value="file2">vote-service/internal/vote/http_events.go (75.9%)</option>
+				
+				<option value="file3">vote-service/internal/vote/http_invites.go (83.8%)</option>
+				
+				<option value="file4">vote-service/internal/vote/http_utils.go (97.5%)</option>
+				
+				<option value="file5">vote-service/internal/vote/http_votes.go (90.2%)</option>
+				
+				<option value="file6">vote-service/internal/vote/logic.go (95.3%)</option>
+				
+				<option value="file7">vote-service/internal/vote/mock_store.go (91.2%)</option>
+				
+				<option value="file8">vote-service/internal/vote/storage.go (0.7%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package vote
+
+import (
+        "errors"
+        "time"
+)
+
+var (
+        ErrVoteConflict = errors.New("vote conflict")
+)
+
+const (
+        visibilityPublic  = "public"
+        visibilityPrivate = "private"
+
+        licenseEveryone = "everyone"
+        licenseInvited  = "invited_only"
+        licenseGeoTime  = "geo_time"
+)
+
+type Event struct {
+        ID          string     `json:"id"`
+        Name        string     `json:"name"`
+        Visibility  string     `json:"visibility"`
+        OwnerID     string     `json:"ownerId"`
+        LicenseMode string     `json:"licenseMode"`
+        GeoLat      *float64   `json:"geoLat,omitempty"`
+        GeoLng      *float64   `json:"geoLng,omitempty"`
+        GeoRadiusM  *int       `json:"geoRadiusM,omitempty"`
+        VoteStart   *time.Time `json:"voteStart,omitempty"`
+        VoteEnd     *time.Time `json:"voteEnd,omitempty"`
+        CreatedAt   time.Time  `json:"createdAt"`
+        UpdatedAt   time.Time  `json:"updatedAt"`
+        IsJoined    bool       `json:"isJoined"`
+}
+
+type VoteResponse struct {
+        Status     string `json:"status"`
+        TrackID    string `json:"trackId"`
+        TotalVotes int    `json:"totalVotes"`
+}
+
+type voteRequest struct {
+        TrackID string   `json:"trackId"`
+        Lat     *float64 `json:"lat,omitempty"`
+        Lng     *float64 `json:"lng,omitempty"`
+}
+
+// err domain
+type voteError struct {
+        status int
+        msg    string
+}
+
+func (e *voteError) Error() string <span class="cov0" title="0">{
+        return e.msg
+}</span>
+
+type inviteError struct {
+        status int
+        msg    string
+}
+
+func (e *inviteError) Error() string <span class="cov8" title="1">{
+        return e.msg
+}</span>
+
+type validationError struct {
+        msg string
+}
+
+func (e *validationError) Error() string <span class="cov8" title="1">{
+        return e.msg
+}</span>
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package vote
+
+import (
+        "net/http"
+
+        "github.com/go-chi/chi/v5"
+        "github.com/jackc/pgx/v5/pgxpool"
+        "github.com/redis/go-redis/v9"
+)
+
+type HTTPServer struct {
+        pool               *pgxpool.Pool
+        store              Store
+        rdb                *redis.Client
+        httpClient         *http.Client
+        userServiceURL     string
+        playlistServiceURL string
+        realtimeServiceURL string
+}
+
+func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, userServiceURL, playlistServiceURL, realtimeServiceURL string) http.Handler <span class="cov8" title="1">{
+        s := &amp;HTTPServer{
+                pool:               pool,
+                store:              NewPostgresStore(pool),
+                rdb:                rdb,
+                httpClient:         http.DefaultClient,
+                userServiceURL:     userServiceURL,
+                playlistServiceURL: playlistServiceURL,
+                realtimeServiceURL: realtimeServiceURL,
+        }
+
+        r := chi.NewRouter()
+
+        // health
+        r.Get("/health", func(w http.ResponseWriter, r *http.Request) </span><span class="cov8" title="1">{
+                w.Header().Set("Content-Type", "application/json")
+                writeJSON(w, http.StatusOK, map[string]any{
+                        "status":  "ok",
+                        "service": "vote-service",
+                })
+        }</span>)
+
+        // events
+        <span class="cov8" title="1">r.Get("/events", s.handleListEvents)
+        r.Post("/events", s.handleCreateEvent)
+        r.Get("/events/{id}", s.handleGetEvent)
+        r.Delete("/events/{id}", s.handleDeleteEvent)
+        r.Patch("/events/{id}", s.handlePatchEvent)
+        r.Post("/events/{id}/transfer-ownership", s.handleTransferOwnership)
+
+        // invites
+        r.Post("/events/{id}/invites", s.handleCreateInvite)
+        r.Delete("/events/{id}/invites/{userId}", s.handleDeleteInvite)
+        r.Get("/events/{id}/invites", s.handleListInvites)
+
+        // voting
+        r.Post("/events/{id}/vote", s.handleVote)
+        r.Delete("/events/{id}/vote", s.handleRemoveVote)
+        r.Get("/events/{id}/tally", s.handleTally)
+
+        return r</span>
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package vote
+
+import (
+        "bytes"
+        "context"
+        "encoding/json"
+        "errors"
+        "net/http"
+        "time"
+
+        "github.com/go-chi/chi/v5"
+        "github.com/jackc/pgx/v5"
+)
+
+func (s *HTTPServer) handleListEvents(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        userID := r.Header.Get("X-User-Id")
+        ctx := r.Context()
+
+        var events []Event
+        var err error
+        if userID == "" </span><span class="cov8" title="1">{
+                events, err = s.store.ListEvents(ctx, "", visibilityPublic)
+        }</span> else<span class="cov8" title="1"> {
+                events, err = s.store.ListEvents(ctx, userID, visibilityPublic)
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov8" title="1">{
+                writeError(w, http.StatusInternalServerError, err.Error())
+                return
+        }</span>
+
+        <span class="cov8" title="1">writeJSON(w, http.StatusOK, events)</span>
+}
+
+func (s *HTTPServer) handleCreateEvent(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        userID := r.Header.Get("X-User-Id")
+        if userID == "" </span><span class="cov8" title="1">{
+                writeError(w, http.StatusUnauthorized, "missing X-User-Id")
+                return
+        }</span>
+
+        <span class="cov8" title="1">var body struct {
+                Name        string   `json:"name"`
+                Visibility  string   `json:"visibility"`
+                LicenseMode string   `json:"licenseMode"`
+                GeoLat      *float64 `json:"geoLat"`
+                GeoLng      *float64 `json:"geoLng"`
+                GeoRadiusM  *int     `json:"geoRadiusM"`
+                VoteStart   *string  `json:"voteStart"`
+                VoteEnd     *string  `json:"voteEnd"`
+        }
+        if err := json.NewDecoder(r.Body).Decode(&amp;body); err != nil </span><span class="cov8" title="1">{
+                writeError(w, http.StatusBadRequest, err.Error())
+                return
+        }</span>
+        <span class="cov8" title="1">if body.Name == "" </span><span class="cov8" title="1">{
+                writeError(w, http.StatusBadRequest, "name is required")
+                return
+        }</span>
+        <span class="cov8" title="1">if body.Visibility == "" </span><span class="cov8" title="1">{
+                body.Visibility = visibilityPublic
+        }</span>
+        <span class="cov8" title="1">if body.LicenseMode == "" </span><span class="cov8" title="1">{
+                body.LicenseMode = licenseEveryone
+        }</span>
+
+        <span class="cov8" title="1">var voteStart, voteEnd *time.Time
+        if body.VoteStart != nil &amp;&amp; *body.VoteStart != "" </span><span class="cov8" title="1">{
+                t, err := time.Parse(time.RFC3339, *body.VoteStart)
+                if err != nil </span><span class="cov0" title="0">{
+                        writeError(w, http.StatusBadRequest, "invalid voteStart (must be RFC3339)")
+                        return
+                }</span>
+                <span class="cov8" title="1">voteStart = &amp;t</span>
+        }
+        <span class="cov8" title="1">if body.VoteEnd != nil &amp;&amp; *body.VoteEnd != "" </span><span class="cov0" title="0">{
+                t, err := time.Parse(time.RFC3339, *body.VoteEnd)
+                if err != nil </span><span class="cov0" title="0">{
+                        writeError(w, http.StatusBadRequest, "invalid voteEnd (must be RFC3339)")
+                        return
+                }</span>
+                <span class="cov0" title="0">voteEnd = &amp;t</span>
+        }
+
+        <span class="cov8" title="1">if err := validateVotingWindow(voteStart, voteEnd, time.Now()); err != nil </span><span class="cov8" title="1">{
+                writeError(w, http.StatusBadRequest, err.Error())
+                return
+        }</span>
+
+        // 1. Create Playlist in playlist-service to get a synchronized ID
+        <span class="cov8" title="1">plReq := map[string]any{
+                "name":        body.Name,
+                "description": "Event Playlist for " + body.Name,
+                "isPublic":    true, // Events are public by default logic here? Or match visibility?
+                "editMode":    "everyone",
+        }
+        if body.Visibility == visibilityPrivate </span><span class="cov0" title="0">{
+                plReq["isPublic"] = false
+                plReq["editMode"] = "invited" // match event logic roughly
+        }</span>
+
+        <span class="cov8" title="1">plBody, _ := json.Marshal(plReq)
+        reqPL, err := http.NewRequestWithContext(r.Context(), http.MethodPost, s.playlistServiceURL+"/playlists", bytes.NewReader(plBody))
+        if err != nil </span><span class="cov0" title="0">{
+                writeError(w, http.StatusInternalServerError, "failed to create request: "+err.Error())
+                return
+        }</span>
+        <span class="cov8" title="1">reqPL.Header.Set("Content-Type", "application/json")
+        reqPL.Header.Set("X-User-Id", userID) // Pass through auth
+
+        // We use a default http client here since we didn't inject one, assuming s.httpClient or http.DefaultClient
+        // For now using http.DefaultClient but strictly we should add HttpClient to HTTPServer.
+        // TIMEOUT is crucial but for MVP using DefaultClient
+        respPL, err := s.httpClient.Do(reqPL)
+        if err != nil </span><span class="cov0" title="0">{
+                writeError(w, http.StatusBadGateway, "playlist-service unavailable: "+err.Error())
+                return
+        }</span>
+        <span class="cov8" title="1">defer respPL.Body.Close()
+
+        if respPL.StatusCode != http.StatusCreated &amp;&amp; respPL.StatusCode != http.StatusOK </span><span class="cov8" title="1">{
+                writeError(w, http.StatusBadGateway, "playlist-service failed")
+                return
+        }</span>
+
+        <span class="cov8" title="1">var plResp struct {
+                ID string `json:"id"`
+        }
+        if err := json.NewDecoder(respPL.Body).Decode(&amp;plResp); err != nil </span><span class="cov0" title="0">{
+                writeError(w, http.StatusInternalServerError, "failed to decode playlist response")
+                return
+        }</span>
+
+        // 2. Insert Event with the SAME ID
+        // Prepare event object
+        <span class="cov8" title="1">newEvent := &amp;Event{
+                ID:          plResp.ID,
+                Name:        body.Name,
+                Visibility:  body.Visibility,
+                OwnerID:     userID,
+                LicenseMode: body.LicenseMode,
+                GeoLat:      body.GeoLat,
+                GeoLng:      body.GeoLng,
+                GeoRadiusM:  body.GeoRadiusM,
+                VoteStart:   voteStart,
+                VoteEnd:     voteEnd,
+        }
+
+        id, err := s.store.CreateEvent(r.Context(), newEvent)
+        if err != nil </span><span class="cov8" title="1">{
+                writeError(w, http.StatusInternalServerError, err.Error())
+                return
+        }</span>
+
+        // Fetch the full event (including timestamps) to return to client
+        <span class="cov8" title="1">fullEvent, err := s.store.LoadEvent(r.Context(), id)
+        if err != nil </span><span class="cov0" title="0">{
+                writeError(w, http.StatusInternalServerError, "failed to load created event: "+err.Error())
+                return
+        }</span>
+
+        <span class="cov8" title="1">writeJSON(w, http.StatusCreated, fullEvent)</span>
+}
+
+func (s *HTTPServer) handleGetEvent(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        id := chi.URLParam(r, "id")
+        userID := r.Header.Get("X-User-Id")
+
+        ev, err := s.store.LoadEvent(r.Context(), id)
+        if err != nil </span><span class="cov8" title="1">{
+                if errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
+                        writeError(w, http.StatusNotFound, "event not found")
+                        return
+                }</span>
+                <span class="cov0" title="0">writeError(w, http.StatusInternalServerError, err.Error())
+                return</span>
+        }
+
+        <span class="cov8" title="1">if ev.Visibility == visibilityPrivate </span><span class="cov8" title="1">{
+                if userID == "" </span><span class="cov8" title="1">{
+                        writeError(w, http.StatusUnauthorized, "missing X-User-Id")
+                        return
+                }</span>
+
+                <span class="cov8" title="1">if ev.OwnerID != userID </span><span class="cov8" title="1">{
+                        invited, err := s.store.IsInvited(r.Context(), ev.ID, userID)
+                        if err != nil </span><span class="cov8" title="1">{
+                                writeError(w, http.StatusInternalServerError, err.Error())
+                                return
+                        }</span>
+                        <span class="cov8" title="1">if !invited </span><span class="cov8" title="1">{
+                                writeError(w, http.StatusForbidden, "event is private, invite required")
+                                return
+                        }</span>
+                }
+        }
+
+        <span class="cov8" title="1">if userID != "" </span><span class="cov8" title="1">{
+                if ev.OwnerID == userID </span><span class="cov8" title="1">{
+                        ev.IsJoined = true
+                }</span> else<span class="cov8" title="1"> {
+                        invited, err := s.store.IsInvited(r.Context(), ev.ID, userID)
+                        if err != nil </span><span class="cov0" title="0">{
+                                writeError(w, http.StatusInternalServerError, err.Error())
+                                return
+                        }</span>
+                        <span class="cov8" title="1">ev.IsJoined = invited</span>
+                }
+        }
+
+        <span class="cov8" title="1">writeJSON(w, http.StatusOK, ev)</span>
+}
+
+func (s *HTTPServer) handleDeleteEvent(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        id := chi.URLParam(r, "id")
+        userID := r.Header.Get("X-User-Id")
+        if userID == "" </span><span class="cov8" title="1">{
+                writeError(w, http.StatusUnauthorized, "missing X-User-Id")
+                return
+        }</span>
+
+        <span class="cov8" title="1">ev, err := s.store.LoadEvent(r.Context(), id)
+        if err != nil </span><span class="cov8" title="1">{
+                if errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
+                        writeError(w, http.StatusNotFound, "event not found")
+                        return
+                }</span>
+                <span class="cov0" title="0">writeError(w, http.StatusInternalServerError, err.Error())
+                return</span>
+        }
+        <span class="cov8" title="1">if ev.OwnerID != userID </span><span class="cov8" title="1">{
+                writeError(w, http.StatusForbidden, "forbidden")
+                return
+        }</span>
+
+        <span class="cov8" title="1">if err := s.store.DeleteEvent(r.Context(), id); err != nil </span><span class="cov0" title="0">{
+                writeError(w, http.StatusInternalServerError, err.Error())
+                return
+        }</span>
+
+        <span class="cov8" title="1">go s.publishEvent(context.Background(), "event.deleted", map[string]string{"id": id})
+
+        w.WriteHeader(http.StatusNoContent)</span>
+}
+
+func (s *HTTPServer) handlePatchEvent(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        id := chi.URLParam(r, "id")
+        userID := r.Header.Get("X-User-Id")
+        if userID == "" </span><span class="cov0" title="0">{
+                writeError(w, http.StatusUnauthorized, "missing X-User-Id")
+                return
+        }</span>
+
+        <span class="cov8" title="1">ev, err := s.store.LoadEvent(r.Context(), id)
+        if err != nil </span><span class="cov0" title="0">{
+                if errors.Is(err, pgx.ErrNoRows) </span><span class="cov0" title="0">{
+                        writeError(w, http.StatusNotFound, "event not found")
+                        return
+                }</span>
+                <span class="cov0" title="0">writeError(w, http.StatusInternalServerError, err.Error())
+                return</span>
+        }
+        <span class="cov8" title="1">if ev.OwnerID != userID </span><span class="cov0" title="0">{
+                writeError(w, http.StatusForbidden, "forbidden")
+                return
+        }</span>
+
+        <span class="cov8" title="1">var body struct {
+                Name        *string  `json:"name"`
+                Visibility  *string  `json:"visibility"`
+                LicenseMode *string  `json:"licenseMode"`
+                GeoLat      *float64 `json:"geoLat"`
+                GeoLng      *float64 `json:"geoLng"`
+                GeoRadiusM  *int     `json:"geoRadiusM"`
+                VoteStart   *string  `json:"voteStart"`
+                VoteEnd     *string  `json:"voteEnd"`
+        }
+        if err := json.NewDecoder(r.Body).Decode(&amp;body); err != nil </span><span class="cov0" title="0">{
+                writeError(w, http.StatusBadRequest, err.Error())
+                return
+        }</span>
+
+        <span class="cov8" title="1">newStart := ev.VoteStart
+        newEnd := ev.VoteEnd
+
+        updates := make(map[string]any)
+        if body.Name != nil &amp;&amp; *body.Name != "" </span><span class="cov8" title="1">{
+                updates["name"] = *body.Name
+                ev.Name = *body.Name
+        }</span>
+        <span class="cov8" title="1">if body.Visibility != nil &amp;&amp; *body.Visibility != "" </span><span class="cov0" title="0">{
+                updates["visibility"] = *body.Visibility
+                ev.Visibility = *body.Visibility
+        }</span>
+        <span class="cov8" title="1">if body.LicenseMode != nil &amp;&amp; *body.LicenseMode != "" </span><span class="cov8" title="1">{
+                updates["license_mode"] = *body.LicenseMode
+                ev.LicenseMode = *body.LicenseMode
+        }</span>
+        <span class="cov8" title="1">if body.GeoLat != nil </span><span class="cov8" title="1">{
+                updates["geo_lat"] = *body.GeoLat
+                ev.GeoLat = body.GeoLat
+        }</span>
+        <span class="cov8" title="1">if body.GeoLng != nil </span><span class="cov8" title="1">{
+                updates["geo_lng"] = *body.GeoLng
+                ev.GeoLng = body.GeoLng
+        }</span>
+        <span class="cov8" title="1">if body.GeoRadiusM != nil </span><span class="cov8" title="1">{
+                updates["geo_radius_m"] = *body.GeoRadiusM
+                ev.GeoRadiusM = body.GeoRadiusM
+        }</span>
+        <span class="cov8" title="1">if body.VoteStart != nil </span><span class="cov8" title="1">{
+                if *body.VoteStart == "" </span><span class="cov8" title="1">{
+                        updates["vote_start"] = nil
+                        newStart = nil
+                }</span> else<span class="cov8" title="1"> {
+                        t, err := time.Parse(time.RFC3339, *body.VoteStart)
+                        if err != nil </span><span class="cov8" title="1">{
+                                writeError(w, http.StatusBadRequest, "invalid voteStart")
+                                return
+                        }</span>
+                        <span class="cov0" title="0">updates["vote_start"] = t
+                        newStart = &amp;t</span>
+                }
+        }
+        <span class="cov8" title="1">if body.VoteEnd != nil </span><span class="cov8" title="1">{
+                if *body.VoteEnd == "" </span><span class="cov8" title="1">{
+                        updates["vote_end"] = nil
+                        newEnd = nil
+                }</span> else<span class="cov0" title="0"> {
+                        t, err := time.Parse(time.RFC3339, *body.VoteEnd)
+                        if err != nil </span><span class="cov0" title="0">{
+                                writeError(w, http.StatusBadRequest, "invalid voteEnd")
+                                return
+                        }</span>
+                        <span class="cov0" title="0">updates["vote_end"] = t
+                        newEnd = &amp;t</span>
+                }
+        }
+
+        <span class="cov8" title="1">if err := validateVotingWindow(newStart, newEnd, time.Now()); err != nil </span><span class="cov0" title="0">{
+                writeError(w, http.StatusBadRequest, err.Error())
+                return
+        }</span>
+
+        <span class="cov8" title="1">if len(updates) == 0 </span><span class="cov8" title="1">{
+                w.WriteHeader(http.StatusNoContent)
+                return
+        }</span>
+
+        <span class="cov8" title="1">if err := s.store.UpdateEvent(r.Context(), id, updates); err != nil </span><span class="cov8" title="1">{
+                if errors.Is(err, pgx.ErrNoRows) </span><span class="cov0" title="0">{
+                        writeError(w, http.StatusNotFound, "event not found")
+                        return
+                }</span>
+                <span class="cov8" title="1">writeError(w, http.StatusInternalServerError, err.Error())
+                return</span>
+        }
+        // ct check removed as UpdateEvent handles no rows error
+
+        <span class="cov8" title="1">updated, err := s.store.LoadEvent(r.Context(), id)
+        if err != nil </span><span class="cov8" title="1">{
+                writeError(w, http.StatusInternalServerError, err.Error())
+                return
+        }</span>
+
+        <span class="cov8" title="1">writeJSON(w, http.StatusOK, updated)</span>
+}
+
+func (s *HTTPServer) handleTransferOwnership(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        id := chi.URLParam(r, "id")
+        userID := r.Header.Get("X-User-Id")
+        if userID == "" </span><span class="cov0" title="0">{
+                writeError(w, http.StatusUnauthorized, "missing X-User-Id")
+                return
+        }</span>
+
+        <span class="cov8" title="1">var body struct {
+                NewOwnerID string `json:"newOwnerId"`
+        }
+        if err := json.NewDecoder(r.Body).Decode(&amp;body); err != nil </span><span class="cov8" title="1">{
+                writeError(w, http.StatusBadRequest, "invalid request body")
+                return
+        }</span>
+        <span class="cov8" title="1">if body.NewOwnerID == "" </span><span class="cov8" title="1">{
+                writeError(w, http.StatusBadRequest, "newOwnerId is required")
+                return
+        }</span>
+
+        // 1. Load event and verify current ownership
+        <span class="cov8" title="1">ev, err := s.store.LoadEvent(r.Context(), id)
+        if err != nil </span><span class="cov8" title="1">{
+                if errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
+                        writeError(w, http.StatusNotFound, "event not found")
+                        return
+                }</span>
+                <span class="cov0" title="0">writeError(w, http.StatusInternalServerError, err.Error())
+                return</span>
+        }
+
+        <span class="cov8" title="1">if ev.OwnerID != userID </span><span class="cov8" title="1">{
+                writeError(w, http.StatusForbidden, "only owner can transfer ownership")
+                return
+        }</span>
+
+        <span class="cov8" title="1">if ev.OwnerID == body.NewOwnerID </span><span class="cov0" title="0">{
+                writeError(w, http.StatusBadRequest, "already owner")
+                return
+        }</span>
+
+        // 2. Perform Transfer
+        // ideally we check if new owner exists or is valid user, but we trust the ID for now
+        // or we check if they are a participant (optional strictness)
+
+        // Update event owner
+        <span class="cov8" title="1">if err := s.store.TransferOwnership(r.Context(), id, body.NewOwnerID); err != nil </span><span class="cov8" title="1">{
+                writeError(w, http.StatusInternalServerError, "failed to update owner: "+err.Error())
+                return
+        }</span>
+
+        // 3. Notify updates
+        // Publish event updated message
+        <span class="cov8" title="1">go s.publishEvent(context.Background(), "event.updated", map[string]string{"id": id})
+        // Also specifically notify about ownership change if we had a specific event type,
+        // but "event.updated" should trigger re-fetch on clients.
+
+        w.WriteHeader(http.StatusOK)</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package vote
+
+import (
+        "bytes"
+        "context"
+        "encoding/json"
+        "errors"
+        "log"
+        "net/http"
+        "time"
+
+        "github.com/go-chi/chi/v5"
+        "github.com/jackc/pgx/v5"
+)
+
+type Invite struct {
+        UserID    string    `json:"userId"`
+        CreatedAt time.Time `json:"createdAt"`
+}
+
+func (s *HTTPServer) handleCreateInvite(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        id := chi.URLParam(r, "id")
+        userID := r.Header.Get("X-User-Id")
+        if userID == "" </span><span class="cov8" title="1">{
+                writeError(w, http.StatusUnauthorized, "missing X-User-Id")
+                return
+        }</span>
+
+        <span class="cov8" title="1">var body struct {
+                UserID string `json:"userId"`
+        }
+        if err := json.NewDecoder(r.Body).Decode(&amp;body); err != nil </span><span class="cov8" title="1">{
+                writeError(w, http.StatusBadRequest, err.Error())
+                return
+        }</span>
+        <span class="cov8" title="1">if body.UserID == "" </span><span class="cov8" title="1">{
+                writeError(w, http.StatusBadRequest, "userId is required")
+                return
+        }</span>
+
+        <span class="cov8" title="1">ev, err := s.store.LoadEvent(r.Context(), id)
+        if err != nil </span><span class="cov8" title="1">{
+                if errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
+                        writeError(w, http.StatusNotFound, "event not found")
+                        return
+                }</span>
+                <span class="cov0" title="0">writeError(w, http.StatusInternalServerError, err.Error())
+                return</span>
+        }
+        <span class="cov8" title="1">if ev.OwnerID != userID </span><span class="cov8" title="1">{
+                // Allow self-invite for public events (Joining)
+                if ev.Visibility == visibilityPublic &amp;&amp; body.UserID == userID </span>{<span class="cov8" title="1">
+                        // Allowed
+                }</span> else<span class="cov8" title="1"> {
+                        writeError(w, http.StatusForbidden, "forbidden")
+                        return
+                }</span>
+        }
+
+        <span class="cov8" title="1">if err := checkUserExists(r.Context(), s.httpClient, s.userServiceURL, body.UserID); err != nil </span><span class="cov8" title="1">{
+                var ie *inviteError
+                if errors.As(err, &amp;ie) </span><span class="cov8" title="1">{
+                        writeError(w, ie.status, ie.msg)
+                        return
+                }</span>
+                <span class="cov0" title="0">log.Printf("vote-service: check user exists: %v", err)
+                writeError(w, http.StatusBadGateway, "unable to verify user")
+                return</span>
+        }
+
+        <span class="cov8" title="1">if err := s.store.CreateInvite(r.Context(), id, body.UserID); err != nil </span><span class="cov8" title="1">{
+                writeError(w, http.StatusInternalServerError, err.Error())
+                return
+        }</span>
+
+        // Propagate to playlist-service for Realtime events
+        // Ignore errors here? Or fail? Best to log and ignore to not break logic if data is improved,
+        // BUT for realtime sync it's critical.
+        // We'll log error but return success since DB write succeeded.
+        <span class="cov8" title="1">go func() </span><span class="cov8" title="1">{
+                // Use a detached context or similar since request context might be cancelled
+                // For simplicity using background context with timeout
+                // (In prod, use proper queue/worker)
+                // Construct request
+                plReqBody, _ := json.Marshal(map[string]string{"userId": body.UserID})
+                req, err := http.NewRequest(http.MethodPost, s.playlistServiceURL+"/playlists/"+id+"/invites", bytes.NewReader(plReqBody))
+                if err == nil </span><span class="cov8" title="1">{
+                        req.Header.Set("Content-Type", "application/json")
+                        req.Header.Set("X-User-Id", userID)
+                        resp, err := s.httpClient.Do(req)
+                        if err != nil </span><span class="cov8" title="1">{
+                                log.Printf("vote-service: failed to propagate invite to playlist-service: %v", err)
+                        }</span> else<span class="cov0" title="0"> {
+                                resp.Body.Close()
+                        }</span>
+                }
+        }()
+
+        <span class="cov8" title="1">w.WriteHeader(http.StatusNoContent)</span>
+}
+
+func (s *HTTPServer) handleDeleteInvite(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        id := chi.URLParam(r, "id")
+        userID := r.Header.Get("X-User-Id")
+        if userID == "" </span><span class="cov0" title="0">{
+                writeError(w, http.StatusUnauthorized, "missing X-User-Id")
+                return
+        }</span>
+
+        <span class="cov8" title="1">ev, err := s.store.LoadEvent(r.Context(), id)
+        if err != nil </span><span class="cov8" title="1">{
+                if errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
+                        writeError(w, http.StatusNotFound, "event not found")
+                        return
+                }</span>
+                <span class="cov8" title="1">writeError(w, http.StatusInternalServerError, err.Error())
+                return</span>
+        }
+        <span class="cov8" title="1">invitedID := chi.URLParam(r, "userId")
+        if ev.OwnerID != userID &amp;&amp; userID != invitedID </span><span class="cov8" title="1">{
+                writeError(w, http.StatusForbidden, "forbidden")
+                return
+        }</span>
+        <span class="cov8" title="1">if err := s.store.DeleteInvite(r.Context(), id, invitedID); err != nil </span><span class="cov8" title="1">{
+                writeError(w, http.StatusInternalServerError, err.Error())
+                return
+        }</span>
+
+        // Propagate to playlist-service
+        <span class="cov8" title="1">go func() </span><span class="cov8" title="1">{
+                req, err := http.NewRequest(http.MethodDelete, s.playlistServiceURL+"/playlists/"+id+"/invites/"+invitedID, nil)
+                if err == nil </span><span class="cov8" title="1">{
+                        req.Header.Set("X-User-Id", userID)
+                        resp, err := s.httpClient.Do(req)
+                        if err != nil </span><span class="cov8" title="1">{
+                                log.Printf("vote-service: failed to propagate delete invite to playlist-service: %v", err)
+                        }</span> else<span class="cov0" title="0"> {
+                                resp.Body.Close()
+                        }</span>
+                }
+        }()
+
+        <span class="cov8" title="1">go s.publishEvent(context.Background(), "event.left", map[string]string{
+                "eventId": id,
+                "userId":  invitedID,
+        })
+
+        w.WriteHeader(http.StatusNoContent)</span>
+}
+
+func (s *HTTPServer) handleListInvites(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        id := chi.URLParam(r, "id")
+        userID := r.Header.Get("X-User-Id")
+        if userID == "" </span><span class="cov0" title="0">{
+                writeError(w, http.StatusUnauthorized, "missing X-User-Id")
+                return
+        }</span>
+
+        <span class="cov8" title="1">ev, err := s.store.LoadEvent(r.Context(), id)
+        if err != nil </span><span class="cov0" title="0">{
+                if errors.Is(err, pgx.ErrNoRows) </span><span class="cov0" title="0">{
+                        writeError(w, http.StatusNotFound, "event not found")
+                        return
+                }</span>
+                <span class="cov0" title="0">writeError(w, http.StatusInternalServerError, err.Error())
+                return</span>
+        }
+        <span class="cov8" title="1">if ev.OwnerID != userID </span><span class="cov8" title="1">{
+                invited, err := s.store.IsInvited(r.Context(), id, userID)
+                if err != nil </span><span class="cov8" title="1">{
+                        writeError(w, http.StatusInternalServerError, err.Error())
+                        return
+                }</span>
+                <span class="cov8" title="1">if !invited </span><span class="cov8" title="1">{
+                        writeError(w, http.StatusForbidden, "forbidden")
+                        return
+                }</span>
+        }
+
+        <span class="cov8" title="1">invites, err := s.store.ListInvites(r.Context(), id)
+        if err != nil </span><span class="cov8" title="1">{
+                writeError(w, http.StatusInternalServerError, err.Error())
+                return
+        }</span>
+
+        <span class="cov8" title="1">writeJSON(w, http.StatusOK, invites)</span>
+}
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package vote
+
+import (
+        "context"
+        "encoding/json"
+        "errors"
+        "net/http"
+)
+
+func join(parts []string, sep string) string <span class="cov8" title="1">{
+        if len(parts) == 0 </span><span class="cov8" title="1">{
+                return ""
+        }</span>
+        <span class="cov8" title="1">out := parts[0]
+        for i := 1; i &lt; len(parts); i++ </span><span class="cov8" title="1">{
+                out += sep + parts[i]
+        }</span>
+        <span class="cov8" title="1">return out</span>
+}
+
+func itoa(i int) string <span class="cov8" title="1">{
+        if i == 0 </span><span class="cov8" title="1">{
+                return "0"
+        }</span>
+        <span class="cov8" title="1">neg := false
+        if i &lt; 0 </span><span class="cov8" title="1">{
+                neg = true
+                i = -i
+        }</span>
+        <span class="cov8" title="1">var digits [20]byte
+        pos := len(digits)
+        for i &gt; 0 </span><span class="cov8" title="1">{
+                pos--
+                digits[pos] = byte('0' + i%10)
+                i /= 10
+        }</span>
+        <span class="cov8" title="1">if neg </span><span class="cov8" title="1">{
+                pos--
+                digits[pos] = '-'
+        }</span>
+        <span class="cov8" title="1">return string(digits[pos:])</span>
+}
+
+func writeError(w http.ResponseWriter, status int, msg string) <span class="cov8" title="1">{
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(status)
+        _ = json.NewEncoder(w).Encode(map[string]string{
+                "error": msg,
+        })
+}</span>
+
+func writeVoteError(w http.ResponseWriter, err error) <span class="cov8" title="1">{
+        var ve *voteError
+        if errors.As(err, &amp;ve) </span><span class="cov8" title="1">{
+                writeError(w, ve.status, ve.msg)
+                return
+        }</span>
+        <span class="cov8" title="1">writeError(w, http.StatusInternalServerError, err.Error())</span>
+}
+
+func writeJSON(w http.ResponseWriter, status int, v interface{}) <span class="cov8" title="1">{
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(status)
+        _ = json.NewEncoder(w).Encode(v)
+}</span>
+
+func (s *HTTPServer) publishEvent(ctx context.Context, eventType string, payload any) <span class="cov8" title="1">{
+        if s.rdb == nil </span><span class="cov8" title="1">{
+                return
+        }</span>
+
+        <span class="cov8" title="1">body := map[string]any{
+                "type":    eventType,
+                "payload": payload,
+        }
+        data, err := json.Marshal(body)
+        if err != nil </span><span class="cov8" title="1">{
+                return
+        }</span>
+
+        <span class="cov0" title="0">if err := s.rdb.Publish(ctx, "broadcast", string(data)).Err(); err != nil </span>{<span class="cov0" title="0">
+                // Log error preferably
+        }</span>
+}
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package vote
+
+import (
+        "encoding/json"
+        "net/http"
+
+        "github.com/go-chi/chi/v5"
+)
+
+type Row struct {
+        Track    string `json:"track"`
+        Count    int    `json:"count"`
+        IsMyVote bool   `json:"isMyVote"`
+}
+
+func (s *HTTPServer) handleVote(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        eventID := chi.URLParam(r, "id")
+        voterID := r.Header.Get("X-User-Id")
+        if voterID == "" </span><span class="cov8" title="1">{
+                writeError(w, http.StatusUnauthorized, "missing X-User-Id")
+                return
+        }</span>
+
+        <span class="cov8" title="1">var body voteRequest
+        if err := json.NewDecoder(r.Body).Decode(&amp;body); err != nil </span><span class="cov8" title="1">{
+                writeError(w, http.StatusBadRequest, err.Error())
+                return
+        }</span>
+        <span class="cov8" title="1">if body.TrackID == "" </span><span class="cov8" title="1">{
+                writeError(w, http.StatusBadRequest, "trackId is required")
+                return
+        }</span>
+        <span class="cov8" title="1">resp, err := registerVote(r.Context(), s.store, s.rdb, eventID, voterID, body.TrackID, body.Lat, body.Lng)
+        if err != nil </span><span class="cov8" title="1">{
+                writeVoteError(w, err)
+                return
+        }</span>
+
+        <span class="cov8" title="1">writeJSON(w, http.StatusOK, resp)</span>
+}
+
+func (s *HTTPServer) handleRemoveVote(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        eventID := chi.URLParam(r, "id")
+        voterID := r.Header.Get("X-User-Id")
+        if voterID == "" </span><span class="cov8" title="1">{
+                writeError(w, http.StatusUnauthorized, "missing X-User-Id")
+                return
+        }</span>
+
+        <span class="cov8" title="1">var body voteRequest
+        if err := json.NewDecoder(r.Body).Decode(&amp;body); err != nil </span><span class="cov0" title="0">{
+                writeError(w, http.StatusBadRequest, err.Error())
+                return
+        }</span>
+        <span class="cov8" title="1">if body.TrackID == "" </span><span class="cov0" title="0">{
+                writeError(w, http.StatusBadRequest, "trackId is required")
+                return
+        }</span>
+
+        <span class="cov8" title="1">resp, err := removeVote(r.Context(), s.store, s.rdb, eventID, voterID, body.TrackID)
+        if err != nil </span><span class="cov8" title="1">{
+                writeVoteError(w, err)
+                return
+        }</span>
+
+        <span class="cov8" title="1">writeJSON(w, http.StatusOK, resp)</span>
+}
+
+func (s *HTTPServer) handleTally(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        eventID := chi.URLParam(r, "id")
+        voterID := r.Header.Get("X-User-Id") // Optional? If missing, isMyVote is false.
+
+        out, err := s.store.GetVoteTally(r.Context(), eventID, voterID)
+        if err != nil </span><span class="cov8" title="1">{
+                writeError(w, http.StatusInternalServerError, err.Error())
+                return
+        }</span>
+
+        <span class="cov8" title="1">writeJSON(w, http.StatusOK, out)</span>
+}
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">package vote
+
+import (
+        "context"
+        "encoding/json"
+        "errors"
+        "fmt"
+        "math"
+        "net/http"
+        "net/url"
+        "time"
+
+        "github.com/jackc/pgx/v5"
+        "github.com/redis/go-redis/v9"
+)
+
+func registerVote(ctx context.Context, store Store, rdb *redis.Client, eventID, voterID, trackID string, lat, lng *float64) (*VoteResponse, error) <span class="cov8" title="1">{
+        ev, err := store.LoadEvent(ctx, eventID)
+        if err != nil </span><span class="cov8" title="1">{
+                if errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
+                        return nil, &amp;voteError{status: http.StatusNotFound, msg: "event not found"}
+                }</span>
+                <span class="cov8" title="1">return nil, err</span>
+        }
+
+        <span class="cov8" title="1">if ok, reason, err := canUserVote(ctx, store, ev, voterID, lat, lng, time.Now()); err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span> else<span class="cov8" title="1"> if !ok </span><span class="cov8" title="1">{
+                return nil, &amp;voteError{status: http.StatusForbidden, msg: reason}
+        }</span>
+
+        <span class="cov8" title="1">if err := store.CastVote(ctx, eventID, trackID, voterID); err != nil </span><span class="cov8" title="1">{
+                if errors.Is(err, ErrVoteConflict) </span><span class="cov8" title="1">{
+                        return nil, &amp;voteError{status: http.StatusConflict, msg: "duplicate vote"}
+                }</span>
+                <span class="cov8" title="1">return nil, err</span>
+        }
+
+        <span class="cov8" title="1">total, err := store.GetVoteCount(ctx, eventID, trackID)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="1">evt := map[string]any{
+                "type": "vote.cast",
+                "payload": map[string]any{
+                        "eventId":    eventID,
+                        "trackId":    trackID,
+                        "voterId":    voterID,
+                        "totalVotes": total,
+                },
+        }
+        if b, err := json.Marshal(evt); err == nil &amp;&amp; rdb != nil </span><span class="cov0" title="0">{
+                _ = rdb.Publish(ctx, "broadcast", string(b)).Err()
+        }</span>
+
+        <span class="cov8" title="1">return &amp;VoteResponse{
+                Status:     "ok",
+                TrackID:    trackID,
+                TotalVotes: total,
+        }, nil</span>
+}
+
+func removeVote(ctx context.Context, store Store, rdb *redis.Client, eventID, voterID, trackID string) (*VoteResponse, error) <span class="cov8" title="1">{
+        ev, err := store.LoadEvent(ctx, eventID)
+        if err != nil </span><span class="cov8" title="1">{
+                if errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
+                        return nil, &amp;voteError{status: http.StatusNotFound, msg: "event not found"}
+                }</span>
+                <span class="cov8" title="1">return nil, err</span>
+        }
+
+        // Verify permission to vote (implies permission to remove vote?)
+        // Usually if you can vote, you can unvote.
+        // We might want to check ownership or voting window?
+        // For simplicity, we re-use canUserVote or just check window.
+        // Let's at least check window.
+        // "Voting has ended" -&gt; cannot remove vote?
+        <span class="cov8" title="1">if ev.VoteEnd != nil &amp;&amp; time.Now().After(*ev.VoteEnd) </span><span class="cov8" title="1">{
+                return nil, &amp;voteError{status: http.StatusForbidden, msg: "voting has ended"}
+        }</span>
+
+        <span class="cov8" title="1">if err := store.RemoveVote(ctx, eventID, trackID, voterID); err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="1">total, err := store.GetVoteCount(ctx, eventID, trackID)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="1">evt := map[string]any{
+                "type": "vote.removed",
+                "payload": map[string]any{
+                        "eventId":    eventID,
+                        "trackId":    trackID,
+                        "voterId":    voterID,
+                        "totalVotes": total,
+                },
+        }
+        if b, err := json.Marshal(evt); err == nil &amp;&amp; rdb != nil </span><span class="cov0" title="0">{
+                _ = rdb.Publish(ctx, "broadcast", string(b)).Err()
+        }</span>
+
+        <span class="cov8" title="1">return &amp;VoteResponse{
+                Status:     "ok",
+                TrackID:    trackID,
+                TotalVotes: total,
+        }, nil</span>
+}
+
+func checkUserExists(ctx context.Context, client *http.Client, baseURL, userID string) error <span class="cov8" title="1">{
+        u, err := url.Parse(baseURL)
+        if err != nil </span><span class="cov8" title="1">{
+                return err
+        }</span>
+        <span class="cov8" title="1">u.Path = "/internal/users/" + url.PathEscape(userID)
+        u.Path += "/exists"
+
+        req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov8" title="1">resp, err := client.Do(req)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov8" title="1">defer resp.Body.Close()
+
+        switch resp.StatusCode </span>{
+        case http.StatusNoContent, http.StatusOK:<span class="cov8" title="1">
+                return nil</span>
+        case http.StatusNotFound:<span class="cov8" title="1">
+                return &amp;inviteError{status: http.StatusNotFound, msg: "user not found"}</span>
+        default:<span class="cov8" title="1">
+                return fmt.Errorf("user-service returned %d", resp.StatusCode)</span>
+        }
+}
+
+// validateVotingWindow enforces:
+// - voteStart and voteEnd (if set) cannot be in the past
+// - voteStart / voteEnd cannot be more than 1 year in the future
+// - if both set, window must be at least 1 hour and end after start
+func validateVotingWindow(voteStart, voteEnd *time.Time, now time.Time) error <span class="cov8" title="1">{
+        const maxFuture = 365 * 24 * time.Hour
+        const minWindow = time.Hour
+
+        if voteStart != nil </span><span class="cov8" title="1">{
+                if voteStart.Before(now) </span><span class="cov8" title="1">{
+                        return &amp;validationError{"voteStart cannot be in the past"}
+                }</span>
+                <span class="cov8" title="1">if voteStart.After(now.Add(maxFuture)) </span><span class="cov8" title="1">{
+                        return &amp;validationError{"voteStart cannot be more than 1 year in the future"}
+                }</span>
+        }
+        <span class="cov8" title="1">if voteEnd != nil </span><span class="cov8" title="1">{
+                if voteEnd.Before(now) </span><span class="cov8" title="1">{
+                        return &amp;validationError{"voteEnd cannot be in the past"}
+                }</span>
+                <span class="cov8" title="1">if voteEnd.After(now.Add(maxFuture)) </span><span class="cov8" title="1">{
+                        return &amp;validationError{"voteEnd cannot be more than 1 year in the future"}
+                }</span>
+        }
+        <span class="cov8" title="1">if voteStart != nil &amp;&amp; voteEnd != nil </span><span class="cov8" title="1">{
+                if voteEnd.Before(*voteStart) </span><span class="cov8" title="1">{
+                        return &amp;validationError{"voteEnd must be after voteStart"}
+                }</span>
+                <span class="cov8" title="1">if voteEnd.Sub(*voteStart) &lt; minWindow </span><span class="cov8" title="1">{
+                        return &amp;validationError{"voting window must be at least 1 hour"}
+                }</span>
+        }
+        <span class="cov8" title="1">return nil</span>
+}
+
+func canUserVote(ctx context.Context, store Store, ev *Event, userID string, lat, lng *float64, now time.Time) (bool, string, error) <span class="cov8" title="1">{
+        if ev.Visibility == visibilityPrivate </span><span class="cov8" title="1">{
+                invited, err := store.IsInvited(ctx, ev.ID, userID)
+                if err != nil </span><span class="cov8" title="1">{
+                        return false, "", err
+                }</span>
+                <span class="cov8" title="1">if !invited &amp;&amp; ev.OwnerID != userID </span><span class="cov8" title="1">{
+                        return false, "event is private, invite required", nil
+                }</span>
+        }
+
+        // owner can always vote regardless of license mode or geo/time
+        <span class="cov8" title="1">if ev.OwnerID == userID </span><span class="cov8" title="1">{
+                return true, "", nil
+        }</span>
+
+        <span class="cov8" title="1">switch ev.LicenseMode </span>{
+        case "", licenseEveryone:<span class="cov8" title="1">
+                return true, "", nil</span>
+
+        case licenseInvited:<span class="cov8" title="1">
+                invited, err := store.IsInvited(ctx, ev.ID, userID)
+                if err != nil </span><span class="cov0" title="0">{
+                        return false, "", err
+                }</span>
+                <span class="cov8" title="1">if !invited </span><span class="cov8" title="1">{
+                        return false, "license requires invitation to vote", nil
+                }</span>
+                <span class="cov8" title="1">return true, "", nil</span>
+
+        case licenseGeoTime:<span class="cov8" title="1">
+                if ev.VoteStart != nil &amp;&amp; now.Before(*ev.VoteStart) </span><span class="cov8" title="1">{
+                        return false, "voting has not started yet", nil
+                }</span>
+                <span class="cov8" title="1">if ev.VoteEnd != nil &amp;&amp; now.After(*ev.VoteEnd) </span><span class="cov8" title="1">{
+                        return false, "voting has ended", nil
+                }</span>
+                <span class="cov8" title="1">if ev.GeoLat == nil || ev.GeoLng == nil || ev.GeoRadiusM == nil </span><span class="cov8" title="1">{
+                        return false, "event is not configured for geo voting", nil
+                }</span>
+                <span class="cov8" title="1">if lat == nil || lng == nil </span><span class="cov8" title="1">{
+                        return false, "location (lat,lng) is required for geo voting", nil
+                }</span>
+                <span class="cov8" title="1">if !withinRadius(*ev.GeoLat, *ev.GeoLng, *ev.GeoRadiusM, *lat, *lng) </span><span class="cov8" title="1">{
+                        return false, "user is outside of allowed geo area", nil
+                }</span>
+                <span class="cov8" title="1">return true, "", nil</span>
+
+        default:<span class="cov8" title="1">
+                return false, "unsupported license mode", nil</span>
+        }
+}
+
+func withinRadius(centerLat, centerLng float64, radiusM int, userLat, userLng float64) bool <span class="cov8" title="1">{
+        const earthRadiusM = 6371000.0
+        rad := func(d float64) float64 </span><span class="cov8" title="1">{ return d * math.Pi / 180 }</span>
+
+        <span class="cov8" title="1">dLat := rad(userLat - centerLat)
+        dLng := rad(userLng - centerLng)
+        a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+                math.Cos(rad(centerLat))*math.Cos(rad(userLat))*math.Sin(dLng/2)*math.Sin(dLng/2)
+        c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+        dist := earthRadiusM * c
+        return dist &lt;= float64(radiusM)</span>
+}
+</pre>
+		
+		<pre class="file" id="file7" style="display: none">package vote
+
+import (
+        "context"
+
+        "github.com/stretchr/testify/mock"
+)
+
+type MockStore struct {
+        mock.Mock
+}
+
+func (m *MockStore) LoadEvent(ctx context.Context, id string) (*Event, error) <span class="cov8" title="1">{
+        args := m.Called(ctx, id)
+        if args.Get(0) == nil </span><span class="cov0" title="0">{
+                return nil, args.Error(1)
+        }</span>
+        <span class="cov8" title="1">return args.Get(0).(*Event), args.Error(1)</span>
+}
+
+func (m *MockStore) IsInvited(ctx context.Context, eventID, userID string) (bool, error) <span class="cov8" title="1">{
+        args := m.Called(ctx, eventID, userID)
+        return args.Bool(0), args.Error(1)
+}</span>
+
+func (m *MockStore) CastVote(ctx context.Context, eventID, trackID, voterID string) error <span class="cov8" title="1">{
+        args := m.Called(ctx, eventID, trackID, voterID)
+        return args.Error(0)
+}</span>
+
+func (m *MockStore) GetVoteCount(ctx context.Context, eventID, trackID string) (int, error) <span class="cov8" title="1">{
+        args := m.Called(ctx, eventID, trackID)
+        return args.Int(0), args.Error(1)
+}</span>
+
+func (m *MockStore) GetVoteTally(ctx context.Context, eventID, voterID string) ([]Row, error) <span class="cov8" title="1">{
+        args := m.Called(ctx, eventID, voterID)
+        return args.Get(0).([]Row), args.Error(1)
+}</span>
+
+func (m *MockStore) RemoveVote(ctx context.Context, eventID, trackID, voterID string) error <span class="cov8" title="1">{
+        args := m.Called(ctx, eventID, trackID, voterID)
+        return args.Error(0)
+}</span>
+
+func (m *MockStore) ListEvents(ctx context.Context, userID, visibility string) ([]Event, error) <span class="cov8" title="1">{
+        args := m.Called(ctx, userID, visibility)
+        if args.Get(0) == nil </span><span class="cov0" title="0">{
+                return nil, args.Error(1)
+        }</span>
+        <span class="cov8" title="1">return args.Get(0).([]Event), args.Error(1)</span>
+}
+
+func (m *MockStore) CreateEvent(ctx context.Context, ev *Event) (string, error) <span class="cov8" title="1">{
+        args := m.Called(ctx, ev)
+        return args.String(0), args.Error(1)
+}</span>
+
+func (m *MockStore) DeleteEvent(ctx context.Context, id string) error <span class="cov8" title="1">{
+        args := m.Called(ctx, id)
+        return args.Error(0)
+}</span>
+
+func (m *MockStore) UpdateEvent(ctx context.Context, id string, updates map[string]any) error <span class="cov8" title="1">{
+        args := m.Called(ctx, id, updates)
+        return args.Error(0)
+}</span>
+
+func (m *MockStore) TransferOwnership(ctx context.Context, id, newOwnerID string) error <span class="cov8" title="1">{
+        args := m.Called(ctx, id, newOwnerID)
+        return args.Error(0)
+}</span>
+
+func (m *MockStore) CreateInvite(ctx context.Context, eventID, userID string) error <span class="cov8" title="1">{
+        args := m.Called(ctx, eventID, userID)
+        return args.Error(0)
+}</span>
+
+func (m *MockStore) DeleteInvite(ctx context.Context, eventID, userID string) error <span class="cov8" title="1">{
+        args := m.Called(ctx, eventID, userID)
+        return args.Error(0)
+}</span>
+
+func (m *MockStore) ListInvites(ctx context.Context, eventID string) ([]Invite, error) <span class="cov8" title="1">{
+        args := m.Called(ctx, eventID)
+        if args.Get(0) == nil </span><span class="cov0" title="0">{
+                return nil, args.Error(1)
+        }</span>
+        <span class="cov8" title="1">return args.Get(0).([]Invite), args.Error(1)</span>
+}
+</pre>
+		
+		<pre class="file" id="file8" style="display: none">package vote
+
+import (
+        "context"
+        "errors"
+        "log"
+        "time"
+
+        "github.com/jackc/pgx/v5"
+        "github.com/jackc/pgx/v5/pgconn"
+        "github.com/jackc/pgx/v5/pgxpool"
+)
+
+type Store interface {
+        LoadEvent(ctx context.Context, id string) (*Event, error)
+        IsInvited(ctx context.Context, eventID, userID string) (bool, error)
+        CastVote(ctx context.Context, eventID, trackID, voterID string) error
+        GetVoteCount(ctx context.Context, eventID, trackID string) (int, error)
+        GetVoteTally(ctx context.Context, eventID, voterID string) ([]Row, error)
+        RemoveVote(ctx context.Context, eventID, trackID, voterID string) error
+        // Event Management
+        ListEvents(ctx context.Context, userID, visibility string) ([]Event, error)
+        CreateEvent(ctx context.Context, ev *Event) (string, error)
+        DeleteEvent(ctx context.Context, id string) error
+        UpdateEvent(ctx context.Context, id string, updates map[string]any) error
+        TransferOwnership(ctx context.Context, id, newOwnerID string) error
+        // Invite Management
+        CreateInvite(ctx context.Context, eventID, userID string) error
+        DeleteInvite(ctx context.Context, eventID, userID string) error
+        ListInvites(ctx context.Context, eventID string) ([]Invite, error)
+}
+
+type PostgresStore struct {
+        pool *pgxpool.Pool
+}
+
+func NewPostgresStore(pool *pgxpool.Pool) *PostgresStore <span class="cov8" title="1">{
+        return &amp;PostgresStore{pool: pool}
+}</span>
+
+func AutoMigrate(ctx context.Context, pool *pgxpool.Pool) error <span class="cov0" title="0">{
+        _, err := pool.Exec(ctx, `
+      CREATE TABLE IF NOT EXISTS events(
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          name TEXT NOT NULL,
+          visibility TEXT NOT NULL DEFAULT 'public',
+          owner_id TEXT NOT NULL DEFAULT '',
+          license_mode TEXT NOT NULL DEFAULT 'everyone',
+          geo_lat DOUBLE PRECISION,
+          geo_lng DOUBLE PRECISION,
+          geo_radius_m INT,
+          vote_start TIMESTAMPTZ,
+          vote_end TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+  `)
+        if err != nil </span><span class="cov0" title="0">{
+                log.Printf("migrate vote-service: %v", err)
+                return err
+        }</span>
+
+        // Ensure columns exist for existing tables
+        <span class="cov0" title="0">if _, err := pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS owner_id TEXT NOT NULL DEFAULT ''`); err != nil </span><span class="cov0" title="0">{
+                log.Printf("migrate alter owner_id: %v", err)
+        }</span>
+        <span class="cov0" title="0">if _, err := pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS license_mode TEXT NOT NULL DEFAULT 'everyone'`); err != nil </span><span class="cov0" title="0">{
+                log.Printf("migrate alter license_mode: %v", err)
+        }</span>
+        <span class="cov0" title="0">if _, err := pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS geo_lat DOUBLE PRECISION`); err != nil </span><span class="cov0" title="0">{
+                log.Printf("migrate alter geo_lat: %v", err)
+        }</span>
+        <span class="cov0" title="0">if _, err := pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS geo_lng DOUBLE PRECISION`); err != nil </span><span class="cov0" title="0">{
+                log.Printf("migrate alter geo_lng: %v", err)
+        }</span>
+        <span class="cov0" title="0">if _, err := pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS geo_radius_m INT`); err != nil </span><span class="cov0" title="0">{
+                log.Printf("migrate alter geo_radius_m: %v", err)
+        }</span>
+        <span class="cov0" title="0">if _, err := pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS vote_start TIMESTAMPTZ`); err != nil </span><span class="cov0" title="0">{
+                log.Printf("migrate alter vote_start: %v", err)
+        }</span>
+        <span class="cov0" title="0">if _, err := pool.Exec(ctx, `ALTER TABLE events ADD COLUMN IF NOT EXISTS vote_end TIMESTAMPTZ`); err != nil </span><span class="cov0" title="0">{
+                log.Printf("migrate alter vote_end: %v", err)
+        }</span>
+
+        <span class="cov0" title="0">if _, err := pool.Exec(ctx, `
+        CREATE TABLE IF NOT EXISTS votes(
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            event_id uuid NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            track TEXT NOT NULL,
+            voter_id TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            UNIQUE(event_id, voter_id, track)
+        )
+    `); err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov0" title="0">_, _ = pool.Exec(ctx, `DROP INDEX IF EXISTS idx_votes_event_voter`)
+
+        if _, err := pool.Exec(ctx, `
+        CREATE TABLE IF NOT EXISTS event_invites(
+            event_id uuid NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            user_id TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            PRIMARY KEY(event_id, user_id)
+        )
+    `); err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov0" title="0">return nil</span>
+}
+
+func (s *PostgresStore) LoadEvent(ctx context.Context, id string) (*Event, error) <span class="cov0" title="0">{
+        var ev Event
+        var geoLat, geoLng *float64
+        var geoRadius *int
+        var voteStart, voteEnd *time.Time
+        err := s.pool.QueryRow(ctx, `
+        SELECT id, name, visibility, owner_id, license_mode,
+               geo_lat, geo_lng, geo_radius_m, vote_start, vote_end,
+               created_at, updated_at
+        FROM events WHERE id=$1
+    `, id).Scan(
+                &amp;ev.ID, &amp;ev.Name, &amp;ev.Visibility, &amp;ev.OwnerID, &amp;ev.LicenseMode,
+                &amp;geoLat, &amp;geoLng, &amp;geoRadius, &amp;voteStart, &amp;voteEnd,
+                &amp;ev.CreatedAt, &amp;ev.UpdatedAt,
+        )
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">ev.GeoLat = geoLat
+        ev.GeoLng = geoLng
+        ev.GeoRadiusM = geoRadius
+        ev.VoteStart = voteStart
+        ev.VoteEnd = voteEnd
+        return &amp;ev, nil</span>
+}
+
+func (s *PostgresStore) IsInvited(ctx context.Context, eventID, userID string) (bool, error) <span class="cov0" title="0">{
+        var exists bool
+        err := s.pool.QueryRow(ctx, `
+        SELECT EXISTS(SELECT 1 FROM event_invites WHERE event_id=$1 AND user_id=$2)
+    `, eventID, userID).Scan(&amp;exists)
+        if err != nil </span><span class="cov0" title="0">{
+                return false, err
+        }</span>
+        <span class="cov0" title="0">return exists, nil</span>
+}
+
+func (s *PostgresStore) CastVote(ctx context.Context, eventID, trackID, voterID string) error <span class="cov0" title="0">{
+        _, err := s.pool.Exec(ctx, `
+        INSERT INTO votes(event_id, track, voter_id)
+        VALUES($1,$2,$3)
+    `, eventID, trackID, voterID)
+
+        if err != nil </span><span class="cov0" title="0">{
+                var pgErr *pgconn.PgError
+                if errors.As(err, &amp;pgErr) &amp;&amp; pgErr.Code == "23505" </span><span class="cov0" title="0">{
+                        return ErrVoteConflict // We need to define this or handle it
+                }</span>
+                <span class="cov0" title="0">return err</span>
+        }
+        <span class="cov0" title="0">return nil</span>
+}
+
+func (s *PostgresStore) CreateInvite(ctx context.Context, eventID, userID string) error <span class="cov0" title="0">{
+        _, err := s.pool.Exec(ctx, `
+        INSERT INTO event_invites(event_id, user_id)
+        VALUES($1,$2) ON CONFLICT DO NOTHING
+    `, eventID, userID)
+        return err
+}</span>
+
+func (s *PostgresStore) DeleteInvite(ctx context.Context, eventID, userID string) error <span class="cov0" title="0">{
+        _, err := s.pool.Exec(ctx, `DELETE FROM event_invites WHERE event_id=$1 AND user_id=$2`, eventID, userID)
+        return err
+}</span>
+
+func (s *PostgresStore) ListInvites(ctx context.Context, eventID string) ([]Invite, error) <span class="cov0" title="0">{
+        rows, err := s.pool.Query(ctx, `SELECT user_id, created_at FROM event_invites WHERE event_id=$1 ORDER BY created_at`, eventID)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">defer rows.Close()
+
+        var invites []Invite
+        for rows.Next() </span><span class="cov0" title="0">{
+                var inv Invite
+                if err := rows.Scan(&amp;inv.UserID, &amp;inv.CreatedAt); err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov0" title="0">invites = append(invites, inv)</span>
+        }
+        <span class="cov0" title="0">if err := rows.Err(); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">return invites, nil</span>
+}
+
+func (s *PostgresStore) ListEvents(ctx context.Context, userID, visibility string) ([]Event, error) <span class="cov0" title="0">{
+        var rows pgx.Rows
+        var err error
+        if userID == "" </span><span class="cov0" title="0">{
+                rows, err = s.pool.Query(ctx, `
+            SELECT id, name, visibility, owner_id, license_mode,
+                   geo_lat, geo_lng, geo_radius_m, vote_start, vote_end,
+                   created_at, updated_at
+            FROM events
+            WHERE visibility = $1
+            ORDER BY created_at DESC
+        `, visibility)
+        }</span> else<span class="cov0" title="0"> {
+                rows, err = s.pool.Query(ctx, `
+            SELECT DISTINCT e.id, e.name, e.visibility, e.owner_id, e.license_mode,
+                   e.geo_lat, e.geo_lng, e.geo_radius_m, e.vote_start, e.vote_end,
+                   e.created_at, e.updated_at,
+                   CASE WHEN i.user_id IS NOT NULL OR e.owner_id = $1 THEN true ELSE false END as is_joined
+            FROM events e
+            LEFT JOIN event_invites i
+              ON i.event_id = e.id AND i.user_id = $1
+            WHERE e.visibility = $2
+               OR e.owner_id = $1
+               OR i.user_id IS NOT NULL
+            ORDER BY e.created_at DESC
+        `, userID, visibility)
+        }</span>
+        <span class="cov0" title="0">if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">defer rows.Close()
+
+        events := make([]Event, 0)
+        for rows.Next() </span><span class="cov0" title="0">{
+                var ev Event
+                var geoLat, geoLng *float64
+                var geoRadius *int
+                var voteStart, voteEnd *time.Time
+
+                if userID == "" </span><span class="cov0" title="0">{
+                        if err := rows.Scan(
+                                &amp;ev.ID, &amp;ev.Name, &amp;ev.Visibility, &amp;ev.OwnerID, &amp;ev.LicenseMode,
+                                &amp;geoLat, &amp;geoLng, &amp;geoRadius, &amp;voteStart, &amp;voteEnd,
+                                &amp;ev.CreatedAt, &amp;ev.UpdatedAt,
+                        ); err != nil </span><span class="cov0" title="0">{
+                                return nil, err
+                        }</span>
+                        <span class="cov0" title="0">ev.IsJoined = false</span>
+                } else<span class="cov0" title="0"> {
+                        if err := rows.Scan(
+                                &amp;ev.ID, &amp;ev.Name, &amp;ev.Visibility, &amp;ev.OwnerID, &amp;ev.LicenseMode,
+                                &amp;geoLat, &amp;geoLng, &amp;geoRadius, &amp;voteStart, &amp;voteEnd,
+                                &amp;ev.CreatedAt, &amp;ev.UpdatedAt,
+                                &amp;ev.IsJoined,
+                        ); err != nil </span><span class="cov0" title="0">{
+                                return nil, err
+                        }</span>
+                }
+                <span class="cov0" title="0">ev.GeoLat = geoLat
+                ev.GeoLng = geoLng
+                ev.GeoRadiusM = geoRadius
+                ev.VoteStart = voteStart
+                ev.VoteEnd = voteEnd
+                events = append(events, ev)</span>
+        }
+        <span class="cov0" title="0">if err := rows.Err(); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">return events, nil</span>
+}
+
+func (s *PostgresStore) CreateEvent(ctx context.Context, ev *Event) (string, error) <span class="cov0" title="0">{
+        var id string
+        err := s.pool.QueryRow(ctx, `
+        INSERT INTO events (id, name, visibility, owner_id, license_mode, geo_lat, geo_lng, geo_radius_m, vote_start, vote_end)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        RETURNING id
+    `, ev.ID, ev.Name, ev.Visibility, ev.OwnerID, ev.LicenseMode, ev.GeoLat, ev.GeoLng, ev.GeoRadiusM, ev.VoteStart, ev.VoteEnd).Scan(&amp;id)
+        return id, err
+}</span>
+
+func (s *PostgresStore) DeleteEvent(ctx context.Context, id string) error <span class="cov0" title="0">{
+        res, err := s.pool.Exec(ctx, `DELETE FROM events WHERE id=$1`, id)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">if res.RowsAffected() == 0 </span><span class="cov0" title="0">{
+                return pgx.ErrNoRows
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}
+
+func (s *PostgresStore) UpdateEvent(ctx context.Context, id string, updates map[string]any) error <span class="cov0" title="0">{
+        if len(updates) == 0 </span><span class="cov0" title="0">{
+                return nil
+        }</span>
+        <span class="cov0" title="0">setParts := []string{}
+        args := []any{}
+        idxArg := 1
+        for k, v := range updates </span><span class="cov0" title="0">{
+                setParts = append(setParts, k+" = $"+itoa(idxArg))
+                args = append(args, v)
+                idxArg++
+        }</span>
+        <span class="cov0" title="0">args = append(args, id)
+        query := "UPDATE events SET " + join(setParts, ", ") + ", updated_at = now() WHERE id = $" + itoa(idxArg)
+        res, err := s.pool.Exec(ctx, query, args...)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">if res.RowsAffected() == 0 </span><span class="cov0" title="0">{
+                return pgx.ErrNoRows
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}
+
+func (s *PostgresStore) TransferOwnership(ctx context.Context, id, newOwnerID string) error <span class="cov0" title="0">{
+        res, err := s.pool.Exec(ctx, `UPDATE events SET owner_id = $1, updated_at = now() WHERE id = $2`, newOwnerID, id)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">if res.RowsAffected() == 0 </span><span class="cov0" title="0">{
+                return pgx.ErrNoRows
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}
+
+// Helpers need to be moved or duplicated if logic.go ones are not accessible?
+// logic.go has no helpers 'itoa' or 'join'. They were inline in http_events.go probably?
+// Ah, 'itoa' and 'join' were likely in http_utils.go or similar. I need to check where they are defined.
+// If they are in http_utils.go (package vote), they are accessible here.
+// Assuming they are available.
+
+func (s *PostgresStore) RemoveVote(ctx context.Context, eventID, trackID, voterID string) error <span class="cov0" title="0">{
+        res, err := s.pool.Exec(ctx, `
+        DELETE FROM votes
+        WHERE event_id=$1 AND track=$2 AND voter_id=$3
+    `, eventID, trackID, voterID)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">if res.RowsAffected() == 0 </span><span class="cov0" title="0">{
+                return pgx.ErrNoRows
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}
+
+func (s *PostgresStore) GetVoteCount(ctx context.Context, eventID, trackID string) (int, error) <span class="cov0" title="0">{
+        var total int
+        err := s.pool.QueryRow(ctx, `
+        SELECT COUNT(*) FROM votes WHERE event_id=$1 AND track=$2
+    `, eventID, trackID).Scan(&amp;total)
+        return total, err
+}</span>
+
+func (s *PostgresStore) GetVoteTally(ctx context.Context, eventID, voterID string) ([]Row, error) <span class="cov0" title="0">{
+        rows, err := s.pool.Query(ctx, `
+        SELECT 
+            track, 
+            COUNT(*) AS c,
+            COALESCE(BOOL_OR(voter_id = $2), false) as is_my_vote
+        FROM votes
+        WHERE event_id = $1
+        GROUP BY track
+        ORDER BY c DESC, track ASC
+    `, eventID, voterID)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">defer rows.Close()
+
+        var out []Row
+        for rows.Next() </span><span class="cov0" title="0">{
+                var row Row
+                if err := rows.Scan(&amp;row.Track, &amp;row.Count, &amp;row.IsMyVote); err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov0" title="0">out = append(out, row)</span>
+        }
+        <span class="cov0" title="0">if err = rows.Err(); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">return out, nil</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

@@ -7,7 +7,7 @@ SERVICES := backend/services/api-gateway/cmd/service \
 						backend/services/vote-service/cmd/service \
 						backend/services/mock-service/cmd/service \
 						backend/services/music-provider-service/cmd/service \
-						frontend/cmd/service
+						frontend/cmd/server
 
 
 .PHONY: help
@@ -99,3 +99,15 @@ start:
 test-gateway:
 	docker compose -f docker-compose.gateway-test.yaml up --build --abort-on-container-exit
 	docker compose -f docker-compose.gateway-test.yaml down --remove-orphans
+
+.PHONY: test-go test-mobile test
+
+test-go:
+	@echo "Running Go tests (web/backend)..."
+	for s in $(SERVICES); do (cd $$s && go test ./...); done
+
+test-mobile:
+	@echo "Running mobile tests..."
+	$(MAKE) -C mobile test
+
+test: test-go test-mobile

@@ -16,77 +16,14 @@ func (s *HTTPServer) handleListEvents(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("X-User-Id")
 	ctx := r.Context()
 
-	var rows pgx.Rows
+	var events []Event
 	var err error
 	if userID == "" {
-		rows, err = s.pool.Query(ctx, `
-            SELECT id, name, visibility, owner_id, license_mode,
-                   geo_lat, geo_lng, geo_radius_m, vote_start, vote_end,
-                   created_at, updated_at
-            FROM events
-            WHERE visibility = $1
-            ORDER BY created_at DESC
-        `, visibilityPublic)
+		events, err = s.store.ListEvents(ctx, "", visibilityPublic)
 	} else {
-		rows, err = s.pool.Query(ctx, `
-            SELECT DISTINCT e.id, e.name, e.visibility, e.owner_id, e.license_mode,
-                   e.geo_lat, e.geo_lng, e.geo_radius_m, e.vote_start, e.vote_end,
-                   e.created_at, e.updated_at,
-                   CASE WHEN i.user_id IS NOT NULL OR e.owner_id = $1 THEN true ELSE false END as is_joined
-            FROM events e
-            LEFT JOIN event_invites i
-              ON i.event_id = e.id AND i.user_id = $1
-            WHERE e.visibility = $2
-               OR e.owner_id = $1
-               OR i.user_id IS NOT NULL
-            ORDER BY e.created_at DESC
-        `, userID, visibilityPublic)
+		events, err = s.store.ListEvents(ctx, userID, visibilityPublic)
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	defer rows.Close()
-
-	events := make([]Event, 0)
-	for rows.Next() {
-		var ev Event
-		var geoLat, geoLng *float64
-		var geoRadius *int
-		var voteStart, voteEnd *time.Time
-
-		if userID == "" {
-			// Public view, no user context
-			if err := rows.Scan(
-				&ev.ID, &ev.Name, &ev.Visibility, &ev.OwnerID, &ev.LicenseMode,
-				&geoLat, &geoLng, &geoRadius, &voteStart, &voteEnd,
-				&ev.CreatedAt, &ev.UpdatedAt,
-			); err != nil {
-				writeError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-			ev.IsJoined = false
-		} else {
-			// User context, scan is_joined
-			if err := rows.Scan(
-				&ev.ID, &ev.Name, &ev.Visibility, &ev.OwnerID, &ev.LicenseMode,
-				&geoLat, &geoLng, &geoRadius, &voteStart, &voteEnd,
-				&ev.CreatedAt, &ev.UpdatedAt,
-				&ev.IsJoined,
-			); err != nil {
-				writeError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-		}
-
-		ev.GeoLat = geoLat
-		ev.GeoLng = geoLng
-		ev.GeoRadiusM = geoRadius
-		ev.VoteStart = voteStart
-		ev.VoteEnd = voteEnd
-		events = append(events, ev)
-	}
-	if err := rows.Err(); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -121,9 +58,16 @@ func (s *HTTPServer) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Visibility == "" {
 		body.Visibility = visibilityPublic
+	} else if body.Visibility != visibilityPublic && body.Visibility != visibilityPrivate {
+		writeError(w, http.StatusBadRequest, "invalid visibility")
+		return
 	}
+
 	if body.LicenseMode == "" {
 		body.LicenseMode = licenseEveryone
+	} else if body.LicenseMode != licenseEveryone && body.LicenseMode != licenseInvited && body.LicenseMode != licenseGeoTime {
+		writeError(w, http.StatusBadRequest, "invalid license mode")
+		return
 	}
 
 	var voteStart, voteEnd *time.Time
@@ -173,7 +117,7 @@ func (s *HTTPServer) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 	// We use a default http client here since we didn't inject one, assuming s.httpClient or http.DefaultClient
 	// For now using http.DefaultClient but strictly we should add HttpClient to HTTPServer.
 	// TIMEOUT is crucial but for MVP using DefaultClient
-	respPL, err := http.DefaultClient.Do(reqPL)
+	respPL, err := s.httpClient.Do(reqPL)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "playlist-service unavailable: "+err.Error())
 		return
@@ -194,33 +138,41 @@ func (s *HTTPServer) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2. Insert Event with the SAME ID
-	ctx := r.Context()
-	var id string
-	err = s.pool.QueryRow(ctx, `
-        INSERT INTO events (id, name, visibility, owner_id, license_mode, geo_lat, geo_lng, geo_radius_m, vote_start, vote_end)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-        RETURNING id
-    `, plResp.ID, body.Name, body.Visibility, userID, body.LicenseMode, body.GeoLat, body.GeoLng, body.GeoRadiusM, voteStart, voteEnd).Scan(&id)
+	// Prepare event object
+	newEvent := &Event{
+		ID:          plResp.ID,
+		Name:        body.Name,
+		Visibility:  body.Visibility,
+		OwnerID:     userID,
+		LicenseMode: body.LicenseMode,
+		GeoLat:      body.GeoLat,
+		GeoLng:      body.GeoLng,
+		GeoRadiusM:  body.GeoRadiusM,
+		VoteStart:   voteStart,
+		VoteEnd:     voteEnd,
+	}
+
+	id, err := s.store.CreateEvent(r.Context(), newEvent)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	// Fetch the full event (including timestamps) to return to client
-	fullEvent, err := loadEvent(ctx, s.pool, id)
+	fullEvent, err := s.store.LoadEvent(r.Context(), id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to load created event: "+err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, fullEvent)
+	writeJSON(w, http.StatusCreated, fullEvent)
 }
 
 func (s *HTTPServer) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	userID := r.Header.Get("X-User-Id")
 
-	ev, err := loadEvent(r.Context(), s.pool, id)
+	ev, err := s.store.LoadEvent(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "event not found")
@@ -237,7 +189,7 @@ func (s *HTTPServer) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if ev.OwnerID != userID {
-			invited, err := isInvited(r.Context(), s.pool, ev.ID, userID)
+			invited, err := s.store.IsInvited(r.Context(), ev.ID, userID)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -253,7 +205,7 @@ func (s *HTTPServer) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 		if ev.OwnerID == userID {
 			ev.IsJoined = true
 		} else {
-			invited, err := isInvited(r.Context(), s.pool, ev.ID, userID)
+			invited, err := s.store.IsInvited(r.Context(), ev.ID, userID)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -273,7 +225,7 @@ func (s *HTTPServer) handleDeleteEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ev, err := loadEvent(r.Context(), s.pool, id)
+	ev, err := s.store.LoadEvent(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "event not found")
@@ -287,7 +239,7 @@ func (s *HTTPServer) handleDeleteEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := s.pool.Exec(r.Context(), `DELETE FROM events WHERE id=$1`, id); err != nil {
+	if err := s.store.DeleteEvent(r.Context(), id); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -305,7 +257,7 @@ func (s *HTTPServer) handlePatchEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ev, err := loadEvent(r.Context(), s.pool, id)
+	ev, err := s.store.LoadEvent(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "event not found")
@@ -337,50 +289,42 @@ func (s *HTTPServer) handlePatchEvent(w http.ResponseWriter, r *http.Request) {
 	newStart := ev.VoteStart
 	newEnd := ev.VoteEnd
 
-	setParts := []string{}
-	args := []any{}
-	idxArg := 1
-
+	updates := make(map[string]any)
 	if body.Name != nil && *body.Name != "" {
-		setParts = append(setParts, "name = $"+itoa(idxArg))
-		args = append(args, *body.Name)
-		idxArg++
+		updates["name"] = *body.Name
 		ev.Name = *body.Name
 	}
-
 	if body.Visibility != nil && *body.Visibility != "" {
-		setParts = append(setParts, "visibility = $"+itoa(idxArg))
-		args = append(args, *body.Visibility)
-		idxArg++
+		if *body.Visibility != visibilityPublic && *body.Visibility != visibilityPrivate {
+			writeError(w, http.StatusBadRequest, "invalid visibility")
+			return
+		}
+		updates["visibility"] = *body.Visibility
 		ev.Visibility = *body.Visibility
 	}
 	if body.LicenseMode != nil && *body.LicenseMode != "" {
-		setParts = append(setParts, "license_mode = $"+itoa(idxArg))
-		args = append(args, *body.LicenseMode)
-		idxArg++
+		if *body.LicenseMode != licenseEveryone && *body.LicenseMode != licenseInvited && *body.LicenseMode != licenseGeoTime {
+			writeError(w, http.StatusBadRequest, "invalid license mode")
+			return
+		}
+		updates["license_mode"] = *body.LicenseMode
 		ev.LicenseMode = *body.LicenseMode
 	}
 	if body.GeoLat != nil {
-		setParts = append(setParts, "geo_lat = $"+itoa(idxArg))
-		args = append(args, *body.GeoLat)
-		idxArg++
+		updates["geo_lat"] = *body.GeoLat
 		ev.GeoLat = body.GeoLat
 	}
 	if body.GeoLng != nil {
-		setParts = append(setParts, "geo_lng = $"+itoa(idxArg))
-		args = append(args, *body.GeoLng)
-		idxArg++
+		updates["geo_lng"] = *body.GeoLng
 		ev.GeoLng = body.GeoLng
 	}
 	if body.GeoRadiusM != nil {
-		setParts = append(setParts, "geo_radius_m = $"+itoa(idxArg))
-		args = append(args, *body.GeoRadiusM)
-		idxArg++
+		updates["geo_radius_m"] = *body.GeoRadiusM
 		ev.GeoRadiusM = body.GeoRadiusM
 	}
 	if body.VoteStart != nil {
 		if *body.VoteStart == "" {
-			setParts = append(setParts, "vote_start = NULL")
+			updates["vote_start"] = nil
 			newStart = nil
 		} else {
 			t, err := time.Parse(time.RFC3339, *body.VoteStart)
@@ -388,15 +332,13 @@ func (s *HTTPServer) handlePatchEvent(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusBadRequest, "invalid voteStart")
 				return
 			}
-			setParts = append(setParts, "vote_start = $"+itoa(idxArg))
-			args = append(args, t)
-			idxArg++
+			updates["vote_start"] = t
 			newStart = &t
 		}
 	}
 	if body.VoteEnd != nil {
 		if *body.VoteEnd == "" {
-			setParts = append(setParts, "vote_end = NULL")
+			updates["vote_end"] = nil
 			newEnd = nil
 		} else {
 			t, err := time.Parse(time.RFC3339, *body.VoteEnd)
@@ -404,9 +346,7 @@ func (s *HTTPServer) handlePatchEvent(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusBadRequest, "invalid voteEnd")
 				return
 			}
-			setParts = append(setParts, "vote_end = $"+itoa(idxArg))
-			args = append(args, t)
-			idxArg++
+			updates["vote_end"] = t
 			newEnd = &t
 		}
 	}
@@ -416,28 +356,86 @@ func (s *HTTPServer) handlePatchEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(setParts) == 0 {
+	if len(updates) == 0 {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 
-	args = append(args, id)
-	query := "UPDATE events SET " + join(setParts, ", ") + ", updated_at = now() WHERE id = $" + itoa(idxArg)
-	ct, err := s.pool.Exec(r.Context(), query, args...)
-	if err != nil {
+	if err := s.store.UpdateEvent(r.Context(), id, updates); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "event not found")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if ct.RowsAffected() == 0 {
-		writeError(w, http.StatusNotFound, "event not found")
-		return
-	}
+	// ct check removed as UpdateEvent handles no rows error
 
-	updated, err := loadEvent(r.Context(), s.pool, id)
+	updated, err := s.store.LoadEvent(r.Context(), id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	writeJSON(w, http.StatusOK, updated)
+}
+
+func (s *HTTPServer) handleTransferOwnership(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	userID := r.Header.Get("X-User-Id")
+	if userID == "" {
+		writeError(w, http.StatusUnauthorized, "missing X-User-Id")
+		return
+	}
+
+	var body struct {
+		NewOwnerID string `json:"newOwnerId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if body.NewOwnerID == "" {
+		writeError(w, http.StatusBadRequest, "newOwnerId is required")
+		return
+	}
+
+	// 1. Load event and verify current ownership
+	ev, err := s.store.LoadEvent(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "event not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if ev.OwnerID != userID {
+		writeError(w, http.StatusForbidden, "only owner can transfer ownership")
+		return
+	}
+
+	if ev.OwnerID == body.NewOwnerID {
+		writeError(w, http.StatusBadRequest, "already owner")
+		return
+	}
+
+	// 2. Perform Transfer
+	// ideally we check if new owner exists or is valid user, but we trust the ID for now
+	// or we check if they are a participant (optional strictness)
+
+	// Update event owner
+	if err := s.store.TransferOwnership(r.Context(), id, body.NewOwnerID); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update owner: "+err.Error())
+		return
+	}
+
+	// 3. Notify updates
+	// Publish event updated message
+	go s.publishEvent(context.Background(), "event.updated", map[string]string{"id": id})
+	// Also specifically notify about ownership change if we had a specific event type,
+	// but "event.updated" should trigger re-fetch on clients.
+
+	w.WriteHeader(http.StatusOK)
 }

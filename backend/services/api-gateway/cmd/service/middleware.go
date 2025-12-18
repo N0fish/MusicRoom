@@ -229,15 +229,3 @@ func playlistCreateRateLimitMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
-
-func getenvInt(key string, def int) int {
-	raw := getenv(key, "")
-	if raw == "" {
-		return def
-	}
-	v, err := strconv.Atoi(raw)
-	if err != nil || v <= 0 {
-		return def
-	}
-	return v
-}

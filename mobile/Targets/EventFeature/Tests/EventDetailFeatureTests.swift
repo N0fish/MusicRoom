@@ -303,4 +303,75 @@ final class EventDetailFeatureTests: XCTestCase {
         }
 
     }
+
+    func testTransferOwnership_Success() async {
+        let event = Event(
+            id: UUID(), name: "Transfer Event", visibility: .publicEvent, ownerId: "u1",
+            licenseMode: .everyone, createdAt: Date(), updatedAt: Date())
+
+        let newOwner = PublicUserProfile(
+            userId: "u2", username: "next_owner", displayName: "Next Owner",
+            avatarUrl: nil, bio: nil, visibility: "public", preferences: nil
+        )
+
+        let store = TestStore(initialState: EventDetailFeature.State(event: event)) {
+            EventDetailFeature()
+        } withDependencies: {
+            $0.musicRoomAPI.transferOwnership = { _, newOwnerId in
+                XCTAssertEqual(newOwnerId, "u2")
+            }
+            $0.musicRoomAPI.getEvent = { _ in
+                // Return updated event? Or same event?
+                // Usually getEvent is called after success.
+                var updated = event
+                updated.ownerId = "u2"
+                return updated
+            }
+            // Stubs for onAppear checks if triggered, but we are just testing the action flow
+            $0.musicRoomAPI.getPlaylist = { _ in
+                PlaylistResponse(
+                    playlist: PlaylistResponse.PlaylistMetadata(
+                        id: event.id.uuidString, ownerId: "u1", name: "P", isPublic: true,
+                        editMode: "o"),
+                    tracks: []
+                )
+            }
+        }
+        store.exhaustivity = .off  // Focus on transfer flow
+
+        // 1. Request Transfer
+        await store.send(.requestTransferOwnership(newOwner)) {
+            $0.confirmationDialog = ConfirmationDialogState {
+                TextState("Transfer Ownership?")
+            } actions: {
+                ButtonState(role: .cancel) {
+                    TextState("Cancel")
+                }
+                ButtonState(role: .destructive, action: .transferOwnership(newOwner)) {
+                    TextState("Transfer to \(newOwner.username)")
+                }
+            } message: {
+                TextState(
+                    "Are you sure you want to transfer ownership to \(newOwner.username)? You will lose control of this event."
+                )
+            }
+        }
+
+        // 2. Confirm Transfer
+        await store.send(.transferOwnership(newOwner)) {
+            $0.confirmationDialog = nil  // Dialog dismissed automatically?
+            // Ideally tapping button in dialog triggers action and dismisses it.
+            // In TCA test, we send the action that the button would send.
+            // But does it clear confirmationDialog state automatically in test? YES.
+        }
+
+        // 3. Handle Response
+        await store.receive(.transferOwnershipResponse(.success("Success"))) {
+            $0.userAlert = EventDetailFeature.UserAlert(
+                title: "Success", message: "Ownership transferred.", type: .success)
+        }
+
+        // 4. Reload Event
+        await store.receive(.loadEvent)
+    }
 }

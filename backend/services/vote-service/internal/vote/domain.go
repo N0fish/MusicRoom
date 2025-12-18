@@ -1,6 +1,13 @@
 package vote
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var (
+	ErrVoteConflict = errors.New("vote conflict")
+)
 
 const (
 	visibilityPublic  = "public"

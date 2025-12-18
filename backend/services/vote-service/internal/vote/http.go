@@ -10,7 +10,9 @@ import (
 
 type HTTPServer struct {
 	pool               *pgxpool.Pool
+	store              Store
 	rdb                *redis.Client
+	httpClient         *http.Client
 	userServiceURL     string
 	playlistServiceURL string
 	realtimeServiceURL string
@@ -19,7 +21,9 @@ type HTTPServer struct {
 func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, userServiceURL, playlistServiceURL, realtimeServiceURL string) http.Handler {
 	s := &HTTPServer{
 		pool:               pool,
+		store:              NewPostgresStore(pool),
 		rdb:                rdb,
+		httpClient:         http.DefaultClient,
 		userServiceURL:     userServiceURL,
 		playlistServiceURL: playlistServiceURL,
 		realtimeServiceURL: realtimeServiceURL,
@@ -42,6 +46,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, userServiceURL, playlistSe
 	r.Get("/events/{id}", s.handleGetEvent)
 	r.Delete("/events/{id}", s.handleDeleteEvent)
 	r.Patch("/events/{id}", s.handlePatchEvent)
+	r.Post("/events/{id}/transfer-ownership", s.handleTransferOwnership)
 
 	// invites
 	r.Post("/events/{id}/invites", s.handleCreateInvite)
@@ -50,6 +55,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, userServiceURL, playlistSe
 
 	// voting
 	r.Post("/events/{id}/vote", s.handleVote)
+	r.Delete("/events/{id}/vote", s.handleRemoveVote)
 	r.Get("/events/{id}/tally", s.handleTally)
 
 	return r

@@ -3,38 +3,59 @@ package main
 import (
 	"log"
 	"net/http"
-	"os"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
+type Config struct {
+	Port             string
+	OpenAPIFile      string
+	AuthURL          string
+	UserURL          string
+	VoteURL          string
+	PlaylistURL      string
+	MockURL          string
+	RealtimeURL      string
+	MusicProviderURL string
+	JWTSecret        []byte
+	RateLimitRPS     int
+}
+
 func main() {
-	port := getenv("PORT", "8080")
-	openapiFile := getenv("OPENAPI_FILE", "openapi.yaml")
+	config := Config{
+		Port:             getenv("PORT", "8080"),
+		OpenAPIFile:      getenv("OPENAPI_FILE", "openapi.yaml"),
+		AuthURL:          getenv("AUTH_SERVICE_URL", "http://auth-service:3001"),
+		UserURL:          getenv("USER_SERVICE_URL", "http://user-service:3005"),
+		VoteURL:          getenv("VOTE_SERVICE_URL", "http://vote-service:3003"),
+		PlaylistURL:      getenv("PLAYLIST_SERVICE_URL", "http://playlist-service:3002"),
+		MockURL:          getenv("MOCK_SERVICE_URL", "http://mock-service:3006"),
+		RealtimeURL:      getenv("REALTIME_SERVICE_URL", "http://realtime-service:3004"),
+		MusicProviderURL: getenv("MUSIC_PROVIDER_SERVICE_URL", "http://music-provider-service:3007"),
+		JWTSecret:        []byte(getenv("JWT_SECRET", "")),
+		RateLimitRPS:     getenvInt("RATE_LIMIT_RPS", 20),
+	}
 
-	authURL := getenv("AUTH_SERVICE_URL", "http://auth-service:3001")
-	userURL := getenv("USER_SERVICE_URL", "http://user-service:3005")
-	voteURL := getenv("VOTE_SERVICE_URL", "http://vote-service:3003")
-	playlistURL := getenv("PLAYLIST_SERVICE_URL", "http://playlist-service:3002")
-	mockURL := getenv("MOCK_SERVICE_URL", "http://mock-service:3006")
-	realtimeURL := getenv("REALTIME_SERVICE_URL", "http://realtime-service:3004")
-	musicProviderURL := getenv("MUSIC_PROVIDER_SERVICE_URL", "http://music-provider-service:3007")
-
-	jwtSecret := []byte(getenv("JWT_SECRET", ""))
-	if len(jwtSecret) == 0 {
-		// log.Println("api-gateway: WARNING: JWT_SECRET is empty, JWT validation disabled")
+	if len(config.JWTSecret) == 0 {
 		log.Fatal("api-gateway: JWT_SECRET is empty, cannot start without JWT validation")
 	}
 
-	rps := getenvInt("RATE_LIMIT_RPS", 20)
+	r := setupRouter(config)
 
+	log.Printf("api-gateway listening on :%s", config.Port)
+	if err := http.ListenAndServe(":"+config.Port, r); err != nil {
+		log.Fatalf("api-gateway: %v", err)
+	}
+}
+
+func setupRouter(cfg Config) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-	r.Use(rateLimitMiddleware(rps))
+	r.Use(rateLimitMiddleware(cfg.RateLimitRPS))
 	r.Use(corsMiddleware)
 	r.Use(requestLogMiddleware)
 
@@ -44,31 +65,26 @@ func main() {
 			"status":  "ok",
 			"service": "api-gateway",
 		})
-		// w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		// w.WriteHeader(http.StatusOK)
-		// _, _ = w.Write([]byte("ok"))
 	})
 
 	// Audit / Telemetry
 	r.Post("/audit/logs", func(w http.ResponseWriter, r *http.Request) {
-		// In a real implementation, we would forward this to an audit service or write to a structured log
-		// For now, we just acknowledge receipt to prevent 404 errors on the client
 		w.WriteHeader(http.StatusOK)
 	})
 
 	// openapi.yaml
 	r.Get("/docs/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, openapiFile)
+		http.ServeFile(w, r, cfg.OpenAPIFile)
 	})
 
 	// Proxies
-	authProxy := mustNewReverseProxy(authURL)
-	userProxy := mustNewReverseProxy(userURL)
-	voteProxy := mustNewReverseProxy(voteURL)
-	playlistProxy := mustNewReverseProxy(playlistURL)
-	mockProxy := mustNewReverseProxy(mockURL)
-	realtimeProxy := mustNewReverseProxy(realtimeURL)
-	musicProxy := mustNewReverseProxy(musicProviderURL)
+	authProxy := mustNewReverseProxy(cfg.AuthURL)
+	userProxy := mustNewReverseProxy(cfg.UserURL)
+	voteProxy := mustNewReverseProxy(cfg.VoteURL)
+	playlistProxy := mustNewReverseProxy(cfg.PlaylistURL)
+	mockProxy := mustNewReverseProxy(cfg.MockURL)
+	realtimeProxy := mustNewReverseProxy(cfg.RealtimeURL)
+	musicProxy := mustNewReverseProxy(cfg.MusicProviderURL)
 
 	// Auth routes (no JWT required)
 	r.Method(http.MethodPost, "/auth/register", authProxy)
@@ -87,18 +103,15 @@ func main() {
 	r.Method(http.MethodGet, "/auth/42/login", authProxy)
 	r.Method(http.MethodGet, "/auth/42/callback", authProxy)
 
-	// /auth/me можно либо через прямой proxy, либо через gateway JWT
 	r.Method(http.MethodGet, "/auth/me", authProxy)
 	r.Method(http.MethodPost, "/auth/link/{provider}", authProxy)
 	r.Method(http.MethodDelete, "/auth/link/{provider}", authProxy)
 
-	log.Printf("api-gateway: registering auth link routes")
-
 	// User-service (JWT required)
 	r.Method(http.MethodGet, "/avatars/*", userProxy)
 	r.Group(func(r chi.Router) {
-		if len(jwtSecret) != 0 {
-			r.Use(jwtAuthMiddleware(jwtSecret))
+		if len(cfg.JWTSecret) != 0 {
+			r.Use(jwtAuthMiddleware(cfg.JWTSecret))
 		}
 
 		// profile
@@ -150,8 +163,8 @@ func main() {
 	// Playlists
 	r.Method(http.MethodGet, "/playlists", playlistProxy) // public playlists
 	r.Group(func(r chi.Router) {
-		if len(jwtSecret) != 0 {
-			r.Use(jwtAuthMiddleware(jwtSecret))
+		if len(cfg.JWTSecret) != 0 {
+			r.Use(jwtAuthMiddleware(cfg.JWTSecret))
 		}
 		r.With(playlistCreateRateLimitMiddleware).
 			Method(http.MethodPost, "/playlists", playlistProxy)
@@ -172,14 +185,15 @@ func main() {
 
 	// Events & Voting
 	r.Group(func(r chi.Router) {
-		if len(jwtSecret) != 0 {
-			r.Use(jwtAuthMiddleware(jwtSecret))
+		if len(cfg.JWTSecret) != 0 {
+			r.Use(jwtAuthMiddleware(cfg.JWTSecret))
 		}
 		// Event lifecycle and settings
 		r.Method(http.MethodGet, "/events", voteProxy)
 		r.Method(http.MethodPost, "/events", voteProxy)
 		r.Method(http.MethodGet, "/events/{id}", voteProxy)
 		r.Method(http.MethodPatch, "/events/{id}", voteProxy)
+		r.Method(http.MethodPost, "/events/{id}/transfer-ownership", voteProxy)
 		r.Method(http.MethodDelete, "/events/{id}", voteProxy)
 		// Invites
 		r.Method(http.MethodGet, "/events/{id}/invites", voteProxy)
@@ -187,6 +201,7 @@ func main() {
 		r.Method(http.MethodDelete, "/events/{id}/invites/{userId}", voteProxy)
 		// Voting
 		r.Method(http.MethodPost, "/events/{id}/vote", voteProxy)
+		r.Method(http.MethodDelete, "/events/{id}/vote", voteProxy)
 		r.Method(http.MethodGet, "/events/{id}/tally", voteProxy)
 	})
 
@@ -199,36 +214,11 @@ func main() {
 
 	// Music provider (search for tracks in external SDK)
 	r.Group(func(r chi.Router) {
-		if len(jwtSecret) != 0 {
-			r.Use(jwtAuthMiddleware(jwtSecret))
+		if len(cfg.JWTSecret) != 0 {
+			r.Use(jwtAuthMiddleware(cfg.JWTSecret))
 		}
 		r.Method(http.MethodGet, "/music/search", musicProxy)
 	})
 
-	log.Printf("api-gateway listening on :%s", port)
-	if err := http.ListenAndServe(":"+port, r); err != nil {
-		log.Fatalf("api-gateway: %v", err)
-	}
-
-	// tlsEnabled := getenv("TLS_ENABLED", "false") == "true"
-	// if tlsEnabled {
-	// 	certFile := getenv("TLS_CERT_FILE", "/certs/cert.pem")
-	// 	keyFile := getenv("TLS_KEY_FILE", "/certs/key.pem")
-	// 	log.Printf("api-gateway listening on HTTPS :%s", port)
-	// 	if err := http.ListenAndServeTLS(":"+port, certFile, keyFile, r); err != nil {
-	// 		log.Fatalf("api-gateway (TLS): %v", err)
-	// 	}
-	// } else {
-	// 	log.Printf("api-gateway listening on HTTP :%s", port)
-	// 	if err := http.ListenAndServe(":"+port, r); err != nil {
-	// 		log.Fatalf("api-gateway: %v", err)
-	// 	}
-	// }
-}
-
-func getenv(k, def string) string {
-	if v := os.Getenv(k); v != "" {
-		return v
-	}
-	return def
+	return r
 }

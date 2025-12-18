@@ -34,6 +34,7 @@ public struct EventDetailFeature: Sendable {
         @Presents public var musicSearch: MusicSearchFeature.State?
         @Presents public var participantProfile: FriendProfileFeature.State?
         public var path = StackState<FriendProfileFeature.State>()
+        @Presents public var confirmationDialog: ConfirmationDialogState<Action>?
 
         public init(event: Event) {
             self.event = event
@@ -61,6 +62,10 @@ public struct EventDetailFeature: Sendable {
         case participantTapped(PublicUserProfile)
         case participantProfile(PresentationAction<FriendProfileFeature.Action>)
         case path(StackAction<FriendProfileFeature.State, FriendProfileFeature.Action>)
+        case requestTransferOwnership(PublicUserProfile)
+        case transferOwnership(PublicUserProfile)
+        case transferOwnershipResponse(TaskResult<String>)
+        case confirmationDialog(PresentationAction<Action>)
 
         // Search
         case addTrackButtonTapped
@@ -464,8 +469,10 @@ public struct EventDetailFeature: Sendable {
                 switch msg.type {
                 case "player.state_changed":
                     // Immediate update for playback control logic
+                    let decoder = JSONDecoder()
+                    decoder.dateDecodingStrategy = .iso8601
                     if let data = try? JSONEncoder().encode(msg.payload),
-                        let payload = try? JSONDecoder.iso8601.decode(
+                        let payload = try? decoder.decode(
                             PlayerStateChangedPayload.self, from: data)
                     {
                         state.metadata?.currentTrackId = payload.currentTrackId
@@ -676,6 +683,63 @@ public struct EventDetailFeature: Sendable {
 
             case .participantProfile:
                 return .none
+
+            case .requestTransferOwnership(let newOwner):
+                #if DEBUG
+                print("Audit: Requesting Transfer to \(newOwner.username)")
+                #endif
+                state.confirmationDialog = ConfirmationDialogState {
+                    TextState("Transfer Ownership?")
+                } actions: {
+                    ButtonState(role: .cancel) {
+                        TextState("Cancel")
+                    }
+                    ButtonState(role: .destructive, action: .transferOwnership(newOwner)) {
+                        TextState("Transfer to \(newOwner.username)")
+                    }
+                } message: {
+                    TextState(
+                        "Are you sure you want to transfer ownership to \(newOwner.username)? You will lose control of this event."
+                    )
+                }
+                return .none
+
+            case .transferOwnership(let newOwner):
+                #if DEBUG
+                print("Audit: Executing Transfer to \(newOwner.userId)")
+                #endif
+                state.confirmationDialog = nil
+                return .run { [eventId = state.event.id] send in
+                    await send(
+                        .transferOwnershipResponse(
+                            TaskResult {
+                                try await musicRoomAPI.transferOwnership(eventId, newOwner.userId)
+                                return "Success"
+                            }
+                        )
+                    )
+                }
+
+            case .transferOwnershipResponse(.success):
+                #if DEBUG
+                print("Audit: Transfer Success")
+                #endif
+                state.userAlert = UserAlert(
+                state.userAlert = UserAlert(
+                    title: "Success", message: "Ownership transferred.", type: .success)
+                return .send(.loadEvent)
+
+            case .transferOwnershipResponse(.failure(let error)):
+                #if DEBUG
+                print("Audit: Transfer Failure: \(error.localizedDescription)")
+                #endif
+                state.userAlert = UserAlert(
+                state.userAlert = UserAlert(
+                    title: "Transfer Failed", message: error.localizedDescription, type: .error)
+                return .none
+
+            case .confirmationDialog:
+                return .none
             }
         }
         .ifLet(\.$musicSearch, action: \.musicSearch) {
@@ -684,5 +748,6 @@ public struct EventDetailFeature: Sendable {
         .forEach(\.path, action: \.path) {
             FriendProfileFeature()
         }
+        .ifLet(\.$confirmationDialog, action: \.confirmationDialog)
     }
 }

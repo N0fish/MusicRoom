@@ -85,6 +85,11 @@ public struct UserClient: Sendable {
     public var generateRandomAvatar: @Sendable () async throws -> UserProfile
 }
 
+public enum UserClientError: Error, Equatable {
+    case serverError(statusCode: Int)
+    case networkError(String)
+}
+
 extension UserClient: DependencyKey {
     public static let liveValue = UserClient.live()
 
@@ -345,6 +350,9 @@ extension UserClient {
                 guard let httpResponse = response as? HTTPURLResponse,
                     (200...299).contains(httpResponse.statusCode)
                 else {
+                    if let httpResponse = response as? HTTPURLResponse {
+                        throw UserClientError.serverError(statusCode: httpResponse.statusCode)
+                    }
                     throw URLError(.badServerResponse)
                 }
 

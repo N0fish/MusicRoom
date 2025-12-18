@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,33 +14,76 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/modules/postgres"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// setupIntegrationTest connects to local DB or skips test.
+// setupIntegrationTest connects to local DB or spins up a container.
 // Returns a Server, a cleanup function, and the db pool.
 func setupIntegrationTest(t *testing.T) (*Server, func(), *pgxpool.Pool) {
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		dbURL = "postgres://musicroom:musicroom@localhost:5432/musicroom?sslmode=disable"
+	ctx := context.Background()
+
+	var dbURL string
+	var container *postgres.PostgresContainer
+	var err error
+
+	// If DATABASE_URL is set, use it (Local dev or CI service)
+	if os.Getenv("DATABASE_URL") != "" {
+		dbURL = os.Getenv("DATABASE_URL")
+	} else {
+		// Otherwise, spin up a Testcontainer
+		msg := "Starting Postgres Testcontainer..."
+		if testing.Short() {
+			t.Skip("Skipping integration test in short mode (container required)")
+		}
+		t.Log(msg)
+
+		dbName := "musicroom_test"
+		dbUser := "user"
+		dbPassword := "password"
+
+		container, err = postgres.Run(ctx,
+			"postgres:16-alpine",
+			postgres.WithDatabase(dbName),
+			postgres.WithUsername(dbUser),
+			postgres.WithPassword(dbPassword),
+			testcontainers.WithWaitStrategy(
+				wait.ForLog("database system is ready to accept connections").
+					WithOccurrence(2).
+					WithStartupTimeout(20*time.Second)),
+		)
+		if err != nil {
+			t.Fatalf("failed to start postgres container: %v", err)
+		}
+
+		dbURL, err = container.ConnectionString(ctx, "sslmode=disable")
+		if err != nil {
+			t.Fatalf("failed to get connection string: %v", err)
+		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	pool, err := pgxpool.New(ctx, dbURL)
+	poolConfig, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
-		t.Skipf("Skipping integration test: cannot connect to DB: %v", err)
+		t.Fatalf("Unable to parse DB URL: %v", err)
+	}
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
+	if err != nil {
+		t.Fatalf("Unable to connect to DB: %v", err)
 	}
 
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
-		t.Skipf("Skipping integration test: cannot ping DB: %v", err)
+		t.Fatalf("Cannot ping DB: %v", err)
 	}
 
 	// Create a dedicated server instance with nil Redis (we verify DB state)
 	srv := NewServer(pool, nil)
 
-	// Run Migrations
+	// Run Migrations involves creating the schema.
+	// Since we are using a fresh container or existing DB, we need to apply schema.
+	// AutoMigrate is lightweight; applying it is safe.
 	if err := AutoMigrate(ctx, pool); err != nil {
 		pool.Close()
 		t.Fatalf("AutoMigrate failed: %v", err)
@@ -47,10 +91,12 @@ func setupIntegrationTest(t *testing.T) (*Server, func(), *pgxpool.Pool) {
 
 	// Cleanup callback
 	cleanup := func() {
-		// Optional: Drop tables? No, keep data for inspection or use transaction rollback?
-		// Transaction rollback for EACH test is best practice, but `setupIntegrationTest` does pool.
-		// For now simple cleanup of created playlist is in the test function itself.
 		pool.Close()
+		if container != nil {
+			if err := container.Terminate(ctx); err != nil {
+				log.Printf("failed to terminate container: %v", err)
+			}
+		}
 	}
 
 	return srv, cleanup, pool
@@ -117,9 +163,9 @@ func TestVotingAndPlaybackFlow(t *testing.T) {
 	// Expected: C, A, B
 	checkOrder(t, router, userID, playlistID, []string{trackC.ID, trackA.ID, trackB.ID})
 
-	// Vote for B twice
-	voteForTrack(t, router, userID, playlistID, trackB.ID)
-	voteForTrack(t, router, userID, playlistID, trackB.ID)
+	// Vote for B twice (User 2 and User 3)
+	voteForTrack(t, router, "test-user-2", playlistID, trackB.ID)
+	voteForTrack(t, router, "test-user-3", playlistID, trackB.ID)
 
 	// Order: B(2), C(1), A(0)
 	checkOrder(t, router, userID, playlistID, []string{trackB.ID, trackC.ID, trackA.ID})

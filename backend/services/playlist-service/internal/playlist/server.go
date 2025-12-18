@@ -1,20 +1,30 @@
 package playlist
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/redis/go-redis/v9"
 )
 
+// DB interface abstracts the database connection (pool or mock).
+type DB interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	BeginTx(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error)
+}
+
 type Server struct {
-	db  *pgxpool.Pool
+	db  DB
 	rdb *redis.Client
 }
 
-func NewServer(db *pgxpool.Pool, rdb *redis.Client) *Server {
+func NewServer(db DB, rdb *redis.Client) *Server {
 	return &Server{
 		db:  db,
 		rdb: rdb,

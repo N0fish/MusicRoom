@@ -26,6 +26,8 @@ public struct MusicRoomAPIClient: Sendable {
     public var leaveEvent: @Sendable (_ eventId: UUID, _ userId: String) async throws -> Void
     public var deleteEvent: @Sendable (_ eventId: UUID) async throws -> Void
     public var joinEvent: @Sendable (_ eventId: UUID) async throws -> Void
+    public var transferOwnership:
+        @Sendable (_ eventId: UUID, _ newOwnerId: String) async throws -> Void
 
     public struct Invite: Decodable, Sendable, Equatable {
         public let userId: String
@@ -413,6 +415,19 @@ extension MusicRoomAPIClient: DependencyKey {
                 request.httpBody = try JSONEncoder().encode(body)
 
                 try await performRequestNoContent(request)
+            },
+            transferOwnership: { eventId, newOwnerId in
+                let url = settings.load().backendURL.appendingPathComponent("events")
+                    .appendingPathComponent(eventId.uuidString)
+                    .appendingPathComponent("transfer-ownership")
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+                let body = ["newOwnerId": newOwnerId]
+                request.httpBody = try JSONEncoder().encode(body)
+
+                try await performRequestNoContent(request)
             }
         )
     }
@@ -492,7 +507,8 @@ extension MusicRoomAPIClient: DependencyKey {
             },
             leaveEvent: { _, _ in },
             deleteEvent: { _ in },
-            joinEvent: { _ in }
+            joinEvent: { _ in },
+            transferOwnership: { _, _ in }
         )
     }
 
@@ -522,7 +538,8 @@ extension MusicRoomAPIClient: DependencyKey {
             listInvites: { _ in [] },
             leaveEvent: { _, _ in },
             deleteEvent: { _ in },
-            joinEvent: { _ in }
+            joinEvent: { _ in },
+            transferOwnership: { _, _ in }
         )
     }
 }

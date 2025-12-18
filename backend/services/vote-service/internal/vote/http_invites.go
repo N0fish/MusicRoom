@@ -38,7 +38,7 @@ func (s *HTTPServer) handleCreateInvite(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	ev, err := loadEvent(r.Context(), s.pool, id)
+	ev, err := s.store.LoadEvent(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "event not found")
@@ -57,7 +57,7 @@ func (s *HTTPServer) handleCreateInvite(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	if err := checkUserExists(r.Context(), s.userServiceURL, body.UserID); err != nil {
+	if err := checkUserExists(r.Context(), s.httpClient, s.userServiceURL, body.UserID); err != nil {
 		var ie *inviteError
 		if errors.As(err, &ie) {
 			writeError(w, ie.status, ie.msg)
@@ -68,10 +68,7 @@ func (s *HTTPServer) handleCreateInvite(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if _, err := s.pool.Exec(r.Context(), `
-        INSERT INTO event_invites(event_id, user_id)
-        VALUES($1,$2) ON CONFLICT DO NOTHING
-    `, id, body.UserID); err != nil {
+	if err := s.store.CreateInvite(r.Context(), id, body.UserID); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -90,7 +87,7 @@ func (s *HTTPServer) handleCreateInvite(w http.ResponseWriter, r *http.Request) 
 		if err == nil {
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("X-User-Id", userID)
-			resp, err := http.DefaultClient.Do(req)
+			resp, err := s.httpClient.Do(req)
 			if err != nil {
 				log.Printf("vote-service: failed to propagate invite to playlist-service: %v", err)
 			} else {
@@ -110,7 +107,7 @@ func (s *HTTPServer) handleDeleteInvite(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	ev, err := loadEvent(r.Context(), s.pool, id)
+	ev, err := s.store.LoadEvent(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "event not found")
@@ -124,7 +121,7 @@ func (s *HTTPServer) handleDeleteInvite(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
-	if _, err := s.pool.Exec(r.Context(), `DELETE FROM event_invites WHERE event_id=$1 AND user_id=$2`, id, invitedID); err != nil {
+	if err := s.store.DeleteInvite(r.Context(), id, invitedID); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -134,7 +131,7 @@ func (s *HTTPServer) handleDeleteInvite(w http.ResponseWriter, r *http.Request) 
 		req, err := http.NewRequest(http.MethodDelete, s.playlistServiceURL+"/playlists/"+id+"/invites/"+invitedID, nil)
 		if err == nil {
 			req.Header.Set("X-User-Id", userID)
-			resp, err := http.DefaultClient.Do(req)
+			resp, err := s.httpClient.Do(req)
 			if err != nil {
 				log.Printf("vote-service: failed to propagate delete invite to playlist-service: %v", err)
 			} else {
@@ -159,7 +156,7 @@ func (s *HTTPServer) handleListInvites(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ev, err := loadEvent(r.Context(), s.pool, id)
+	ev, err := s.store.LoadEvent(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "event not found")
@@ -169,7 +166,7 @@ func (s *HTTPServer) handleListInvites(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if ev.OwnerID != userID {
-		invited, err := isInvited(r.Context(), s.pool, id, userID)
+		invited, err := s.store.IsInvited(r.Context(), id, userID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -180,23 +177,8 @@ func (s *HTTPServer) handleListInvites(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	rows, err := s.pool.Query(r.Context(), `SELECT user_id, created_at FROM event_invites WHERE event_id=$1 ORDER BY created_at`, id)
+	invites, err := s.store.ListInvites(r.Context(), id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	defer rows.Close()
-
-	var invites []Invite
-	for rows.Next() {
-		var inv Invite
-		if err := rows.Scan(&inv.UserID, &inv.CreatedAt); err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		invites = append(invites, inv)
-	}
-	if err := rows.Err(); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

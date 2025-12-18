@@ -11,11 +11,11 @@ import (
 )
 
 type MockUser struct {
-	ID          string                 `json:"id"`
-	DisplayName string                 `json:"displayName"`
-	Bio         string                 `json:"bio"`
-	Visibility  string                 `json:"visibility"`
-	Preferences map[string]any         `json:"preferences"`
+	ID          string         `json:"id"`
+	DisplayName string         `json:"displayName"`
+	Bio         string         `json:"bio"`
+	Visibility  string         `json:"visibility"`
+	Preferences map[string]any `json:"preferences"`
 }
 
 type MockTrack struct {
@@ -25,11 +25,11 @@ type MockTrack struct {
 }
 
 type MockPlaylist struct {
-	ID         string       `json:"id"`
-	Name       string       `json:"name"`
-	OwnerID    string       `json:"ownerId"`
-	Visibility string       `json:"visibility"`
-	Tracks     []MockTrack  `json:"tracks"`
+	ID         string      `json:"id"`
+	Name       string      `json:"name"`
+	OwnerID    string      `json:"ownerId"`
+	Visibility string      `json:"visibility"`
+	Tracks     []MockTrack `json:"tracks"`
 }
 
 type MockEvent struct {
@@ -47,7 +47,15 @@ type InitialData struct {
 
 func main() {
 	port := getenv("PORT", "3006")
+	r := SetupRouter()
 
+	log.Printf("mock-service on :%s", port)
+	if err := http.ListenAndServe(":"+port, r); err != nil {
+		log.Fatalf("listen: %v", err)
+	}
+}
+
+func SetupRouter() *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -88,10 +96,7 @@ func main() {
 		json.NewEncoder(w).Encode(sampleEvents())
 	})
 
-	log.Printf("mock-service on :%s", port)
-	if err := http.ListenAndServe(":"+port, r); err != nil {
-		log.Fatalf("listen: %v", err)
-	}
+	return r
 }
 
 func sampleUser() MockUser {

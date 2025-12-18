@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 )
 
 const (
@@ -87,8 +86,9 @@ func (s *Server) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	form.Set("redirect_uri", s.googleCfg.RedirectURL)
 	form.Set("grant_type", "authorization_code")
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.PostForm(googleTokenURL, form)
+	form.Set("grant_type", "authorization_code")
+
+	resp, err := s.httpClient.PostForm(googleTokenURL, form)
 	if err != nil {
 		log.Printf("google callback: token exchange error: %v", err)
 		writeError(w, http.StatusBadGateway, "google token exchange failed")
@@ -115,7 +115,7 @@ func (s *Server) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Header.Set("Authorization", "Bearer "+tr.AccessToken)
 
-	uResp, err := client.Do(req)
+	uResp, err := s.httpClient.Do(req)
 	if err != nil {
 		log.Printf("google callback: userinfo error: %v", err)
 		writeError(w, http.StatusBadGateway, "google userinfo failed")
@@ -140,7 +140,7 @@ func (s *Server) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.upsertUserWithGoogle(r.Context(), email, ui.Sub)
+	user, err := s.repo.UpsertUserWithGoogle(r.Context(), email, ui.Sub)
 	if err != nil {
 		log.Printf("google callback: upsertUserWithGoogle: %v", err)
 		writeError(w, http.StatusInternalServerError, "internal error")

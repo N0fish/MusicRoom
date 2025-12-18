@@ -1,4 +1,5 @@
 import AppSupportClients
+import AuthenticationServices
 import ComposableArchitecture
 import Foundation
 
@@ -218,6 +219,32 @@ public struct ProfileFeature: Sendable {
 
             case .linkAccountResponse(.failure(let error)):
                 state.isLoading = false
+
+                if let error = error as? ASWebAuthenticationSessionError,
+                    error.code == .canceledLogin
+                {
+                    return .none
+                }
+
+                // Check also for NSError in case it's bridged
+                let nsError = error as NSError
+                if nsError.domain == ASWebAuthenticationSessionError.errorDomain
+                    && nsError.code == ASWebAuthenticationSessionError.canceledLogin.rawValue
+                {
+                    return .none
+                }
+
+                // Handle Conflict (409) specifically
+                if let userError = error as? UserClientError,
+                    case .serverError(let statusCode) = userError,
+                    statusCode == 409
+                {
+                    state.errorMessage =
+                        "This account is already linked to another user. Please log in to that account to unlink it first."
+                    return .none
+                }
+
+                // Generic error handling
                 state.errorMessage = "Failed to link/unlink account: \(error.localizedDescription)"
                 return .none
 

@@ -15,6 +15,10 @@ public struct EventDetailView: View {
 
     @Namespace private var animation
 
+    private var isOwner: Bool {
+        store.currentUserId == store.event.ownerId
+    }
+
     public var body: some View {
         ZStack {
             LiquidBackground()
@@ -456,6 +460,10 @@ struct TrackRow: View {
 struct ParticipantsListView: View {
     @Bindable var store: StoreOf<EventDetailFeature>
 
+    private var isOwner: Bool {
+        store.currentUserId == store.event.ownerId
+    }
+
     var body: some View {
         NavigationStack(path: $store.scope(state: \.path, action: \.path)) {
             List {
@@ -490,6 +498,15 @@ struct ParticipantsListView: View {
                                 } label: {
                                     ParticipantRow(profile: participant)
                                 }
+                                .contextMenu {
+                                    if isOwner {
+                                        Button(role: .destructive) {
+                                            store.send(.requestTransferOwnership(participant))
+                                        } label: {
+                                            Label("Make Owner", systemImage: "crown.fill")
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -499,13 +516,14 @@ struct ParticipantsListView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") {
-                        store.send(.binding(.set(\.isShowingParticipants, false)))
+                        store.send(.set(\.isShowingParticipants, false))
                     }
                 }
             }
         } destination: { store in
             FriendProfileView(store: store)
         }
+        .confirmationDialog($store.scope(state: \.confirmationDialog, action: \.confirmationDialog))
     }
 }
 

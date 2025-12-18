@@ -50,7 +50,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.createUserWithPassword(r.Context(), email, string(hash))
+	user, err := s.repo.CreateUserWithPassword(r.Context(), email, string(hash))
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) || strings.Contains(strings.ToLower(err.Error()), "duplicate key") {
 			writeError(w, http.StatusConflict, "email already registered")
@@ -63,7 +63,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	// РАСКОМЕНТИРОВАТЬ БЛОГ КОГДА ЗАКОНЧИТСЯ ДЕВ РАЗРАБОТКА - ЭТО АВТОМАТИЧЕСКАЯ ОТПРАВКА ЕМЕЙЛА ПРИ РЕГИСТРАЦИИ
 	token := randomToken(32)
-	if err := s.setVerificationToken(r.Context(), user.ID, token); err != nil {
+	if err := s.repo.SetVerificationToken(r.Context(), user.ID, token); err != nil {
 		log.Printf("register: setVerificationToken: %v", err)
 	} else {
 		// 	log.Printf("[auth-service] email verification for %s: %s", user.Email, verificationURL)
@@ -93,7 +93,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.findUserByEmail(r.Context(), email)
+	user, err := s.repo.FindUserByEmail(r.Context(), email)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
 			writeError(w, http.StatusUnauthorized, "invalid credentials")
@@ -146,7 +146,7 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.findUserByID(r.Context(), claims.UserID)
+	user, err := s.repo.FindUserByID(r.Context(), claims.UserID)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "user not found")
 		return
@@ -169,7 +169,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.findUserByID(r.Context(), claims.UserID)
+	user, err := s.repo.FindUserByID(r.Context(), claims.UserID)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "user not found")
 		return
@@ -199,7 +199,7 @@ func (s *Server) handleRequestEmailVerification(w http.ResponseWriter, r *http.R
 	}
 	email := strings.TrimSpace(strings.ToLower(body.Email))
 
-	user, err := s.findUserByEmail(r.Context(), email)
+	user, err := s.repo.FindUserByEmail(r.Context(), email)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "user not found")
 		return
@@ -211,7 +211,7 @@ func (s *Server) handleRequestEmailVerification(w http.ResponseWriter, r *http.R
 	}
 
 	token := randomToken(32)
-	if err := s.setVerificationToken(r.Context(), user.ID, token); err != nil {
+	if err := s.repo.SetVerificationToken(r.Context(), user.ID, token); err != nil {
 		log.Printf("request-email-verification: %v", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
@@ -228,7 +228,7 @@ func (s *Server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "token is required")
 		return
 	}
-	user, err := s.verifyEmailByToken(r.Context(), token)
+	user, err := s.repo.VerifyEmailByToken(r.Context(), token)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
 			writeError(w, http.StatusBadRequest, "invalid token")
@@ -254,7 +254,7 @@ func (s *Server) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	email := strings.TrimSpace(strings.ToLower(body.Email))
 
-	user, err := s.findUserByEmail(r.Context(), email)
+	user, err := s.repo.FindUserByEmail(r.Context(), email)
 	if err != nil {
 		// Do not reveal whether user exists
 		writeJSON(w, http.StatusOK, map[string]string{"status": "reset link sent"})
@@ -263,7 +263,7 @@ func (s *Server) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 
 	token := randomToken(32)
 	expiresAt := time.Now().Add(1 * time.Hour)
-	if err := s.setResetToken(r.Context(), user.ID, token, expiresAt); err != nil {
+	if err := s.repo.SetResetToken(r.Context(), user.ID, token, expiresAt); err != nil {
 		log.Printf("forgot-password: %v", err)
 		writeJSON(w, http.StatusOK, map[string]string{"status": "reset link sent"})
 		return
@@ -300,7 +300,7 @@ func (s *Server) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.resetPasswordByToken(r.Context(), body.Token, string(hash), time.Now())
+	user, err := s.repo.ResetPasswordByToken(r.Context(), body.Token, string(hash), time.Now())
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
 			writeError(w, http.StatusBadRequest, "invalid or expired token")
@@ -384,16 +384,23 @@ func (s *Server) handleLinkProvider(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find target user (User B)
-	targetUser, err := s.findUserByID(r.Context(), targetClaims.UserID)
+	targetUser, err := s.repo.FindUserByID(r.Context(), targetClaims.UserID)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "target user not found")
 		return
 	}
 
 	// Find current user (User A)
-	currentUser, err := s.findUserByID(r.Context(), claims.UserID)
+	currentUser, err := s.repo.FindUserByID(r.Context(), claims.UserID)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "user not found")
+		return
+	}
+
+	// Check if target user is an existing "real" user or just a temp shell
+	// Heuristic: if created > 5 minutes ago, it's likely a real user.
+	if time.Since(targetUser.CreatedAt) > 5*time.Minute {
+		writeError(w, http.StatusConflict, "account associated with another user")
 		return
 	}
 
@@ -408,13 +415,13 @@ func (s *Server) handleLinkProvider(w http.ResponseWriter, r *http.Request) {
 		}
 		// Move GoogleID from B to A
 		// First: Unlink from B to avoid unique constraint violation
-		if _, err := s.updateGoogleID(r.Context(), targetUser.ID, nil); err != nil {
+		if _, err := s.repo.UpdateGoogleID(r.Context(), targetUser.ID, nil); err != nil {
 			log.Printf("link google: unlink target: %v", err)
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
 		// Second: Link to A
-		if _, err := s.updateGoogleID(r.Context(), currentUser.ID, targetUser.GoogleID); err != nil {
+		if _, err := s.repo.UpdateGoogleID(r.Context(), currentUser.ID, targetUser.GoogleID); err != nil {
 			log.Printf("link google: link current: %v", err)
 			// Attempt to restore? For now just fail. User B is now unlinked but distinct.
 			writeError(w, http.StatusInternalServerError, "internal error")
@@ -431,13 +438,13 @@ func (s *Server) handleLinkProvider(w http.ResponseWriter, r *http.Request) {
 		}
 		// Move FTID from B to A
 		// First: Unlink from B to avoid unique constraint violation
-		if _, err := s.updateFTID(r.Context(), targetUser.ID, nil); err != nil {
+		if _, err := s.repo.UpdateFTID(r.Context(), targetUser.ID, nil); err != nil {
 			log.Printf("link 42: unlink target: %v", err)
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
 		// Second: Link to A
-		if _, err := s.updateFTID(r.Context(), currentUser.ID, targetUser.FTID); err != nil {
+		if _, err := s.repo.UpdateFTID(r.Context(), currentUser.ID, targetUser.FTID); err != nil {
 			log.Printf("link 42: link current: %v", err)
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
@@ -445,7 +452,7 @@ func (s *Server) handleLinkProvider(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete target user (User B)
-	if err := s.deleteUser(r.Context(), targetUser.ID); err != nil {
+	if err := s.repo.DeleteUser(r.Context(), targetUser.ID); err != nil {
 		// Log but don't fail, since link succeeded
 		log.Printf("link provider: failed to delete temp user %s: %v", targetUser.ID, err)
 	}
@@ -467,13 +474,13 @@ func (s *Server) handleUnlinkProvider(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if provider == "google" {
-		if _, err := s.updateGoogleID(r.Context(), claims.UserID, nil); err != nil {
+		if _, err := s.repo.UpdateGoogleID(r.Context(), claims.UserID, nil); err != nil {
 			log.Printf("unlink google: %v", err)
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
 	} else if provider == "42" {
-		if _, err := s.updateFTID(r.Context(), claims.UserID, nil); err != nil {
+		if _, err := s.repo.UpdateFTID(r.Context(), claims.UserID, nil); err != nil {
 			log.Printf("unlink 42: %v", err)
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return

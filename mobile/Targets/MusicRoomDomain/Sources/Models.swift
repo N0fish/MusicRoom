@@ -264,8 +264,8 @@ public struct PlaylistResponse: Codable, Sendable, Equatable {
         public let name: String
         public let isPublic: Bool
         public let editMode: String
-        public let currentTrackId: String?
-        public let playingStartedAt: Date?
+        public var currentTrackId: String?
+        public var playingStartedAt: Date?
 
         public init(
             id: String, ownerId: String, name: String, isPublic: Bool, editMode: String,

@@ -176,6 +176,32 @@ final class ProfileFeatureTests: XCTestCase {
         }
     }
 
+    func testLinkAccount_Conflict() async {
+        let store = TestStore(initialState: ProfileFeature.State()) {
+            ProfileFeature()
+        } withDependencies: {
+            $0.webAuthenticationSession.authenticate = { _, _ in
+                URL(string: "musicroom://auth?accessToken=mockAccess&refreshToken=mockRefresh")!
+            }
+            $0.user.link = { provider, token in
+                throw UserClientError.serverError(statusCode: 409)
+            }
+        }
+
+        await store.send(
+            ProfileFeature.Action.linkAccount(
+                AuthenticationClient.SocialHelper.SocialProvider.google)
+        ) {
+            $0.isLoading = true
+        }
+
+        await store.receive(\.linkAccountResponse.failure) {
+            $0.isLoading = false
+            $0.errorMessage =
+                "This account is already linked to another user. Please log in to that account to unlink it first."
+        }
+    }
+
     func testUnlinkAccount_Success() async {
 
         let profileUnlinked = UserProfile(

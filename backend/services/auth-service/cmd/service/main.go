@@ -13,7 +13,7 @@ import (
 )
 
 type Server struct {
-	db              *pgxpool.Pool
+	repo            Repository
 	jwtSecret       []byte
 	accessTTL       time.Duration
 	refreshTTL      time.Duration
@@ -21,6 +21,7 @@ type Server struct {
 	ftCfg           FTConfig
 	frontendURL     string
 	frontendBaseURL string
+	httpClient      HTTPClient
 
 	emailSender         EmailSender
 	verificationURLBase string
@@ -55,15 +56,19 @@ func main() {
 		emailSender = LogEmailSender{}
 	}
 
+	repo := NewPostgresRepository(pool)
+
 	srv := &Server{
-		db:              pool,
-		jwtSecret:       jwtSecret,
-		accessTTL:       accessTTL,
-		refreshTTL:      refreshTTL,
-		googleCfg:       loadGoogleConfigFromEnv(),
-		ftCfg:           loadFTConfigFromEnv(),
-		frontendURL:     getenv("OAUTH_FRONTEND_REDIRECT", "http://localhost:5175/auth/callback"),
+		repo:        repo,
+		jwtSecret:   jwtSecret,
+		accessTTL:   accessTTL,
+		refreshTTL:  refreshTTL,
+		googleCfg:   loadGoogleConfigFromEnv(),
+		ftCfg:       loadFTConfigFromEnv(),
+		frontendURL: getenv("OAUTH_FRONTEND_REDIRECT", "http://localhost:5175/auth/callback"),
+
 		frontendBaseURL: getenv("FRONTEND_BASE_URL", "http://localhost:5175"),
+		httpClient:      &http.Client{Timeout: 10 * time.Second},
 
 		emailSender:         emailSender,
 		verificationURLBase: getenv("EMAIL_VERIFICATION_URL", "http://localhost:8080/auth/verify-email"),

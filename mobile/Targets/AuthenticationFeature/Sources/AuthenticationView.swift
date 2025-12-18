@@ -168,7 +168,7 @@ public struct AuthenticationView: View {
                                     .progressViewStyle(
                                         CircularProgressViewStyle(tint: .white))
                             } else {
-                                Text(store.isRegistering ? "INITIATE SEQUENCE" : "CONNECT")
+                                Text(store.isRegistering ? "REGISTER" : "CONNECT")
                                     .font(.liquidButton)
                                     .foregroundColor(.white)
                             }
@@ -242,7 +242,7 @@ public struct AuthenticationView: View {
                 Text(
                     store.isRegistering
                         ? "Existing User? Connect"
-                        : "New Identity? Initialize"
+                        : "New Identity? Register"
                 )
                 .font(.liquidCaption)
                 .foregroundColor(.liquidPrimary)
