@@ -52,4 +52,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
         showModal();
     }
+
+    window.showConfirm = ({ title, content, onConfirm }) => {
+        modalTitle.textContent = title;
+        modalContent.textContent = content;
+        modalInput.classList.add('hidden');
+        modalActions.innerHTML = '';
+
+        const confirmButton = document.createElement('button');
+        confirmButton.textContent = 'Confirm';
+        confirmButton.className = 'px-4 py-2 bg-primary text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-primary-hover focus:outline-none';
+        confirmButton.addEventListener('click', () => {
+            onConfirm();
+            hideModal();
+        });
+
+        const cancelButton = document.createElement('button');
+        cancelButton.textContent = 'Cancel';
+        cancelButton.className = 'btn-modal mt-2';
+        cancelButton.addEventListener('click', hideModal);
+
+        modalActions.appendChild(confirmButton);
+        modalActions.appendChild(cancelButton);
+
+        showModal();
+    }
 });

@@ -51,6 +51,7 @@ func main() {
 	r.Get("/realtime", app.page("realtime.gohtml", nil))
 	r.Get("/me", app.page("me.gohtml", nil))
 	r.Get("/friends", app.page("friends.gohtml", nil))
+	r.Get("/friends/requests", app.page("friend-requests.gohtml", nil))
 
 	r.Get("/static/playlists.js", func(w http.ResponseWriter, r *http.Request) {
 		tpl, err := template.ParseFS(staticFS, "static/playlists.js")

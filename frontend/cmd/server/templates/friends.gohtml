@@ -2,6 +2,18 @@
 <div class="flex flex-col items-center justify-center px-6 py-8 mx-auto lg:py-0">
   <div class="w-full bg-card-bg rounded-lg shadow md:mt-0 sm:max-w-xl xl:p-0">
     <div class="p-6 space-y-4 md:space-y-6 sm:p-8">
+      <h1 class="text-xl font-bold leading-tight tracking-tight text-text md:text-2xl text-center">Friends</h1>
+      <a id="incoming-requests-link" href="/friends/requests" class="text-center text-primary block relative">
+        <span>Incoming Friend Requests</span>
+        <span id="incoming-requests-badge" class="absolute top-0 right-0 hidden w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center"></span>
+      </a>
+      <div id="friends-list" class="space-y-4">
+      </div>
+    </div>
+  </div>
+
+  <div class="w-full bg-card-bg rounded-lg shadow md:mt-6 sm:max-w-xl xl:p-0">
+    <div class="p-6 space-y-4 md:space-y-6 sm:p-8">
       <h1 class="text-xl font-bold leading-tight tracking-tight text-text md:text-2xl text-center">Find Friends</h1>
       <div class="space-y-4">
         <div>
@@ -18,7 +30,60 @@
 <script>
   const searchInput = document.getElementById('search-input');
   const searchResults = document.getElementById('search-results');
+  const friendsList = document.getElementById('friends-list');
+  const incomingRequestsLink = document.getElementById('incoming-requests-link');
+  const incomingRequestsBadge = document.getElementById('incoming-requests-badge');
   const API = "{{.API}}";
+
+  async function getFriends() {
+    try {
+      const res = await authService.fetchWithAuth(`${API}/users/me/friends`);
+      if (!res.ok) {
+        throw new Error('Failed to get friends');
+      }
+      const data = await res.json();
+      displayFriends(data.items);
+    } catch (error) {
+      console.error(error.message);
+      showAlert({ title: 'Error', content: error.message });
+    }
+  }
+
+  function displayFriends(friends) {
+    if (!friends || friends.length === 0) {
+      friendsList.innerHTML = '<p class="text-text-muted">You have no friends yet.</p>';
+      return;
+    }
+
+    friendsList.innerHTML = friends.map(friend => `
+      <div class="flex items-center justify-between p-2 bg-card-bg-hover rounded-lg">
+        <div class="flex items-center space-x-4">
+          <div>
+            <p class="font-semibold text-text">${friend.displayName}</p>
+            <p class="text-sm text-text-muted">@${friend.username}</p>
+          </div>
+        </div>
+        <button class="btn-small btn-danger" onclick="removeFriend('${friend.userId}')">Remove</button>
+      </div>
+    `).join('');
+  }
+
+  async function removeFriend(userId) {
+    try {
+      const res = await authService.fetchWithAuth(`${API}/users/me/friends/${userId}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to remove friend');
+      }
+      showAlert({ title: 'Success', content: 'Friend removed.' });
+      getFriends();
+    } catch (error) {
+      console.error(error.message);
+      showAlert({ title: 'Error', content: error.message });
+    }
+  }
 
   async function searchUsers(query) {
     if (query.length < 3) {
@@ -40,7 +105,7 @@
   }
 
   function displayResults(users) {
-    if (users.length === 0) {
+    if (!users || users.length === 0) {
       searchResults.innerHTML = '<p class="text-text-muted">No users found.</p>';
       return;
     }
@@ -48,15 +113,24 @@
     searchResults.innerHTML = users.map(user => `
       <div class="flex items-center justify-between p-2 bg-card-bg-hover rounded-lg">
         <div class="flex items-center space-x-4">
-          <img src="${API}${user.avatarUrl || '/avatars/default.svg'}" alt="Avatar" class="w-10 h-10 rounded-full">
           <div>
             <p class="font-semibold text-text">${user.displayName}</p>
             <p class="text-sm text-text-muted">@${user.username}</p>
           </div>
         </div>
-        <button class="btn-small" onclick="sendFriendRequest('${user.userId}')">Add Friend</button>
+        <button id="add-friend-${user.userId}" class="btn-small" onclick="confirmSendFriendRequest('${user.userId}', '${user.displayName}')">Add Friend</button>
       </div>
     `).join('');
+  }
+
+  function confirmSendFriendRequest(userId, displayName) {
+    showConfirm({
+      title: 'Send Friend Request',
+      content: `Are you sure you want to send a friend request to ${displayName}?`,
+      onConfirm: () => {
+        sendFriendRequest(userId);
+      }
+    });
   }
 
   async function sendFriendRequest(userId) {
@@ -69,15 +143,41 @@
         throw new Error(err.error || 'Failed to send friend request');
       }
       showAlert({ title: 'Success', content: 'Friend request sent.' });
+      const button = document.getElementById(`add-friend-${userId}`);
+      if (button) {
+        button.textContent = 'Request Sent';
+        button.disabled = true;
+      }
     } catch (error) {
       console.error(error.message);
       showAlert({ title: 'Error', content: error.message });
     }
   }
 
+  async function checkIncomingFriendRequests() {
+    try {
+      const res = await authService.fetchWithAuth(`${API}/users/me/friends/requests/incoming`);
+      if (!res.ok) {
+        return; // fail silently
+      }
+      const data = await res.json();
+      if (data.items && data.items.length > 0) {
+        incomingRequestsBadge.textContent = data.items.length;
+        incomingRequestsBadge.classList.remove('hidden');
+      } else {
+        incomingRequestsBadge.classList.add('hidden');
+      }
+    } catch (error) {
+      console.error("Failed to check incoming friend requests", error);
+    }
+  }
+
   searchInput.addEventListener('input', (e) => {
     searchUsers(e.target.value);
   });
+
+  getFriends();
+  checkIncomingFriendRequests();
 </script>
 {{end}}
 {{ template "base" . }}

@@ -1,0 +1,89 @@
+{{define "content"}}
+<div class="flex flex-col items-center justify-center px-6 py-8 mx-auto lg:py-0">
+  <div class="w-full bg-card-bg rounded-lg shadow md:mt-0 sm:max-w-xl xl:p-0">
+    <div class="p-6 space-y-4 md:space-y-6 sm:p-8">
+      <h1 class="text-xl font-bold leading-tight tracking-tight text-text md:text-2xl text-center">Incoming Friend Requests</h1>
+      <div id="friend-requests" class="space-y-4">
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const friendRequestsContainer = document.getElementById('friend-requests');
+  const API = "{{.API}}";
+
+  async function getIncomingFriendRequests() {
+    try {
+      const res = await authService.fetchWithAuth(`${API}/users/me/friends/requests/incoming`);
+      if (!res.ok) {
+        throw new Error('Failed to get incoming friend requests');
+      }
+      const data = await res.json();
+      displayFriendRequests(data.items);
+    } catch (error) {
+      console.error(error.message);
+      showAlert({ title: 'Error', content: error.message });
+    }
+  }
+
+  function displayFriendRequests(requests) {
+    if (!requests || requests.length === 0) {
+      friendRequestsContainer.innerHTML = '<p class="text-text-muted">No incoming friend requests.</p>';
+      return;
+    }
+
+    friendRequestsContainer.innerHTML = requests.map(request => `
+      <div class="flex items-center justify-between p-2 bg-card-bg-hover rounded-lg">
+        <div class="flex items-center space-x-4">
+          <div>
+            <p class="font-semibold text-text">${request.from.displayName}</p>
+            <p class="text-sm text-text-muted">@${request.from.username}</p>
+          </div>
+        </div>
+        <div>
+          <button class="btn-small btn-success" onclick="acceptFriendRequest('${request.from.userId}')">Accept</button>
+          <button class="btn-small btn-danger" onclick="rejectFriendRequest('${request.from.userId}')">Reject</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async function acceptFriendRequest(userId) {
+    try {
+      const res = await authService.fetchWithAuth(`${API}/users/me/friends/${userId}/accept`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to accept friend request');
+      }
+      showAlert({ title: 'Success', content: 'Friend request accepted.' });
+      getIncomingFriendRequests();
+    } catch (error) {
+      console.error(error.message);
+      showAlert({ title: 'Error', content: error.message });
+    }
+  }
+
+  async function rejectFriendRequest(userId) {
+    try {
+      const res = await authService.fetchWithAuth(`${API}/users/me/friends/${userId}/reject`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to reject friend request');
+      }
+      showAlert({ title: 'Success', content: 'Friend request rejected.' });
+      getIncomingFriendRequests();
+    } catch (error) {
+      console.error(error.message);
+      showAlert({ title: 'Error', content: error.message });
+    }
+  }
+
+  getIncomingFriendRequests();
+</script>
+{{end}}
+{{ template "base" . }}
