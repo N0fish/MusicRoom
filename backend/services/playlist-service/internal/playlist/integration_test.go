@@ -43,8 +43,8 @@ func setupIntegrationTest(t *testing.T) (*Server, func(), *pgxpool.Pool) {
 		dbUser := "user"
 		dbPassword := "password"
 
-		container, err = postgres.Run(ctx,
-			"postgres:16-alpine",
+		container, err = postgres.RunContainer(ctx,
+			testcontainers.WithImage("postgres:16-alpine"),
 			postgres.WithDatabase(dbName),
 			postgres.WithUsername(dbUser),
 			postgres.WithPassword(dbPassword),
