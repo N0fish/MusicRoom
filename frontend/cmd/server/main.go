@@ -3,7 +3,7 @@ package main
 import (
 	"embed"
 	"encoding/json"
-	"html/template"
+	html_template "html/template" // Alias html/template
 	"log"
 	"net/http"
 	"os"
@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	text_template "text/template" // Alias text/template
 	"github.com/go-chi/chi/v5"
 )
 
@@ -27,7 +28,7 @@ type App struct {
 
 type Playlist struct {
 	ID          string    `json:"id"`
-	OwnerID     string    `json:"ownerId"`
+	OwnerID     string    `json:"json:"ownerId"`
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
 	IsPublic    bool      `json:"isPublic"`
@@ -54,7 +55,7 @@ func main() {
 	r.Get("/friends/requests", app.page("friend-requests.gohtml", nil))
 
 	r.Get("/static/playlists.js", func(w http.ResponseWriter, r *http.Request) {
-		tpl, err := template.ParseFS(staticFS, "static/playlists.js")
+		tpl, err := text_template.ParseFS(staticFS, "static/playlists.js") // Use text_template
 		if err != nil {
 			http.Error(w, "template error", 500)
 			return
@@ -138,7 +139,7 @@ func (a *App) getPlaylists() ([]Playlist, error) {
 
 func (a *App) page(name string, data map[string]any) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tpl, err := template.ParseFS(tplFS, "templates/base.gohtml", "templates/"+name)
+		tpl, err := html_template.ParseFS(tplFS, "templates/base.gohtml", "templates/"+name) // Use html_template
 		if err != nil {
 			http.Error(w, "template error", 500)
 			return

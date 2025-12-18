@@ -1,6 +1,9 @@
 {{ define "content" }}
 <div class="card mt-6">
-    <h2 class="text-xl font-semibold mb-4">Public Playlists</h2>
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-semibold">Public Playlists</h2>
+        <button class="btn" onclick="createPlaylist()">Create Playlist</button>
+    </div>
     <table class="w-full text-left">
         <thead>
             <tr>
@@ -23,6 +26,13 @@
     </table>
 </div>
 
+<div id="current-playlist" class="card mt-6" style="display: none;">
+    <h2 class="text-xl font-semibold mb-4">Current Playlist: <span id="pl-name"></span></h2>
+    <span id="pl-id" style="display: none;"></span>
+    <ul id="pl-tracks" class="list-disc list-inside">
+    </ul>
+</div>
+
 <div class="card mt-6">
     <h2 class="text-xl font-semibold mb-4">Search Music</h2>
     <div class="space-y-3">
@@ -32,6 +42,6 @@
     </div>
 </div>
 
-<script src="/static/playlists.js"></script>
+<script src="/static/playlists.js?v=3"></script>
 {{ end }}
 {{ template "base" . }}
