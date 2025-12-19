@@ -12,7 +12,9 @@ public struct AnyDecodable: Codable, @unchecked Sendable, Equatable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
-        if let x = try? container.decode(Int.self) {
+        if container.decodeNil() {
+            value = NSNull()
+        } else if let x = try? container.decode(Int.self) {
             value = x
         } else if let x = try? container.decode(Double.self) {
             value = x
@@ -32,7 +34,9 @@ public struct AnyDecodable: Codable, @unchecked Sendable, Equatable {
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
-        if let x = value as? Int {
+        if value is NSNull {
+            try container.encodeNil()
+        } else if let x = value as? Int {
             try container.encode(x)
         } else if let x = value as? Double {
             try container.encode(x)
@@ -40,12 +44,7 @@ public struct AnyDecodable: Codable, @unchecked Sendable, Equatable {
             try container.encode(x)
         } else if let x = value as? Bool {
             try container.encode(x)
-        } else if let x = value as? [String: Any] {  // Map back to AnyDecodable for encoding recursion?
-            // Since we have the value as Any, we need to wrap it if we want to use auto-encoding,
-            // or manually encode dict.
-            // Simplest is to cast to [String: AnyDecodable] if possible, or just build a wrapper.
-            // But AnyDecodable structure is flat.
-            // Let's iterate.
+        } else if let x = value as? [String: Any] {
             let wrapped = x.mapValues { AnyDecodable($0) }
             try container.encode(wrapped)
         } else if let x = value as? [Any] {
@@ -65,6 +64,7 @@ public struct AnyDecodable: Codable, @unchecked Sendable, Equatable {
     }
 
     public static func == (lhs: AnyDecodable, rhs: AnyDecodable) -> Bool {
+        if lhs.value is NSNull && rhs.value is NSNull { return true }
         if let l = lhs.value as? Int, let r = rhs.value as? Int { return l == r }
         if let l = lhs.value as? Double, let r = rhs.value as? Double { return l == r }
         if let l = lhs.value as? String, let r = rhs.value as? String { return l == r }
