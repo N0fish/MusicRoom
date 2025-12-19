@@ -114,12 +114,10 @@ extension AuthenticationClient {
     static func live(urlSession: URLSession = .shared) -> Self {
         let keychain = KeychainHelper()
 
-        // TODO: Use a proper configured base URL
-        let baseURL = URL(string: "http://localhost:8080/auth")!
-
         return Self(
             login: { email, password in
-                let url = baseURL.appendingPathComponent("login")
+                let baseUrl = BaseURL.resolve()
+                let url = URL(string: "\(baseUrl)/auth/login")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.addValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -163,7 +161,8 @@ extension AuthenticationClient {
                 keychain.save(authResponse.refreshToken, for: "refreshToken")
             },
             register: { email, password in
-                let url = baseURL.appendingPathComponent("register")
+                let baseUrl = BaseURL.resolve()
+                let url = URL(string: "\(baseUrl)/auth/register")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.addValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -224,7 +223,8 @@ extension AuthenticationClient {
                     throw AuthenticationError.invalidCredentials
                 }
 
-                let url = baseURL.appendingPathComponent("refresh")
+                let baseUrl = BaseURL.resolve()
+                let url = URL(string: "\(baseUrl)/auth/refresh")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.addValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -261,7 +261,8 @@ extension AuthenticationClient {
                 keychain.save(refreshResponse.refreshToken, for: "refreshToken")
             },
             forgotPassword: { email in
-                let url = baseURL.appendingPathComponent("forgot-password")
+                let baseUrl = BaseURL.resolve()
+                let url = URL(string: "\(baseUrl)/auth/forgot-password")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.addValue("application/json", forHTTPHeaderField: "Content-Type")

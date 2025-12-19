@@ -20,7 +20,9 @@ extension TelemetryClient: DependencyKey {
             subsystem: Bundle.main.bundleIdentifier ?? "com.musicroom.mobile", category: "Audit")
 
         // 1. Log to os.Logger
-        let metadataString = metadata.map { "\($0.key): \($0.value)" }.joined(separator: ", ")
+        let metadataString =
+            metadata.isEmpty
+            ? "none" : metadata.map { "\($0.key): \($0.value)" }.joined(separator: ", ")
         logger.info(
             "Action: \(action, privacy: .public) | Metadata: \(metadataString, privacy: .public)")
 
@@ -36,11 +38,11 @@ extension TelemetryClient: DependencyKey {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         // Headers
-        request.setValue("iOS", forHTTPHeaderField: "X-Platform")
+        request.setValue("iOS", forHTTPHeaderField: "X-Client-Platform")
         let deviceName = await MainActor.run { UIDevice.current.name }
-        request.setValue(deviceName, forHTTPHeaderField: "X-Device")
+        request.setValue(deviceName, forHTTPHeaderField: "X-Client-Device")
         if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
-            request.setValue(version, forHTTPHeaderField: "X-App-Version")
+            request.setValue(version, forHTTPHeaderField: "X-Client-App-Version")
         }
 
         if let token = authentication.getAccessToken() {

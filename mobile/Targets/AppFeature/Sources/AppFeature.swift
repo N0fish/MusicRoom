@@ -189,8 +189,12 @@ public struct AppFeature: Sendable {
                 return .none
 
             case .logoutButtonTapped:
-                return .run { [authentication = self.authentication, telemetry] send in
-                    await telemetry.log("user.logout", [:])
+                return .run {
+                    [
+                        userId = state.eventList.currentUserId,
+                        authentication = self.authentication, telemetry
+                    ] send in
+                    await telemetry.log("user.logout", userId.map { ["userId": $0] } ?? [:])
                     await authentication.logout()
                     await send(.destinationChanged(.login))
                 }

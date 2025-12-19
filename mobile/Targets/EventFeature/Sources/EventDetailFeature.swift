@@ -154,8 +154,9 @@ public struct EventDetailFeature: Sendable {
 
             case .onAppear:
                 return .merge(
-                    .run { [name = state.event.name] _ in
-                        await telemetry.log("Viewed Event Detail: \(name)", [:])
+                    .run { [id = state.event.id, name = state.event.name] _ in
+                        await telemetry.log(
+                            "Viewed Event Detail: \(name)", ["eventId": id.uuidString])
                     },
                     .send(.loadPlaylist),
                     .send(.loadEvent),
@@ -480,6 +481,12 @@ public struct EventDetailFeature: Sendable {
                     }
                     return .send(.loadPlaylist)
 
+                case "event.updated":
+                    return .merge(
+                        .send(.loadEvent),
+                        .send(.loadPlaylist)
+                    )
+
                 case "vote.cast", "track.added", "track.deleted", "playlist.reordered",
                     "playlist.updated", "track.updated":
                     return .send(.loadPlaylist)
@@ -620,7 +627,10 @@ public struct EventDetailFeature: Sendable {
                                     var profiles: [PublicUserProfile] = []
                                     for await profile in group {
                                         if let profile {
-                                            profiles.append(profile)
+                                            // Filter out owner to avoid duplicates if backend includes them
+                                            if profile.userId != ownerId {
+                                                profiles.append(profile)
+                                            }
                                         }
                                     }
                                     return profiles
@@ -685,6 +695,7 @@ public struct EventDetailFeature: Sendable {
                 return .none
 
             case .requestTransferOwnership(let newOwner):
+                print("DEBUG: Requesting Transfer to \(newOwner.username)")
                 #if DEBUG
                     print("Audit: Requesting Transfer to \(newOwner.username)")
                 #endif
@@ -705,6 +716,7 @@ public struct EventDetailFeature: Sendable {
                 return .none
 
             case .transferOwnership(let newOwner):
+                print("DEBUG: Confirmed Transfer to \(newOwner.userId)")
                 #if DEBUG
                     print("Audit: Executing Transfer to \(newOwner.userId)")
                 #endif
@@ -726,7 +738,15 @@ public struct EventDetailFeature: Sendable {
                 #endif
                 state.userAlert = UserAlert(
                     title: "Success", message: "Ownership transferred.", type: .success)
-                return .send(.loadEvent)
+                return .merge(
+                    .send(.loadEvent),
+                    .send(.loadParticipants),
+                    .run { send in
+                        // Small delay to allow backend propagation if needed, mostly for safety
+                        try? await Task.sleep(for: .seconds(0.5))
+                        await send(.loadParticipants)
+                    }
+                )
 
             case .transferOwnershipResponse(.failure(let error)):
                 #if DEBUG
@@ -735,6 +755,9 @@ public struct EventDetailFeature: Sendable {
                 state.userAlert = UserAlert(
                     title: "Transfer Failed", message: error.localizedDescription, type: .error)
                 return .none
+
+            case .confirmationDialog(.presented(let action)):
+                return .send(action)
 
             case .confirmationDialog:
                 return .none

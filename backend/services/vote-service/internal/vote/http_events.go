@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"time"
 
@@ -383,6 +384,7 @@ func (s *HTTPServer) handlePatchEvent(w http.ResponseWriter, r *http.Request) {
 func (s *HTTPServer) handleTransferOwnership(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	userID := r.Header.Get("X-User-Id")
+	log.Printf("DEBUG: handleTransferOwnership id=%s userID=%s", id, userID)
 	if userID == "" {
 		writeError(w, http.StatusUnauthorized, "missing X-User-Id")
 		return
@@ -429,6 +431,12 @@ func (s *HTTPServer) handleTransferOwnership(w http.ResponseWriter, r *http.Requ
 	if err := s.store.TransferOwnership(r.Context(), id, body.NewOwnerID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update owner: "+err.Error())
 		return
+	}
+
+	// Ensure old owner is now a participant (invited)
+	if err := s.store.CreateInvite(r.Context(), id, userID); err != nil {
+		// Log error but don't fail the request as transfer already happened
+		log.Printf("ERROR: failed to add old owner %s as participant: %v", userID, err)
 	}
 
 	// 3. Notify updates

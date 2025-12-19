@@ -241,9 +241,9 @@ extension UserClient {
     static func live() -> Self {
         return Self(
             me: {
+                let baseUrl = BaseURL.resolve()
                 // 1. Fetch User Profile
-                // TODO: Use configured base URL
-                let urlProfile = URL(string: "http://localhost:8080/users/me")!
+                let urlProfile = URL(string: "\(baseUrl)/users/me")!
                 var reqProfile = URLRequest(url: urlProfile)
                 reqProfile.httpMethod = "GET"
 
@@ -262,7 +262,7 @@ extension UserClient {
                 var profile = try JSONDecoder().decode(UserProfile.self, from: dataProfile)
 
                 // 2. Fetch Auth Info (Linked Providers)
-                let urlAuth = URL(string: "http://localhost:8080/auth/me")!
+                let urlAuth = URL(string: "\(baseUrl)/auth/me")!
                 var reqAuth = URLRequest(url: urlAuth)
                 reqAuth.httpMethod = "GET"
                 if let token = KeychainHelper().read("accessToken") {
@@ -293,10 +293,27 @@ extension UserClient {
                     // Keep default empty linkedProviders
                 }
 
+                if let avatarUrl = profile.avatarUrl, !avatarUrl.hasPrefix("http") {
+                    profile = UserProfile(
+                        id: profile.id,
+                        userId: profile.userId,
+                        username: profile.username,
+                        displayName: profile.displayName,
+                        avatarUrl: baseUrl + avatarUrl,
+                        hasCustomAvatar: profile.hasCustomAvatar,
+                        bio: profile.bio,
+                        visibility: profile.visibility,
+                        preferences: profile.preferences,
+                        linkedProviders: profile.linkedProviders,
+                        email: profile.email
+                    )
+                }
+
                 return profile
             },
             updateProfile: { profile in
-                let url = URL(string: "http://localhost:8080/users/me")!
+                let baseUrl = BaseURL.resolve()
+                let url = URL(string: "\(baseUrl)/users/me")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "PATCH"
                 request.addValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -329,10 +346,27 @@ extension UserClient {
                     throw URLError(.badServerResponse)
                 }
 
-                return try JSONDecoder().decode(UserProfile.self, from: data)
+                var updatedProfile = try JSONDecoder().decode(UserProfile.self, from: data)
+                if let avatarUrl = updatedProfile.avatarUrl, !avatarUrl.hasPrefix("http") {
+                    updatedProfile = UserProfile(
+                        id: updatedProfile.id,
+                        userId: updatedProfile.userId,
+                        username: updatedProfile.username,
+                        displayName: updatedProfile.displayName,
+                        avatarUrl: baseUrl + avatarUrl,
+                        hasCustomAvatar: updatedProfile.hasCustomAvatar,
+                        bio: updatedProfile.bio,
+                        visibility: updatedProfile.visibility,
+                        preferences: updatedProfile.preferences,
+                        linkedProviders: updatedProfile.linkedProviders,
+                        email: updatedProfile.email
+                    )
+                }
+                return updatedProfile
             },
             link: { provider, token in
-                let url = URL(string: "http://localhost:8080/auth/link/\(provider)")!
+                let baseUrl = BaseURL.resolve()
+                let url = URL(string: "\(baseUrl)/auth/link/\(provider)")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.addValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -371,7 +405,7 @@ extension UserClient {
                 // So we MUST return the fresh profile.
 
                 // Re-fetch /users/me
-                let meUrl = URL(string: "http://localhost:8080/users/me")!
+                let meUrl = URL(string: "\(baseUrl)/users/me")!
                 var meReq = URLRequest(url: meUrl)
                 meReq.httpMethod = "GET"
                 if let accessToken = KeychainHelper().read("accessToken") {
@@ -381,7 +415,7 @@ extension UserClient {
                 var profile = try JSONDecoder().decode(UserProfile.self, from: meData)
 
                 // Re-fetch /auth/me for linked providers
-                let authUrl = URL(string: "http://localhost:8080/auth/me")!
+                let authUrl = URL(string: "\(baseUrl)/auth/me")!
                 var authReq = URLRequest(url: authUrl)
                 authReq.httpMethod = "GET"
                 if let accessToken = KeychainHelper().read("accessToken") {
@@ -402,10 +436,27 @@ extension UserClient {
                     print("UserClient: Failed to fetch auth/me after link: \(error)")
                 }
 
+                if let avatarUrl = profile.avatarUrl, !avatarUrl.hasPrefix("http") {
+                    profile = UserProfile(
+                        id: profile.id,
+                        userId: profile.userId,
+                        username: profile.username,
+                        displayName: profile.displayName,
+                        avatarUrl: baseUrl + avatarUrl,
+                        hasCustomAvatar: profile.hasCustomAvatar,
+                        bio: profile.bio,
+                        visibility: profile.visibility,
+                        preferences: profile.preferences,
+                        linkedProviders: profile.linkedProviders,
+                        email: profile.email
+                    )
+                }
+
                 return profile
             },
             unlink: { provider in
-                let url = URL(string: "http://localhost:8080/auth/link/\(provider)")!
+                let baseUrl = BaseURL.resolve()
+                let url = URL(string: "\(baseUrl)/auth/link/\(provider)")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "DELETE"
 
@@ -422,7 +473,7 @@ extension UserClient {
                 }
 
                 // Re-fetch /users/me
-                let meUrl = URL(string: "http://localhost:8080/users/me")!
+                let meUrl = URL(string: "\(baseUrl)/users/me")!
                 var meReq = URLRequest(url: meUrl)
                 meReq.httpMethod = "GET"
                 if let accessToken = KeychainHelper().read("accessToken") {
@@ -432,7 +483,7 @@ extension UserClient {
                 var profile = try JSONDecoder().decode(UserProfile.self, from: meData)
 
                 // Re-fetch /auth/me
-                let authUrl = URL(string: "http://localhost:8080/auth/me")!
+                let authUrl = URL(string: "\(baseUrl)/auth/me")!
                 var authReq = URLRequest(url: authUrl)
                 authReq.httpMethod = "GET"
                 if let accessToken = KeychainHelper().read("accessToken") {
@@ -452,10 +503,27 @@ extension UserClient {
                 } catch {
                     print("UserClient: Failed to fetch auth/me after unlink: \(error)")
                 }
+
+                if let avatarUrl = profile.avatarUrl, !avatarUrl.hasPrefix("http") {
+                    profile = UserProfile(
+                        id: profile.id,
+                        userId: profile.userId,
+                        username: profile.username,
+                        displayName: profile.displayName,
+                        avatarUrl: baseUrl + avatarUrl,
+                        hasCustomAvatar: profile.hasCustomAvatar,
+                        bio: profile.bio,
+                        visibility: profile.visibility,
+                        preferences: profile.preferences,
+                        linkedProviders: profile.linkedProviders,
+                        email: profile.email
+                    )
+                }
                 return profile
             },
             changePassword: { current, new in
-                let url = URL(string: "http://localhost:8080/users/me/password")!
+                let baseUrl = BaseURL.resolve()
+                let url = URL(string: "\(baseUrl)/users/me/password")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.addValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -476,7 +544,8 @@ extension UserClient {
                 }
             },
             generateRandomAvatar: {
-                let url = URL(string: "http://localhost:8080/users/me/avatar/random")!
+                let baseUrl = BaseURL.resolve()
+                let url = URL(string: "\(baseUrl)/users/me/avatar/random")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
 
@@ -506,7 +575,23 @@ extension UserClient {
                     throw URLError(.cannotDecodeContentData)
                 }
 
-                return try JSONDecoder().decode(UserProfile.self, from: data)
+                var updatedProfile = try JSONDecoder().decode(UserProfile.self, from: data)
+                if let avatarUrl = updatedProfile.avatarUrl, !avatarUrl.hasPrefix("http") {
+                    updatedProfile = UserProfile(
+                        id: updatedProfile.id,
+                        userId: updatedProfile.userId,
+                        username: updatedProfile.username,
+                        displayName: updatedProfile.displayName,
+                        avatarUrl: baseUrl + avatarUrl,
+                        hasCustomAvatar: updatedProfile.hasCustomAvatar,
+                        bio: updatedProfile.bio,
+                        visibility: updatedProfile.visibility,
+                        preferences: updatedProfile.preferences,
+                        linkedProviders: updatedProfile.linkedProviders,
+                        email: updatedProfile.email
+                    )
+                }
+                return updatedProfile
             }
         )
     }

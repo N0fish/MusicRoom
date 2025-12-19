@@ -104,10 +104,10 @@ public struct AuthenticationFeature: Sendable {
                     do {
                         if isRegistering {
                             try await authentication.register(email, password)
-                            await telemetry.log("user.auth.register.success", [:])
+                            await telemetry.log("user.auth.register.success", ["email": email])
                         } else {
                             try await authentication.login(email, password)
-                            await telemetry.log("user.auth.login.success", [:])
+                            await telemetry.log("user.auth.login.success", ["email": email])
                         }
                         await send(.authResponse(.success(true)))
                     } catch let error as AuthenticationError {

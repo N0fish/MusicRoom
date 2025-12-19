@@ -121,21 +121,28 @@ public struct EventDetailView: View {
                             }
 
                             if !queuedTracks.isEmpty {
-                                Button {
-                                    store.send(.nextTrackButtonTapped)
-                                } label: {
-                                    HStack {
-                                        Image(systemName: "play.fill")
-                                        Text("Start Radio")
+                                if store.currentUserId == store.event.ownerId {
+                                    Button {
+                                        store.send(.nextTrackButtonTapped)
+                                    } label: {
+                                        HStack {
+                                            Image(systemName: "play.fill")
+                                            Text("Start Radio")
+                                        }
+                                        .font(.liquidBody.bold())
+                                        .foregroundStyle(.white)
+                                        .padding()
+                                        .frame(maxWidth: .infinity)
+                                        .background(Color.green.opacity(0.8))
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
                                     }
-                                    .font(.liquidBody.bold())
-                                    .foregroundStyle(.white)
-                                    .padding()
-                                    .frame(maxWidth: .infinity)
-                                    .background(Color.green.opacity(0.8))
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .padding(.horizontal)
+                                } else {
+                                    Text("Waiting for host to start...")
+                                        .font(.liquidCaption)
+                                        .foregroundStyle(.white.opacity(0.5))
+                                        .padding()
                                 }
-                                .padding(.horizontal)
                             } else if !store.isLoading && !store.tracks.isEmpty {
                                 // Tracks exist but none are queued (all played) -> Event Finished
                                 VStack(spacing: 8) {
@@ -520,10 +527,11 @@ struct ParticipantsListView: View {
                     }
                 }
             }
+            .confirmationDialog(
+                $store.scope(state: \.confirmationDialog, action: \.confirmationDialog))
         } destination: { store in
             FriendProfileView(store: store)
         }
-        .confirmationDialog($store.scope(state: \.confirmationDialog, action: \.confirmationDialog))
     }
 }
 

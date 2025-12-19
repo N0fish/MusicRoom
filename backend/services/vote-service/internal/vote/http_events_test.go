@@ -515,6 +515,7 @@ func TestHandleTransferOwnership(t *testing.T) {
 		ev := &Event{ID: "ev1", OwnerID: "owner"}
 		mockStore.On("LoadEvent", mock.Anything, "ev1").Return(ev, nil)
 		mockStore.On("TransferOwnership", mock.Anything, "ev1", "newOwner").Return(nil)
+		mockStore.On("CreateInvite", mock.Anything, "ev1", "owner").Return(nil)
 
 		r.ServeHTTP(rec, req)
 		assert.Equal(t, http.StatusOK, rec.Code)

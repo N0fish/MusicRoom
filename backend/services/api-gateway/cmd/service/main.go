@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"log"
 	"net/http"
 
@@ -69,6 +70,15 @@ func setupRouter(cfg Config) *chi.Mux {
 
 	// Audit / Telemetry
 	r.Post("/audit/logs", func(w http.ResponseWriter, r *http.Request) {
+		platform := r.Header.Get("X-Client-Platform")
+		device := r.Header.Get("X-Client-Device")
+		version := r.Header.Get("X-Client-App-Version")
+		userId := r.Header.Get("X-User-Id")
+
+		body, _ := io.ReadAll(r.Body)
+		log.Printf("audit_log: user=%s platform=%s device=%s version=%s body=%s",
+			userId, platform, device, version, string(body))
+
 		w.WriteHeader(http.StatusOK)
 	})
 

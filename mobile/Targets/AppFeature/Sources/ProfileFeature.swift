@@ -149,8 +149,8 @@ public struct ProfileFeature: Sendable {
                 state.isEditing = false
                 state.userProfile = normalizeAvatarUrl(profile)
                 state.errorMessage = nil
-                return .run { [telemetry] _ in
-                    await telemetry.log("user.profile.update.success", [:])
+                return .run { [userId = profile.userId, telemetry] _ in
+                    await telemetry.log("user.profile.update.success", ["userId": userId])
                 }
 
             case .updateProfileResponse(.failure(let error)):
@@ -213,8 +213,8 @@ public struct ProfileFeature: Sendable {
                 state.isLoading = false
                 state.userProfile = normalizeAvatarUrl(profile)
                 state.errorMessage = nil
-                return .run { [telemetry] _ in
-                    await telemetry.log("user.account.link.success", [:])
+                return .run { [userId = profile.userId, telemetry] _ in
+                    await telemetry.log("user.account.link.success", ["userId": userId])
                 }
 
             case .linkAccountResponse(.failure(let error)):
@@ -292,8 +292,9 @@ public struct ProfileFeature: Sendable {
                 state.currentPassword = ""
                 state.newPassword = ""
                 state.confirmNewPassword = ""
-                return .run { [telemetry] _ in
-                    await telemetry.log("user.password.change.success", [:])
+                return .run { [userId = state.userProfile?.userId, telemetry] _ in
+                    await telemetry.log(
+                        "user.password.change.success", userId.map { ["userId": $0] } ?? [:])
                 }
 
             case .changePasswordResponse(.failure(let error)):

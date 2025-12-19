@@ -163,8 +163,10 @@ extension FriendsClient {
     static func live() -> Self {
         return Self(
             listFriends: {
-                let url = URL(string: "http://localhost:8080/users/me/friends")!
+                let baseUrl = BaseURL.resolve()
+                let url = URL(string: "\(baseUrl)/users/me/friends")!
                 var request = URLRequest(url: url)
+
                 request.httpMethod = "GET"
                 attachAuth(to: &request)
 
@@ -172,10 +174,23 @@ extension FriendsClient {
                 try validate(response: response)
 
                 let list = try JSONDecoder().decode(FriendsListResponse.self, from: data)
-                return (list.items ?? []).map { $0.toFriend() }
+                return (list.items ?? []).map { item in
+                    var friend = item.toFriend()
+                    if let avatarUrl = friend.avatarUrl, !avatarUrl.hasPrefix("http") {
+                        friend = Friend(
+                            id: friend.id,
+                            userId: friend.userId,
+                            username: friend.username,
+                            displayName: friend.displayName,
+                            avatarUrl: baseUrl + avatarUrl
+                        )
+                    }
+                    return friend
+                }
             },
             incomingRequests: {
-                let url = URL(string: "http://localhost:8080/users/me/friends/requests/incoming")!
+                let baseUrl = BaseURL.resolve()
+                let url = URL(string: "\(baseUrl)/users/me/friends/requests/incoming")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "GET"
                 attachAuth(to: &request)
@@ -190,19 +205,25 @@ extension FriendsClient {
                     // Flexible Date Parsing safely
                     let date = ISO8601DateFormatter().date(from: item.createdAt) ?? Date()
 
+                    var avatarUrl = item.from.avatarUrl
+                    if let url = avatarUrl, !url.hasPrefix("http") {
+                        avatarUrl = baseUrl + url
+                    }
+
                     return FriendRequest(
                         id: item.from.userId,  // Use userId as request ID key since API doesn't return request ID here explicitly in "from"
                         senderId: item.from.userId,
                         senderUsername: item.from.username,
                         senderDisplayName: item.from.displayName,
-                        senderAvatarUrl: item.from.avatarUrl,
+                        senderAvatarUrl: avatarUrl,
                         status: "pending",  // Implicitly pending for incoming requests
                         sentAt: date
                     )
                 }
             },
             sendRequest: { userId in
-                let url = URL(string: "http://localhost:8080/users/me/friends/\(userId)/request")!
+                let baseUrl = BaseURL.resolve()
+                let url = URL(string: "\(baseUrl)/users/me/friends/\(userId)/request")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 attachAuth(to: &request)
@@ -211,7 +232,8 @@ extension FriendsClient {
                 try validate(response: response)
             },
             acceptRequest: { senderId in
-                let url = URL(string: "http://localhost:8080/users/me/friends/\(senderId)/accept")!
+                let baseUrl = BaseURL.resolve()
+                let url = URL(string: "\(baseUrl)/users/me/friends/\(senderId)/accept")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 attachAuth(to: &request)
@@ -220,7 +242,8 @@ extension FriendsClient {
                 try validate(response: response)
             },
             rejectRequest: { senderId in
-                let url = URL(string: "http://localhost:8080/users/me/friends/\(senderId)/reject")!
+                let baseUrl = BaseURL.resolve()
+                let url = URL(string: "\(baseUrl)/users/me/friends/\(senderId)/reject")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 attachAuth(to: &request)
@@ -229,7 +252,8 @@ extension FriendsClient {
                 try validate(response: response)
             },
             removeFriend: { friendId in
-                let url = URL(string: "http://localhost:8080/users/me/friends/\(friendId)")!
+                let baseUrl = BaseURL.resolve()
+                let url = URL(string: "\(baseUrl)/users/me/friends/\(friendId)")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "DELETE"
                 attachAuth(to: &request)
@@ -239,7 +263,8 @@ extension FriendsClient {
             },
             searchUsers: { query in
                 guard !query.isEmpty else { return [] }
-                var components = URLComponents(string: "http://localhost:8080/users/search")!
+                let baseUrl = BaseURL.resolve()
+                var components = URLComponents(string: "\(baseUrl)/users/search")!
                 components.queryItems = [URLQueryItem(name: "query", value: query)]
 
                 var request = URLRequest(url: components.url!)
@@ -250,10 +275,23 @@ extension FriendsClient {
                 try validate(response: response)
 
                 let list = try JSONDecoder().decode(FriendsListResponse.self, from: data)
-                return (list.items ?? []).map { $0.toFriend() }
+                return (list.items ?? []).map { item in
+                    var friend = item.toFriend()
+                    if let avatarUrl = friend.avatarUrl, !avatarUrl.hasPrefix("http") {
+                        friend = Friend(
+                            id: friend.id,
+                            userId: friend.userId,
+                            username: friend.username,
+                            displayName: friend.displayName,
+                            avatarUrl: baseUrl + avatarUrl
+                        )
+                    }
+                    return friend
+                }
             },
             getProfile: { userId in
-                let url = URL(string: "http://localhost:8080/users/\(userId)")!
+                let baseUrl = BaseURL.resolve()
+                let url = URL(string: "\(baseUrl)/users/\(userId)")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "GET"
                 attachAuth(to: &request)
@@ -261,7 +299,19 @@ extension FriendsClient {
                 let (data, response) = try await URLSession.shared.data(for: request)
                 try validate(response: response)
 
-                return try JSONDecoder().decode(PublicUserProfile.self, from: data)
+                var profile = try JSONDecoder().decode(PublicUserProfile.self, from: data)
+                if let avatarUrl = profile.avatarUrl, !avatarUrl.hasPrefix("http") {
+                    profile = PublicUserProfile(
+                        userId: profile.userId,
+                        username: profile.username,
+                        displayName: profile.displayName,
+                        avatarUrl: baseUrl + avatarUrl,
+                        bio: profile.bio,
+                        visibility: profile.visibility,
+                        preferences: profile.preferences
+                    )
+                }
+                return profile
             }
         )
     }

@@ -95,8 +95,8 @@ public struct EventListFeature: Sendable {
                     }
                 }
 
-                return .run { send in
-                    await telemetry.log("Fetching Events", [:])
+                return .run { [userId = state.currentUserId] send in
+                    await telemetry.log("Fetching Events", userId.map { ["userId": $0] } ?? [:])
                     do {
                         let events = try await musicRoomAPI.listEvents()
                         // Save to cache on success
