@@ -117,172 +117,75 @@ public struct EventListView: View {
     }
 
     private var eventList: some View {
-        ScrollView {
-            LazyVStack(spacing: 24) {
-                // My Events Section
-                let myEvents = store.events.filter {
-                    $0.ownerId == store.currentUserId || ($0.isJoined ?? false)
-                }
-                if !myEvents.isEmpty {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("My Events")
-                            .font(.title2)
-                            .foregroundStyle(.white)
-                            .padding(.horizontal)
-
-                        ForEach(Array(myEvents.enumerated()), id: \.element.id) { index, event in
-                            SwipeableEventRow(
-                                event: event,
-                                currentUserId: store.currentUserId,
-                                onTap: {
-                                    store.send(.eventTapped(event))
-                                },
-                                onAction: {
+        List {
+            // My Events Section
+            let myEvents = store.events.filter {
+                $0.ownerId == store.currentUserId || ($0.isJoined ?? false)
+            }
+            if !myEvents.isEmpty {
+                Section {
+                    ForEach(myEvents) { event in
+                        let isOwner = event.ownerId == store.currentUserId
+                        EventCard(event: event)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                store.send(.eventTapped(event))
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
                                     store.send(.deleteEvent(event))
+                                } label: {
+                                    Label(
+                                        isOwner ? "Delete" : "Leave",
+                                        systemImage: isOwner ? "trash" : "door.left.hand.open"
+                                    )
                                 }
-                            )
-                            .matchedGeometryEffect(id: event.id, in: namespace)
-                        }
+                                .tint(isOwner ? .red : .orange)
+                            }
                     }
-                }
-
-                // Explore Section
-                let exploreEvents = store.events.filter {
-                    $0.ownerId != store.currentUserId && !($0.isJoined ?? false)
-                }
-                if !exploreEvents.isEmpty {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Explore")
-                            .font(.title2)
-                            .foregroundStyle(.white)
-                            .padding(.horizontal)
-
-                        ForEach(Array(exploreEvents.enumerated()), id: \.element.id) {
-                            index, event in
-                            // Non-swipeable row for Explore events (or swipe to join?)
-                            // For now, just tap to enter (and potentially join via detail)
-                            // We disable the swipe action by not wrapping in SwipeableEventRow or passing no-op
-                            // But SwipeableEventRow provides the card UI.
-                            // Let's use SwipeableEventRow but perhaps disable swipe if not joined?
-                            // Currently SwipeableEventRow handles gesture.
-                            // Simplest: Use SwipeableEventRow but onAction does nothing or shows alert?
-                            // Better: Making Swipeable behavior conditional.
-
-                            // Since we don't have time to refactor Row deeply, we use it.
-                            // But maybe we should ONLY allow Leave on My Events.
-                            SwipeableEventRow(
-                                event: event,
-                                currentUserId: store.currentUserId,
-                                onTap: {
-                                    store.send(.eventTapped(event))
-                                },
-                                onAction: {
-                                    // No-op for explore events (can't leave what you haven't joined)
-                                    // Or maybe "Hide"?
-                                }
-                            )
-                            .matchedGeometryEffect(id: event.id, in: namespace)
-                            // We need to modify SwipeableEventRow to accept "canSwipe".
-                            // For now, we just pass the row.
-                        }
-                    }
+                } header: {
+                    Text("My Events")
+                        .font(.title2)
+                        .foregroundStyle(.white)
+                        .textCase(nil)
+                        .padding(.vertical, 8)
                 }
             }
-            .padding(.vertical)
+
+            // Explore Section
+            let exploreEvents = store.events.filter {
+                $0.ownerId != store.currentUserId && !($0.isJoined ?? false)
+            }
+            if !exploreEvents.isEmpty {
+                Section {
+                    ForEach(exploreEvents) { event in
+                        EventCard(event: event)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                store.send(.eventTapped(event))
+                            }
+                    }
+                } header: {
+                    Text("Explore")
+                        .font(.title2)
+                        .foregroundStyle(.white)
+                        .textCase(nil)
+                        .padding(.vertical, 8)
+                }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .refreshable {
+            store.send(.loadEvents)
         }
         .animation(.default, value: store.events)
-    }
-}
-
-struct SwipeableEventRow: View {
-    let event: Event
-    let currentUserId: String?
-    let onTap: () -> Void
-    let onAction: () -> Void
-
-    @State private var offset: CGFloat = 0
-    @State private var isSwiped = false
-    private let actionThreshold: CGFloat = 60
-    private let maxDrag: CGFloat = 100
-
-    private var isOwner: Bool {
-        event.ownerId == currentUserId
-    }
-
-    var body: some View {
-        ZStack {
-            // Background Action Layer
-            GeometryReader { geometry in
-                HStack {
-                    Spacer()
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(isOwner ? Color.red : Color.orange)
-
-                        VStack(spacing: 4) {
-                            Image(systemName: isOwner ? "trash.fill" : "door.left.hand.open")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                            Text(isOwner ? "Delete" : "Leave")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                        }
-                        .foregroundColor(.white)
-                        .padding(.trailing, 20)
-                    }
-                    .frame(width: max(offset * -1, 0))
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
-                    .opacity(offset < 0 ? 1 : 0)
-                }
-            }
-
-            // Foreground Card
-            EventCard(event: event)
-                .contentShape(Rectangle())  // Ensure entire area is hittable
-                .offset(x: offset)
-                .onTapGesture {
-                    if offset == 0 {
-                        onTap()
-                    } else {
-                        // If swiped, valid tap resets the swipe
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            offset = 0
-                        }
-                    }
-                }
-                .gesture(
-                    DragGesture()
-                        .onChanged { value in
-                            // Only allow swipe if owner or joined
-                            guard (event.isJoined ?? false) || isOwner else { return }
-
-                            if value.translation.width < 0 {
-                                // Resistance curve
-                                let translation = value.translation.width
-                                offset =
-                                    translation > -maxDrag
-                                    ? translation
-                                    : -maxDrag - (pow(abs(translation + maxDrag), 0.7))
-                            } else {
-                                // No right swipe - strict limit
-                                offset = 0
-                            }
-                        }
-                        .onEnded { value in
-                            guard (event.isJoined ?? false) || isOwner else { return }
-
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                if value.translation.width < -actionThreshold {
-                                    // Trigger action and reset
-                                    offset = 0
-                                    onAction()
-                                } else {
-                                    offset = 0
-                                }
-                            }
-                        }
-                )
-        }
     }
 }
 

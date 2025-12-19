@@ -16,6 +16,7 @@ public struct EventListFeature: Sendable {
 
         public var isOffline: Bool = false
         public var currentUserId: String?
+        public var hasLoaded: Bool = false
 
         public init() {}
     }
@@ -59,6 +60,7 @@ public struct EventListFeature: Sendable {
         Reduce { state, action in
             switch action {
             case .onAppear:
+                guard !state.hasLoaded else { return .none }
                 // Start network monitor
                 return .merge(
                     .send(.loadEvents),
@@ -112,6 +114,7 @@ public struct EventListFeature: Sendable {
                 state.isLoading = false
                 state.events = events
                 state.errorMessage = nil
+                state.hasLoaded = true
                 return .none
 
             case .eventsLoaded(.failure(let error)):
@@ -141,6 +144,7 @@ public struct EventListFeature: Sendable {
                 } else {
                     state.errorMessage = "Loaded from cache (API Failed)"
                 }
+                state.hasLoaded = true
                 return .none
 
             case .eventsLoadedFromCache(.failure(let error)):

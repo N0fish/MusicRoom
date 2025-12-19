@@ -42,12 +42,12 @@ func (s *HTTPServer) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Name        string   `json:"name"`
 		Visibility  string   `json:"visibility"`
-		LicenseMode string   `json:"licenseMode"`
-		GeoLat      *float64 `json:"geoLat"`
-		GeoLng      *float64 `json:"geoLng"`
-		GeoRadiusM  *int     `json:"geoRadiusM"`
-		VoteStart   *string  `json:"voteStart"`
-		VoteEnd     *string  `json:"voteEnd"`
+		LicenseMode string   `json:"license_mode"`
+		GeoLat      *float64 `json:"geo_lat"`
+		GeoLng      *float64 `json:"geo_lng"`
+		GeoRadiusM  *int     `json:"geo_radius_m"`
+		VoteStart   *string  `json:"vote_start"`
+		VoteEnd     *string  `json:"vote_end"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -101,9 +101,9 @@ func (s *HTTPServer) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		"isPublic":    true, // Events are public by default logic here? Or match visibility?
 		"editMode":    "everyone",
 	}
-	if body.Visibility == visibilityPrivate {
-		plReq["isPublic"] = false
-		plReq["editMode"] = "invited" // match event logic roughly
+	if body.Visibility == visibilityPrivate || body.LicenseMode == licenseInvited {
+		plReq["isPublic"] = (body.Visibility == visibilityPublic)
+		plReq["editMode"] = "invited" // license_invited or private visibility triggers invited edit mode
 	}
 
 	plBody, _ := json.Marshal(plReq)
@@ -275,12 +275,12 @@ func (s *HTTPServer) handlePatchEvent(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Name        *string  `json:"name"`
 		Visibility  *string  `json:"visibility"`
-		LicenseMode *string  `json:"licenseMode"`
-		GeoLat      *float64 `json:"geoLat"`
-		GeoLng      *float64 `json:"geoLng"`
-		GeoRadiusM  *int     `json:"geoRadiusM"`
-		VoteStart   *string  `json:"voteStart"`
-		VoteEnd     *string  `json:"voteEnd"`
+		LicenseMode *string  `json:"license_mode"`
+		GeoLat      *float64 `json:"geo_lat"`
+		GeoLng      *float64 `json:"geo_lng"`
+		GeoRadiusM  *int     `json:"geo_radius_m"`
+		VoteStart   *string  `json:"vote_start"`
+		VoteEnd     *string  `json:"vote_end"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -355,6 +355,51 @@ func (s *HTTPServer) handlePatchEvent(w http.ResponseWriter, r *http.Request) {
 	if err := validateVotingWindow(newStart, newEnd, time.Now()); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
+	}
+
+	// Propagate changes to playlist-service if name, visibility or license_mode changed
+	if body.Name != nil || body.Visibility != nil || body.LicenseMode != nil {
+		plUpdate := make(map[string]any)
+		if body.Name != nil {
+			plUpdate["name"] = *body.Name
+		}
+		if body.Visibility != nil {
+			plUpdate["isPublic"] = (*body.Visibility == visibilityPublic)
+		}
+		if body.LicenseMode != nil || body.Visibility != nil {
+			// Recalculate editMode
+			vis := ev.Visibility
+			if body.Visibility != nil {
+				vis = *body.Visibility
+			}
+			lic := ev.LicenseMode
+			if body.LicenseMode != nil {
+				lic = *body.LicenseMode
+			}
+
+			if vis == visibilityPrivate || lic == licenseInvited {
+				plUpdate["editMode"] = "invited"
+			} else {
+				plUpdate["editMode"] = "everyone"
+			}
+		}
+
+		if s.httpClient != nil {
+			go func() {
+				plBody, _ := json.Marshal(plUpdate)
+				req, err := http.NewRequest(http.MethodPatch, s.playlistServiceURL+"/playlists/"+id, bytes.NewReader(plBody))
+				if err == nil {
+					req.Header.Set("Content-Type", "application/json")
+					req.Header.Set("X-User-Id", userID)
+					resp, err := s.httpClient.Do(req)
+					if err != nil {
+						log.Printf("vote-service: failed to propagate patch to playlist-service: %v", err)
+					} else {
+						resp.Body.Close()
+					}
+				}
+			}()
+		}
 	}
 
 	if len(updates) == 0 {

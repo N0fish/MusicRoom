@@ -58,7 +58,7 @@ public struct AuthenticationView: View {
             // MARK: - Form Container (Glass)
             GlassView(cornerRadius: 32) {
                 VStack(spacing: 24) {
-                    Text(store.isRegistering ? "Create Account" : "Access Terminal")
+                    Text(store.isRegistering ? "Create Account" : "Access")
                         .font(.liquidH2)
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity, alignment: .leading)

@@ -26,6 +26,22 @@ public struct EventDetailFeature: Sendable {
             return track.providerTrackId
         }
 
+        public var canVote: Bool {
+            if let userId = currentUserId, userId == event.ownerId {
+                return true
+            }
+            switch event.licenseMode {
+            case .everyone:
+                return true
+            case .invitedOnly:
+                return event.isJoined ?? false
+            case .geoTime:
+                // For now, assume true for UI and let backend handle precise geo/time check,
+                // or we could check basic time window if available.
+                return true
+            }
+        }
+
         public var participants: [PublicUserProfile] = []
         public var ownerProfile: PublicUserProfile?
         public var isLoadingParticipants: Bool = false

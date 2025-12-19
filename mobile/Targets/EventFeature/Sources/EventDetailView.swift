@@ -201,7 +201,8 @@ public struct EventDetailView: View {
                                         isOffline: store.isOffline,
                                         onVote: {
                                             store.send(.voteButtonTapped(trackId: track.id))
-                                        }
+                                        },
+                                        showVote: store.canVote
                                     )
                                     .matchedGeometryEffect(id: track.id, in: animation)
                                     .transition(.scale.combined(with: .opacity))

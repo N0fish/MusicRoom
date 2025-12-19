@@ -138,6 +138,17 @@ public struct CreateEventRequest: Codable, Sendable {
     public let voteStart: Date?
     public let voteEnd: Date?
 
+    enum CodingKeys: String, CodingKey {
+        case name
+        case visibility
+        case licenseMode = "license_mode"
+        case geoLat = "geo_lat"
+        case geoLng = "geo_lng"
+        case geoRadiusM = "geo_radius_m"
+        case voteStart = "vote_start"
+        case voteEnd = "vote_end"
+    }
+
     public init(
         name: String,
         visibility: EventVisibility = .publicEvent,
@@ -156,6 +167,28 @@ public struct CreateEventRequest: Codable, Sendable {
         self.geoRadiusM = geoRadiusM
         self.voteStart = voteStart
         self.voteEnd = voteEnd
+    }
+}
+
+public struct PatchEventRequest: Codable, Sendable {
+    public let name: String?
+    public let visibility: EventVisibility?
+    public let licenseMode: EventLicenseMode?
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case visibility
+        case licenseMode = "license_mode"
+    }
+
+    public init(
+        name: String? = nil,
+        visibility: EventVisibility? = nil,
+        licenseMode: EventLicenseMode? = nil
+    ) {
+        self.name = name
+        self.visibility = visibility
+        self.licenseMode = licenseMode
     }
 }
 

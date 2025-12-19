@@ -163,6 +163,27 @@ func TestHandleVoteTrack_Errors(t *testing.T) {
 			},
 			wantCode: http.StatusConflict,
 		},
+		{
+			name:       "Forbidden - Invited Only Edit Mode (Public Playlist)",
+			playlistID: "pl-pub",
+			trackID:    "tr-1",
+			userID:     "outsider",
+			mockSetup: func(m *MockDB) {
+				m.QueryRowFunc = func(ctx context.Context, sql string, args ...any) pgx.Row {
+					if strings.Contains(sql, "FROM playlists") {
+						return &MockRow{ScanFunc: func(dest ...any) error {
+							*dest[0].(*string) = "owner"
+							*dest[1].(*bool) = true // public
+							*dest[2].(*string) = "invited"
+							return nil
+						}}
+					}
+					// check member
+					return &MockRow{ScanFunc: func(dest ...any) error { return pgx.ErrNoRows }}
+				}
+			},
+			wantCode: http.StatusForbidden,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

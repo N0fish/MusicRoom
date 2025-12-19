@@ -66,6 +66,7 @@ public struct AppFeature: Sendable {
         case logoutButtonTapped
         case handleDeepLink(URL)
         case networkStatusChanged(NetworkStatus)
+        case checkInitialLoad
     }
 
     @Dependency(\.musicRoomAPI) var musicRoomAPI
@@ -106,6 +107,9 @@ public struct AppFeature: Sendable {
             case .eventList(.delegate(.sessionExpired)):
                 return .send(.logoutButtonTapped)
 
+            case .eventList(.eventsLoaded), .eventList(.eventsLoadedFromCache):
+                return .send(.checkInitialLoad)
+
             case .eventList:
                 return .none
 
@@ -117,8 +121,14 @@ public struct AppFeature: Sendable {
                     await send(.destinationChanged(.login))
                 }
 
+            case .profile(.profileResponse):
+                return .send(.checkInitialLoad)
+
             case .profile:
                 return .none
+
+            case .friends(.friendsLoaded), .friends(.requestsLoaded):
+                return .send(.checkInitialLoad)
 
             case .friends:
                 return .none
@@ -132,11 +142,11 @@ public struct AppFeature: Sendable {
 
             case .task:
                 return .run { [authentication = self.authentication] send in
-                    // Show Splash for at least 2 seconds
-                    try? await Task.sleep(for: .seconds(2))
-
                     if authentication.isAuthenticated() {
-                        await send(.destinationChanged(.app))
+                        // Trigger initial loads
+                        await send(.eventList(.onAppear))
+                        await send(.profile(.onAppear))
+                        await send(.friends(.onAppear))
                         await send(.startApp)
                     } else {
                         await send(.destinationChanged(.login))
@@ -183,6 +193,13 @@ public struct AppFeature: Sendable {
                 }
 
                 return .send(.eventList(.networkStatusChanged(status)))
+
+            case .checkInitialLoad:
+                // We transition to .app only when all critical data is loaded
+                if state.eventList.hasLoaded && state.profile.hasLoaded && state.friends.hasLoaded {
+                    state.destination = .app
+                }
+                return .none
 
             case .handleDeepLink(_):
                 // Legacy: ASWebAuthenticationSession handles callbacks internally for Social Auth.

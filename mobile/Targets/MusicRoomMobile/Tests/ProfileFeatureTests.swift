@@ -39,6 +39,7 @@ final class ProfileFeatureTests: XCTestCase {
             $0.editableUsername = "testuser"
             $0.editableEmail = "test@example.com"
             $0.editableMusicPreferences = "Rock"
+            $0.hasLoaded = true
         }
     }
 
@@ -89,6 +90,7 @@ final class ProfileFeatureTests: XCTestCase {
             $0.editableUsername = "old"
             $0.editableEmail = "old@example.com"
             $0.editableMusicPreferences = "Old"
+            $0.hasLoaded = true
         }
 
         // Toggle Edit

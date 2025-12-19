@@ -28,6 +28,8 @@ public struct MusicRoomAPIClient: Sendable {
     public var joinEvent: @Sendable (_ eventId: UUID) async throws -> Void
     public var transferOwnership:
         @Sendable (_ eventId: UUID, _ newOwnerId: String) async throws -> Void
+    public var patchEvent:
+        @Sendable (_ eventId: UUID, _ request: PatchEventRequest) async throws -> Event
 
     public struct Invite: Decodable, Sendable, Equatable {
         public let userId: String
@@ -428,6 +430,16 @@ extension MusicRoomAPIClient: DependencyKey {
                 request.httpBody = try JSONEncoder().encode(body)
 
                 try await performRequestNoContent(request)
+            },
+            patchEvent: { eventId, requestBody in
+                let url = settings.load().backendURL.appendingPathComponent("events")
+                    .appendingPathComponent(eventId.uuidString)
+                var request = URLRequest(url: url)
+                request.httpMethod = "PATCH"
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+                request.httpBody = try JSONEncoder.iso8601.encode(requestBody)
+                return try await performRequest(request)
             }
         )
     }
@@ -508,7 +520,8 @@ extension MusicRoomAPIClient: DependencyKey {
             leaveEvent: { _, _ in },
             deleteEvent: { _ in },
             joinEvent: { _ in },
-            transferOwnership: { _, _ in }
+            transferOwnership: { _, _ in },
+            patchEvent: { _, _ in MockDataFactory.sampleEvents().first! }
         )
     }
 
@@ -539,7 +552,8 @@ extension MusicRoomAPIClient: DependencyKey {
             leaveEvent: { _, _ in },
             deleteEvent: { _ in },
             joinEvent: { _ in },
-            transferOwnership: { _, _ in }
+            transferOwnership: { _, _ in },
+            patchEvent: { _, _ in throw MusicRoomAPIError.networkError("Test unimplemented") }
         )
     }
 }

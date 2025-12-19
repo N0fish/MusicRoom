@@ -23,6 +23,7 @@ public struct FriendsFeature: Sendable {
         public var searchQuery: String = ""
         public var isLoading: Bool = false
         public var errorMessage: String?
+        public var hasLoaded: Bool = false
 
         // Navigation
         public var path = StackState<FriendProfileFeature.State>()
@@ -89,6 +90,7 @@ public struct FriendsFeature: Sendable {
                 return .none
 
             case .onAppear:
+                guard !state.hasLoaded else { return .none }
                 return .send(.loadData)
 
             case .segmentChanged(let segment):
@@ -136,6 +138,7 @@ public struct FriendsFeature: Sendable {
                         avatarUrl: normalizeUrl(friend.avatarUrl)
                     )
                 }
+                state.hasLoaded = true
                 return .none
 
             case .friendsLoaded(.failure(let error)):

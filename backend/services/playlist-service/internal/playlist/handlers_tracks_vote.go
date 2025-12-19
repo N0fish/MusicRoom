@@ -30,7 +30,7 @@ func (s *Server) handleVoteTrack(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 1. Check access
-	ownerID, isPublic, _, err := s.getPlaylistAccessInfo(ctx, playlistID)
+	ownerID, isPublic, editMode, err := s.getPlaylistAccessInfo(ctx, playlistID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "playlist not found")
 		return
@@ -54,6 +54,14 @@ func (s *Server) handleVoteTrack(w http.ResponseWriter, r *http.Request) {
 	if !isPublic && userID != ownerID && !invited {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
+	}
+
+	// Enforce editMode for voting
+	if userID != ownerID {
+		if editMode == editModeInvited && !invited {
+			writeError(w, http.StatusForbidden, "this playlist requires an invitation to vote")
+			return
+		}
 	}
 
 	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})

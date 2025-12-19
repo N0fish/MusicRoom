@@ -28,6 +28,7 @@ public struct ProfileFeature: Sendable {
         public var isChangingPassword = false
         public var passwordChangeSuccessMessage: String?
         public var isOffline: Bool = false
+        public var hasLoaded: Bool = false
 
         public init() {}
     }
@@ -63,6 +64,7 @@ public struct ProfileFeature: Sendable {
         Reduce { state, action in
             switch action {
             case .onAppear:
+                guard !state.hasLoaded else { return .none }
                 state.isLoading = true
                 return .run { [userClient] send in
                     await send(.profileResponse(TaskResult { try await userClient.me() }))
@@ -76,6 +78,7 @@ public struct ProfileFeature: Sendable {
                 state.editableEmail = profile.email ?? ""
                 state.editableMusicPreferences =
                     profile.preferences.genres?.joined(separator: ",") ?? ""
+                state.hasLoaded = true
                 return .none
 
             case .profileResponse(.failure(let error)):

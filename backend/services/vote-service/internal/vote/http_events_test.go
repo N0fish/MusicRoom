@@ -157,9 +157,9 @@ func TestHandleCreateEvent(t *testing.T) {
 		r.Post("/events", server.handleCreateEvent)
 
 		payload := map[string]any{
-			"name":        "My Event",
-			"visibility":  "public",
-			"licenseMode": "everyone",
+			"name":         "My Event",
+			"visibility":   "public",
+			"license_mode": "everyone",
 		}
 		b, _ := json.Marshal(payload)
 		req := httptest.NewRequest("POST", "/events", bytes.NewReader(b))
@@ -209,7 +209,7 @@ func TestHandleCreateEvent(t *testing.T) {
 		r.Post("/events", server.handleCreateEvent)
 
 		past := "2020-01-01T00:00:00Z"
-		payload := map[string]any{"name": "Event", "voteStart": past}
+		payload := map[string]any{"name": "Event", "vote_start": past}
 		b, _ := json.Marshal(payload)
 		req := httptest.NewRequest("POST", "/events", bytes.NewReader(b))
 		req.Header.Set("X-User-Id", "user1")
@@ -394,7 +394,7 @@ func TestHandlePatchEvent(t *testing.T) {
 		r := chi.NewRouter()
 		r.Patch("/events/{id}", server.handlePatchEvent)
 
-		payload := map[string]any{"voteStart": "", "voteEnd": ""}
+		payload := map[string]any{"vote_start": "", "vote_end": ""}
 		b, _ := json.Marshal(payload)
 		req := httptest.NewRequest("PATCH", "/events/ev1", bytes.NewReader(b))
 		req.Header.Set("X-User-Id", "owner")
@@ -440,7 +440,7 @@ func TestHandlePatchEvent(t *testing.T) {
 		r := chi.NewRouter()
 		r.Patch("/events/{id}", server.handlePatchEvent)
 
-		payload := map[string]any{"licenseMode": "invalid"}
+		payload := map[string]any{"license_mode": "invalid"}
 		b, _ := json.Marshal(payload)
 		req := httptest.NewRequest("PATCH", "/events/ev1", bytes.NewReader(b))
 		req.Header.Set("X-User-Id", "owner")
@@ -585,7 +585,7 @@ func TestHandlePatchEventDeep(t *testing.T) {
 		r := chi.NewRouter()
 		r.Patch("/events/{id}", server.handlePatchEvent)
 
-		payload := map[string]any{"licenseMode": "geo_time", "voteStart": "invalid"}
+		payload := map[string]any{"license_mode": "geo_time", "vote_start": "invalid"}
 		b, _ := json.Marshal(payload)
 		req := httptest.NewRequest("PATCH", "/events/ev1", bytes.NewReader(b))
 		req.Header.Set("X-User-Id", "owner")
@@ -605,7 +605,7 @@ func TestHandlePatchEventDeep(t *testing.T) {
 		r.Patch("/events/{id}", server.handlePatchEvent)
 
 		lat, lng, rad := 1.2, 3.4, 500
-		payload := map[string]any{"geoLat": lat, "geoLng": lng, "geoRadiusM": rad}
+		payload := map[string]any{"geo_lat": lat, "geo_lng": lng, "geo_radius_m": rad}
 		b, _ := json.Marshal(payload)
 		req := httptest.NewRequest("PATCH", "/events/ev1", bytes.NewReader(b))
 		req.Header.Set("X-User-Id", "owner")

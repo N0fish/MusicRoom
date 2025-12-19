@@ -54,6 +54,7 @@ final class EventListFeatureTests: XCTestCase {
         await store.receive(\.eventsLoaded.success) {
             $0.isLoading = false
             $0.events = events
+            $0.hasLoaded = true
         }
 
         // Network monitor handled by AppFeature now
@@ -108,6 +109,7 @@ final class EventListFeatureTests: XCTestCase {
             $0.isLoading = false
             $0.events = events
             $0.errorMessage = nil
+            $0.hasLoaded = true
         }
 
         await offlineStore.receive(\.currentUserLoaded.success) {
@@ -160,6 +162,7 @@ final class EventListFeatureTests: XCTestCase {
             $0.isLoading = false
             $0.events = events
             $0.errorMessage = "Loaded from cache (API Failed)"
+            $0.hasLoaded = true
         }
     }
 
@@ -204,6 +207,7 @@ final class EventListFeatureTests: XCTestCase {
         await store.receive(\.eventsLoaded.success) {
             $0.isLoading = false
             $0.events = [event]
+            $0.hasLoaded = true
         }
 
         // Simulate invitation
@@ -225,6 +229,7 @@ final class EventListFeatureTests: XCTestCase {
 
         await store.receive(\.eventsLoaded.success) {
             $0.isLoading = false
+            $0.hasLoaded = true
             // events didn't change in this mock test because listEvents mocked to return same
         }
 
@@ -272,6 +277,7 @@ final class EventListFeatureTests: XCTestCase {
         await store.receive(\.eventsLoaded.success) {
             $0.isLoading = false
             $0.events = [event]
+            $0.hasLoaded = true
         }
 
         // Simulate Creation (My Event on other device)
@@ -299,6 +305,7 @@ final class EventListFeatureTests: XCTestCase {
         await store.receive(\.eventsLoaded.success) {
             $0.isLoading = false
             $0.events = [event]
+            $0.hasLoaded = true
         }
 
         await store.send(.onDisappear)
