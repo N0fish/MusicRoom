@@ -24,6 +24,7 @@ public struct FriendsFeature: Sendable {
         public var isLoading: Bool = false
         public var errorMessage: String?
         public var hasLoaded: Bool = false
+        public var currentUserId: String?
 
         // Navigation
         public var path = StackState<FriendProfileFeature.State>()
@@ -38,6 +39,7 @@ public struct FriendsFeature: Sendable {
         case loadData
         case friendsLoaded(Result<[Friend], EquatableError>)
         case requestsLoaded(Result<[FriendRequest], EquatableError>)
+        case currentUserLoaded(Result<String, EquatableError>)
 
         // Search Actions
         case performSearch
@@ -74,6 +76,7 @@ public struct FriendsFeature: Sendable {
     public struct EmptyResponse: Equatable, Sendable {}
 
     @Dependency(\.friendsClient) var friendsClient
+    @Dependency(\.user) var userClient
     @Dependency(\.appSettings) var appSettings
 
     public init() {}
@@ -106,7 +109,7 @@ public struct FriendsFeature: Sendable {
             case .loadData:
                 state.isLoading = true
                 state.errorMessage = nil
-                return .run { send in
+                return .run { [userClient] send in
                     await withThrowingTaskGroup(of: Void.self) { group in
                         group.addTask {
                             do {
@@ -124,8 +127,23 @@ public struct FriendsFeature: Sendable {
                                 await send(.requestsLoaded(.failure(EquatableError(error))))
                             }
                         }
+                        group.addTask {
+                            do {
+                                let me = try await userClient.me()
+                                await send(.currentUserLoaded(.success(me.userId)))
+                            } catch {
+                                await send(.currentUserLoaded(.failure(EquatableError(error))))
+                            }
+                        }
                     }
                 }
+
+            case .currentUserLoaded(.success(let userId)):
+                state.currentUserId = userId
+                return .none
+
+            case .currentUserLoaded(.failure):
+                return .none
 
             case .friendsLoaded(.success(let friends)):
                 state.isLoading = false

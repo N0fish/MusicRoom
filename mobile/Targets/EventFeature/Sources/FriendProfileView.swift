@@ -85,19 +85,21 @@ public struct FriendProfileView: View {
             ToolbarItem(placement: .primaryAction) {
                 if store.isLoading {
                     ProgressView()
-                } else if store.isFriend {
-                    Button(role: .destructive) {
-                        store.send(.view(.removeFriendTapped))
-                    } label: {
-                        Image(systemName: "person.badge.minus")  // fixed icon
-                            .foregroundStyle(.red)
-                    }
-                } else {
-                    Button {
-                        store.send(.view(.addFriendTapped))
-                    } label: {
-                        Image(systemName: "person.badge.plus")  // fixed icon
-                            .foregroundStyle(.blue)
+                } else if !store.isMe {
+                    if store.isFriend {
+                        Button(role: .destructive) {
+                            store.send(.view(.removeFriendTapped))
+                        } label: {
+                            Image(systemName: "person.badge.minus")  // fixed icon
+                                .foregroundStyle(.red)
+                        }
+                    } else {
+                        Button {
+                            store.send(.view(.addFriendTapped))
+                        } label: {
+                            Image(systemName: "person.badge.plus")  // fixed icon
+                                .foregroundStyle(.blue)
+                        }
                     }
                 }
             }

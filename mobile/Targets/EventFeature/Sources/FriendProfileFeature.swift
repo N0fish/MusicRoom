@@ -11,6 +11,7 @@ public struct FriendProfileFeature {
         public let userId: String
         public var profile: PublicUserProfile?
         public var isFriend: Bool
+        public var isMe: Bool = false
         public var isLoading: Bool = false
         @Presents public var alert: AlertState<Action.Alert>?
 
@@ -26,6 +27,7 @@ public struct FriendProfileFeature {
         case delegate(Delegate)
         case alert(PresentationAction<Alert>)
         case profileLoaded(TaskResult<PublicUserProfile>)
+        case userLoaded(TaskResult<UserProfile>)
 
         public enum View: Equatable, Sendable {
             case onAppear
@@ -44,6 +46,7 @@ public struct FriendProfileFeature {
     }
 
     @Dependency(\.friendsClient) var friendsClient
+    @Dependency(\.user) var userClient
     @Dependency(\.dismiss) var dismiss
     @Dependency(\.appSettings) var appSettings
 
@@ -54,11 +57,17 @@ public struct FriendProfileFeature {
             switch action {
             case .view(.onAppear):
                 state.isLoading = true
-                return .run { [friendsClient, userId = state.userId] send in
+                return .run { [friendsClient, userClient, userId = state.userId] send in
                     await send(
                         .profileLoaded(
                             TaskResult {
                                 try await friendsClient.getProfile(userId)
+                            }))
+
+                    await send(
+                        .userLoaded(
+                            TaskResult {
+                                try await userClient.me()
                             }))
                 }
 
@@ -69,6 +78,15 @@ public struct FriendProfileFeature {
 
             case .profileLoaded(.failure):
                 state.isLoading = false
+                return .none
+
+            case .userLoaded(.success(let user)):
+                if user.userId == state.userId {
+                    state.isMe = true
+                }
+                return .none
+
+            case .userLoaded(.failure):
                 return .none
 
             case .view(.addFriendTapped):

@@ -218,6 +218,7 @@ public struct FriendsView: View {
                 SearchResultRow(
                     user: user,
                     isFriend: friendIds.contains(user.userId),
+                    isMe: user.userId == store.currentUserId,
                     onAdd: {
                         withAnimation {
                             _ = store.send(.sendRequest(user.id))
@@ -238,6 +239,7 @@ public struct FriendsView: View {
 private struct SearchResultRow: View {
     let user: AppSupportClients.Friend
     let isFriend: Bool
+    let isMe: Bool
     let onAdd: () -> Void
     let onTapProfile: () -> Void
 
@@ -269,7 +271,14 @@ private struct SearchResultRow: View {
 
             Spacer()
 
-            if isFriend {
+            if isMe {
+                Text("You")
+                    .font(.caption)
+                    .padding(6)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(8)
+                    .foregroundStyle(.blue)
+            } else if isFriend {
                 Text("Friends")
                     .font(.caption)
                     .padding(6)
