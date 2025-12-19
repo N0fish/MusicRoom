@@ -236,6 +236,13 @@ public struct EventListFeature: Sendable {
                             return .send(.loadEvents)
                         }
                     }
+                } else if message.type == "event.invited" {
+                    if let dict = message.payload.value as? [String: Any],
+                        let userId = dict["userId"] as? String,
+                        userId == currentUserId
+                    {
+                        return .send(.loadEvents)
+                    }
                 } else if message.type == "event.deleted" {
                     // Payload is { "id": "..." }
                     if let dict = message.payload.value as? [String: Any],

@@ -25,27 +25,10 @@ public struct EventDetailView: View {
                 .ignoresSafeArea()
 
             // Hidden YouTube Player
-            YouTubePlayerView(
-                videoId: Binding(
-                    get: { store.currentVideoId },
-                    set: { _ in }
-                ),
-                isPlaying: .constant(true),
-                startSeconds: store.metadata?.playingStartedAt.map { Date().timeIntervalSince($0) }
-                    ?? 0,
-                onEnded: {
-                    // Auto-next logic:
-                    // 1. Owner always triggers
-                    // 2. If no tracks queued (end of event), anyone triggers to ensure "Finished" state syncs
-                    let hasNextTrack = store.tracks.contains { $0.status == "queued" }
-                    if store.currentUserId == store.event.ownerId || !hasNextTrack {
-                        store.send(.nextTrackButtonTapped)
-                    }
-                }
-            )
-            .frame(width: 1, height: 1)
-            .opacity(0.01)  // Nearly invisible but active
-            .allowsHitTesting(false)
+            EventYouTubePlayerView(store: store)
+                .frame(width: 1, height: 1)
+                .opacity(0.01)  // Nearly invisible but active
+                .allowsHitTesting(false)
 
             VStack(spacing: 0) {
                 // Header removed in favor of standard toolbar
@@ -54,195 +37,17 @@ public struct EventDetailView: View {
                     VStack(alignment: .leading, spacing: 20) {
 
                         // Join Button for Explore events
-                        if store.event.isJoined == false {
-                            Button {
-                                store.send(.joinEventTapped)
-                            } label: {
-                                HStack {
-                                    Image(systemName: "plus.circle.fill")
-                                    Text("Join Event")
-                                }
-                                .font(.liquidBody.bold())
-                                .foregroundStyle(.white)
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                                .background(Color.blue.opacity(0.8))
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                            }
-                            .padding(.horizontal)
-                        }
+                        JoinButtonView(store: store)
 
                         // Now Playing Section
-                        if let currentTrack = store.tracks.first(where: { $0.status == "playing" })
-                        {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Now Playing")
-                                    .font(.liquidTitle)
-                                    .foregroundStyle(Color.white)
-                                    .padding(.horizontal)
-
-                                TrackRow(
-                                    index: 0,
-                                    track: currentTrack,
-                                    voteCount: currentTrack.voteCount ?? 0,
-                                    isMyVote: false,  // Can't vote on playing
-                                    isOffline: store.isOffline,
-                                    onVote: {},
-                                    showVote: false,
-                                    timeRemaining: store.timeRemaining,
-                                    totalDuration: store.currentTrackDuration
-                                )
-                                .matchedGeometryEffect(id: currentTrack.id, in: animation)
-                                .transition(.scale(scale: 0.9).combined(with: .opacity))
-                                .padding(.horizontal)
-
-                                // Next Track Control (Play/Skip)
-                                if store.currentUserId == store.event.ownerId {
-                                    Button {
-                                        store.send(.nextTrackButtonTapped)
-                                    } label: {
-                                        HStack {
-                                            Image(systemName: "forward.end.fill")
-                                            Text("Next Track")
-                                        }
-                                        .font(.liquidBody.bold())
-                                        .foregroundStyle(.white)
-                                        .padding()
-                                        .background(Color.white.opacity(0.2))
-                                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                                    }
-                                    .padding(.horizontal)
-                                }
-                            }
-                        } else {
-                            // Check if we have tracks ready to play
-                            let queuedTracks = store.tracks.filter {
-                                $0.status == "queued" || $0.status == nil
-                            }
-
-                            if !queuedTracks.isEmpty {
-                                if store.currentUserId == store.event.ownerId {
-                                    Button {
-                                        store.send(.nextTrackButtonTapped)
-                                    } label: {
-                                        HStack {
-                                            Image(systemName: "play.fill")
-                                            Text("Start Radio")
-                                        }
-                                        .font(.liquidBody.bold())
-                                        .foregroundStyle(.white)
-                                        .padding()
-                                        .frame(maxWidth: .infinity)
-                                        .background(Color.green.opacity(0.8))
-                                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                                    }
-                                    .padding(.horizontal)
-                                } else {
-                                    Text("Waiting for host to start...")
-                                        .font(.liquidCaption)
-                                        .foregroundStyle(.white.opacity(0.5))
-                                        .padding()
-                                }
-                            } else if !store.isLoading && !store.tracks.isEmpty {
-                                // Tracks exist but none are queued (all played) -> Event Finished
-                                VStack(spacing: 8) {
-                                    Image(systemName: "flag.checkered")
-                                        .font(.system(size: 32))
-                                        .foregroundStyle(Color.white.opacity(0.8))
-                                        .padding(.bottom, 4)
-
-                                    Text("Event Finished")
-                                        .font(.liquidH2)
-                                        .foregroundStyle(Color.white)
-
-                                    Text("You can start anew!")
-                                        .font(.liquidCaption)
-                                        .foregroundStyle(Color.white.opacity(0.7))
-                                }
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                                .background(Color.black.opacity(0.3))
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
-                                .padding(.horizontal)
-                            }
-                        }
+                        NowPlayingSectionView(store: store, animation: animation)
 
                         // Leaderboard / Playlist
-                        Text("Up Next")
-                            .font(.liquidTitle)
-                            .foregroundStyle(Color.white)
-                            .padding(.horizontal)
-
-                        if store.tracks.filter({ $0.status == "queued" || $0.status == nil })
-                            .isEmpty && !store.isLoading
-                        {
-                            Text("Queue empty. Add tracks!")
-                                .font(.liquidBody)
-                                .foregroundStyle(Color.white.opacity(0.6))
-                                .padding(.horizontal)
-                        } else {
-                            LazyVStack(spacing: 12) {
-                                // Filter only queued (or nil status if legacy)
-                                let queuedTracks = store.tracks.filter {
-                                    $0.status == "queued" || $0.status == nil
-                                }
-
-                                // Sort tracks by vote count descending
-                                let sortedTracks = queuedTracks.sorted {
-                                    ($0.voteCount ?? 0) > ($1.voteCount ?? 0)
-                                }
-
-                                ForEach(sortedTracks) { track in
-                                    TrackRow(
-                                        index: (sortedTracks.firstIndex(of: track) ?? 0) + 1,
-                                        track: track,
-                                        voteCount: track.voteCount ?? 0,
-                                        isMyVote: track.isVoted ?? false,
-                                        isOffline: store.isOffline,
-                                        onVote: {
-                                            store.send(.voteButtonTapped(trackId: track.id))
-                                        },
-                                        showVote: store.canVote
-                                    )
-                                    .matchedGeometryEffect(id: track.id, in: animation)
-                                    .transition(.scale.combined(with: .opacity))
-                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                        Button(role: .destructive) {
-                                            store.send(.removeTrackButtonTapped(trackId: track.id))
-                                        } label: {
-                                            Label("Remove", systemImage: "trash")
-                                        }
-                                    }
-                                }
-                            }
-                            .animation(
-                                .spring(response: 0.6, dampingFraction: 0.8), value: store.tracks
-                            )
-                            .padding(.horizontal)
-                        }
+                        PlaylistView(store: store, animation: animation)
 
                         // Add Track Button
-                        LiquidButton(
-                            useGlass: true,
-                            action: {
-                                if !store.isOffline {
-                                    store.send(.addTrackButtonTapped)
-                                }
-                            }
-                        ) {
-                            HStack {
-                                Image(systemName: "plus.circle.fill")
-                                    .font(.liquidIcon)
-                                Text("Add Track")
-                                    .font(.liquidBody.bold())
-                                Spacer()
-                            }
-                            .foregroundStyle(store.isOffline ? Color.gray : Color.white)
-                            .frame(maxWidth: .infinity)
-                        }
-                        .disabled(store.isOffline)
-                        .padding(.horizontal)
-                        .padding(.top, 20)
+                        AddTrackButtonView(store: store)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
 
                         Spacer(minLength: 100)
                     }
@@ -256,49 +61,7 @@ public struct EventDetailView: View {
             }
         }
         .overlay(alignment: .top) {
-            if let alert = store.userAlert {
-                HStack(spacing: 12) {
-                    Image(
-                        systemName: alert.type == .error
-                            ? "exclamationmark.triangle.fill"
-                            : (alert.type == .success
-                                ? "checkmark.circle.fill" : "info.circle.fill")
-                    )
-                    .font(.system(size: 20))
-                    .foregroundStyle(.white)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(alert.title)
-                            .font(.liquidBody.bold())
-                            .foregroundStyle(.white)
-                        Text(alert.message)
-                            .font(.liquidCaption)
-                            .foregroundStyle(.white.opacity(0.8))
-                    }
-                    Spacer()
-                }
-                .padding()
-                .background(
-                    (alert.type == .error
-                        ? Color.red
-                        : alert.type == .success
-                            ? Color.green : Color.blue)
-                        .opacity(0.9)
-                        .shadow(.drop(radius: 10, y: 5))
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .padding(.horizontal)
-                .padding(.top, 8)  // Add some safe area padding
-                .transition(
-                    .asymmetric(
-                        insertion: .move(edge: .top).combined(with: .opacity),
-                        removal: .move(edge: .top).combined(with: .opacity)
-                    )
-                )
-                .onTapGesture {
-                    store.send(.dismissInfo, animation: .spring())
-                }
-            }
+            UserAlertOverlay(store: store)
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.7), value: store.userAlert)
         .onAppear {
@@ -561,6 +324,331 @@ struct ParticipantRow: View {
                         .foregroundStyle(.secondary)
                 }
             }
+        }
+    }
+}
+
+struct JoinButtonView: View {
+    @Bindable var store: StoreOf<EventDetailFeature>
+
+    var body: some View {
+        if store.event.isJoined == false
+            && (store.event.licenseMode != .invitedOnly || store.event.visibility == .publicEvent)
+        {
+            Button {
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                    _ = store.send(.joinEventTapped)
+                }
+            } label: {
+                HStack {
+                    Image(systemName: "plus.circle.fill")
+                    Text("Join Event")
+                }
+                .font(.liquidBody.bold())
+                .foregroundStyle(.white)
+                .padding()
+                .frame(maxWidth: .infinity)
+                .background(Color.blue.opacity(0.8))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .padding(.horizontal)
+            .transition(
+                .asymmetric(
+                    insertion: .scale.combined(with: .opacity),
+                    removal: .opacity.combined(with: .scale(scale: 0.8))))
+        }
+    }
+}
+
+struct NowPlayingSectionView: View {
+    @Bindable var store: StoreOf<EventDetailFeature>
+    var animation: Namespace.ID
+
+    var body: some View {
+        Group {
+            if let currentTrack = store.tracks.first(where: { $0.status == "playing" }) {
+                PlayingTrackView(
+                    store: store, track: currentTrack, animation: animation
+                )
+            } else {
+                QueuedTracksView(store: store)
+            }
+        }
+    }
+}
+
+struct PlayingTrackView: View {
+    @Bindable var store: StoreOf<EventDetailFeature>
+    let track: Track
+    var animation: Namespace.ID
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Now Playing")
+                .font(.liquidTitle)
+                .foregroundStyle(Color.white)
+                .padding(.horizontal)
+
+            TrackRow(
+                index: 0,
+                track: track,
+                voteCount: track.voteCount ?? 0,
+                isMyVote: false,  // Can't vote on playing
+                isOffline: store.isOffline,
+                onVote: {},
+                showVote: false,
+                timeRemaining: store.timeRemaining,
+                totalDuration: store.currentTrackDuration
+            )
+            .matchedGeometryEffect(id: track.id, in: animation)
+            .transition(.scale(scale: 0.9).combined(with: .opacity))
+            .padding(.horizontal)
+
+            // Next Track Control (Play/Skip)
+            if store.currentUserId == store.event.ownerId {
+                Button {
+                    store.send(.nextTrackButtonTapped)
+                } label: {
+                    HStack {
+                        Image(systemName: "forward.end.fill")
+                        Text("Next Track")
+                    }
+                    .font(.liquidBody.bold())
+                    .foregroundStyle(.white)
+                    .padding()
+                    .background(Color.white.opacity(0.2))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .padding(.horizontal)
+            }
+        }
+    }
+}
+
+struct QueuedTracksView: View {
+    @Bindable var store: StoreOf<EventDetailFeature>
+
+    var body: some View {
+        // Check if we have tracks ready to play
+        let queuedTracks = store.tracks.filter {
+            $0.status == "queued" || $0.status == nil
+        }
+
+        if !queuedTracks.isEmpty {
+            if store.currentUserId == store.event.ownerId {
+                Button {
+                    store.send(.nextTrackButtonTapped)
+                } label: {
+                    HStack {
+                        Image(systemName: "play.fill")
+                        Text("Start Radio")
+                    }
+                    .font(.liquidBody.bold())
+                    .foregroundStyle(.white)
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.green.opacity(0.8))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .padding(.horizontal)
+            } else {
+                Text("Waiting for host to start...")
+                    .font(.liquidCaption)
+                    .foregroundStyle(.white.opacity(0.5))
+                    .padding()
+            }
+        } else if !store.isLoading && !store.tracks.isEmpty {
+            // Tracks exist but none are queued (all played) -> Event Finished
+            VStack(spacing: 8) {
+                Image(systemName: "flag.checkered")
+                    .font(.system(size: 32))
+                    .foregroundStyle(Color.white.opacity(0.8))
+                    .padding(.bottom, 4)
+
+                Text("Event Finished")
+                    .font(.liquidH2)
+                    .foregroundStyle(Color.white)
+
+                Text("You can start anew!")
+                    .font(.liquidCaption)
+                    .foregroundStyle(Color.white.opacity(0.7))
+            }
+            .padding()
+            .frame(maxWidth: .infinity)
+            .background(Color.black.opacity(0.3))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .padding(.horizontal)
+        }
+    }
+}
+
+struct PlaylistView: View {
+    @Bindable var store: StoreOf<EventDetailFeature>
+    var animation: Namespace.ID
+
+    var body: some View {
+        Text("Up Next")
+            .font(.liquidTitle)
+            .foregroundStyle(Color.white)
+            .padding(.horizontal)
+
+        if store.tracks.filter({ $0.status == "queued" || $0.status == nil })
+            .isEmpty && !store.isLoading
+        {
+            Text("Queue empty. Add tracks!")
+                .font(.liquidBody)
+                .foregroundStyle(Color.white.opacity(0.6))
+                .padding(.horizontal)
+        } else {
+            LazyVStack(spacing: 12) {
+                // Filter only queued (or nil status if legacy)
+                let queuedTracks = store.tracks.filter {
+                    $0.status == "queued" || $0.status == nil
+                }
+
+                // Sort tracks by vote count descending
+                let sortedTracks = queuedTracks.sorted {
+                    ($0.voteCount ?? 0) > ($1.voteCount ?? 0)
+                }
+
+                ForEach(sortedTracks) { track in
+                    TrackRow(
+                        index: (sortedTracks.firstIndex(of: track) ?? 0) + 1,
+                        track: track,
+                        voteCount: track.voteCount ?? 0,
+                        isMyVote: track.isVoted ?? false,
+                        isOffline: store.isOffline,
+                        onVote: {
+                            store.send(.voteButtonTapped(trackId: track.id))
+                        },
+                        showVote: store.canVote
+                    )
+                    .matchedGeometryEffect(id: track.id, in: animation)
+                    .transition(.scale.combined(with: .opacity))
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            store.send(.removeTrackButtonTapped(trackId: track.id))
+                        } label: {
+                            Label("Remove", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+            .animation(
+                .spring(response: 0.6, dampingFraction: 0.8), value: store.tracks
+            )
+            .padding(.horizontal)
+        }
+    }
+}
+
+struct UserAlertOverlay: View {
+    @Bindable var store: StoreOf<EventDetailFeature>
+
+    var body: some View {
+        if let alert = store.userAlert {
+            HStack(spacing: 12) {
+                Image(
+                    systemName: alert.type == .error
+                        ? "exclamationmark.triangle.fill"
+                        : (alert.type == .success
+                            ? "checkmark.circle.fill" : "info.circle.fill")
+                )
+                .font(.system(size: 20))
+                .foregroundStyle(.white)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(alert.title)
+                        .font(.liquidBody.bold())
+                        .foregroundStyle(.white)
+                    Text(alert.message)
+                        .font(.liquidCaption)
+                        .foregroundStyle(.white.opacity(0.8))
+                }
+                Spacer()
+            }
+            .padding()
+            .background(
+                (alert.type == .error
+                    ? Color.red
+                    : alert.type == .success
+                        ? Color.green : Color.blue)
+                    .opacity(0.9)
+                    .shadow(.drop(radius: 10, y: 5))
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .padding(.horizontal)
+            .padding(.top, 8)  // Add some safe area padding
+            .transition(
+                .asymmetric(
+                    insertion: .move(edge: .top).combined(with: .opacity),
+                    removal: .move(edge: .top).combined(with: .opacity)
+                )
+            )
+            .onTapGesture {
+                store.send(.dismissInfo, animation: .spring())
+            }
+        }
+    }
+}
+
+struct EventYouTubePlayerView: View {
+    @Bindable var store: StoreOf<EventDetailFeature>
+
+    var body: some View {
+        YouTubePlayerView(
+            videoId: Binding(
+                get: { store.currentVideoId },
+                set: { _ in }
+            ),
+            isPlaying: Binding(
+                get: {
+                    // Play only if joined
+                    return (store.event.isJoined ?? false)
+                },
+                set: { _ in }
+            ),
+            startSeconds: store.metadata?.playingStartedAt.map { Date().timeIntervalSince($0) }
+                ?? 0,
+            onEnded: {
+                // Auto-next logic:
+                // 1. Owner always triggers
+                // 2. If no tracks queued (end of event), anyone triggers to ensure "Finished" state syncs
+                let hasNextTrack = store.tracks.contains { $0.status == "queued" }
+                if store.currentUserId == store.event.ownerId || !hasNextTrack {
+                    store.send(.nextTrackButtonTapped)
+                }
+            }
+        )
+    }
+}
+
+struct AddTrackButtonView: View {
+    @Bindable var store: StoreOf<EventDetailFeature>
+
+    var body: some View {
+        if store.canVote {
+            LiquidButton(
+                useGlass: true,
+                action: {
+                    if !store.isOffline {
+                        store.send(.addTrackButtonTapped)
+                    }
+                }
+            ) {
+                HStack {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.liquidIcon)
+                    Text("Add Track")
+                        .font(.liquidBody.bold())
+                    Spacer()
+                }
+                .foregroundStyle(store.isOffline ? Color.gray : Color.white)
+                .frame(maxWidth: .infinity)
+            }
+            .disabled(store.isOffline)
+            .padding(.horizontal)
+            .padding(.top, 20)
         }
     }
 }

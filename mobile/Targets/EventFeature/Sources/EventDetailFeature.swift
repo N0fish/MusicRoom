@@ -27,19 +27,7 @@ public struct EventDetailFeature: Sendable {
         }
 
         public var canVote: Bool {
-            if let userId = currentUserId, userId == event.ownerId {
-                return true
-            }
-            switch event.licenseMode {
-            case .everyone:
-                return true
-            case .invitedOnly:
-                return event.isJoined ?? false
-            case .geoTime:
-                // For now, assume true for UI and let backend handle precise geo/time check,
-                // or we could check basic time window if available.
-                return true
-            }
+            return event.canVote ?? false
         }
 
         public var participants: [PublicUserProfile] = []
@@ -151,7 +139,15 @@ public struct EventDetailFeature: Sendable {
                 return .none
 
             case .joinEventTapped:
+                guard
+                    state.event.licenseMode != .invitedOnly
+                        || state.event.visibility == .publicEvent
+                else { return .none }
                 state.event.isJoined = true  // Optimistic update
+                // Optimistic vote permission for public open events
+                if state.event.licenseMode == .everyone {
+                    state.event.canVote = true
+                }
                 return .run { [eventId = state.event.id] send in
                     do {
                         try await musicRoomAPI.joinEvent(eventId)
@@ -215,6 +211,7 @@ public struct EventDetailFeature: Sendable {
                 // Ensure owner is considered joined
                 if let userId = state.currentUserId, userId == state.event.ownerId {
                     state.event.isJoined = true
+                    state.event.canVote = true
                 }
                 return .none
 
@@ -420,6 +417,7 @@ public struct EventDetailFeature: Sendable {
                 return .none
 
             case .addTrackButtonTapped:
+                guard state.canVote else { return .none }
                 if state.isOffline {
                     state.userAlert = UserAlert(
                         title: "Offline",
@@ -592,6 +590,7 @@ public struct EventDetailFeature: Sendable {
                 // Ensure owner is considered joined if we already have the event
                 if state.event.ownerId == profile.userId {
                     state.event.isJoined = true
+                    state.event.canVote = true
                 }
                 return .none
 

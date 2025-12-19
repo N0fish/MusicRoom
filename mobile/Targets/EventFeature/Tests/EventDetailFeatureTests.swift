@@ -371,7 +371,85 @@ final class EventDetailFeatureTests: XCTestCase {
                 title: "Success", message: "Ownership transferred.", type: .success)
         }
 
-        // 4. Reload Event
         await store.receive(.loadEvent)
+    }
+
+    func testCanVote_PropertyCheck() {
+        var state = EventDetailFeature.State(
+            event: .init(
+                id: UUID(), name: "E", visibility: .publicEvent, ownerId: "o",
+                licenseMode: .everyone, createdAt: Date(), updatedAt: Date()))
+
+        // Default from init is false
+        XCTAssertFalse(state.canVote)
+
+        // Set to true
+        state.event.canVote = true
+        XCTAssertTrue(state.canVote)
+
+        // Set to false
+        state.event.canVote = false
+        XCTAssertFalse(state.canVote)
+    }
+
+    func testJoin_Optimistic_Everyone_SetsCanVote() async {
+        let event = Event(
+            id: UUID(), name: "Public Open", visibility: .publicEvent, ownerId: "o",
+            licenseMode: .everyone, createdAt: Date(), updatedAt: Date(), isJoined: false,
+            canVote: false)
+
+        let store = TestStore(initialState: EventDetailFeature.State(event: event)) {
+            EventDetailFeature()
+        } withDependencies: {
+            $0.musicRoomAPI.joinEvent = { _ in }
+        }
+
+        await store.send(.joinEventTapped) {
+            $0.event.isJoined = true
+            $0.event.canVote = true  // Optimistic update for Everyone mode
+        }
+
+        await store.receive(.delegate(.eventJoined))
+    }
+
+    func testJoin_Optimistic_PublicInvited_GuestOnly() async {
+        let event = Event(
+            id: UUID(), name: "Public Invited", visibility: .publicEvent, ownerId: "o",
+            licenseMode: .invitedOnly, createdAt: Date(), updatedAt: Date(), isJoined: false,
+            canVote: false)
+
+        let store = TestStore(initialState: EventDetailFeature.State(event: event)) {
+            EventDetailFeature()
+        } withDependencies: {
+            $0.musicRoomAPI.joinEvent = { _ in }
+        }
+
+        await store.send(.joinEventTapped) {
+            $0.event.isJoined = true
+            $0.event.canVote = false  // Should NOT act optimistically for invitedOnly (remains Guest)
+        }
+
+        await store.receive(.delegate(.eventJoined))
+    }
+
+    func testAddTrack_RestrictedIfCannotVote() async {
+        let event = Event(
+            id: UUID(), name: "Restricted", visibility: .publicEvent, ownerId: "o",
+            licenseMode: .everyone, createdAt: Date(), updatedAt: Date(), isJoined: true,
+            canVote: false)  // User joined but lost voting rights or restricted
+
+        let store = TestStore(initialState: EventDetailFeature.State(event: event)) {
+            EventDetailFeature()
+        }
+
+        // Tapping add track should do NOTHING (no state change, no check logic)
+        // Note: Logic for blocking this should vary.
+        // If Logic is in View (disabled button), Reducer might still handle it if sent?
+        // Ideally Reducer should ALSO guard it.
+        // Let's check Reducer implementation...
+        // Reducer doesn't currently guard it. Let's add the guard in Reducer via this test failure-driven dev.
+        await store.send(.addTrackButtonTapped)
+        // If reducer has no guard, this will trigger navigation to music search.
+        // We expect it to NOT TRIGGER anything.
     }
 }
