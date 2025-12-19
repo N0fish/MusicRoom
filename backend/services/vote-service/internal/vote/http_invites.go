@@ -47,14 +47,43 @@ func (s *HTTPServer) handleCreateInvite(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	var role string
+
 	if ev.OwnerID != userID {
-		// Allow self-invite for public events (Joining)
-		if ev.Visibility == visibilityPublic && body.UserID == userID {
-			// Allowed
+		// Strict check for Invited Only
+		if ev.LicenseMode == licenseInvited {
+			// If InvitedOnly, ONLY Owner can invite contributors.
+			// BUT, Public events allow listeners to join.
+			// If Self-Join + Public + InvitedOnly -> Guest
+			if ev.Visibility == visibilityPublic && body.UserID == userID {
+				role = RoleGuest
+			} else {
+				// Stranger trying to invite someone or join private?
+				// Private check is handled by visibility usually?
+				// Actually handleCreateInvite: "if ev.OwnerID != userID" ...
+				// If not owner, you can only self-join public events.
+				// (The previous logic allowed this).
+				if ev.Visibility == visibilityPublic && body.UserID == userID {
+					// Logic above handles this branch, but let's be explicit
+					// This block is redundant if we nested cleanly, but let's follow logic.
+				} else {
+					writeError(w, http.StatusForbidden, "cannot join invited-only event without invite")
+					return
+				}
+			}
 		} else {
-			writeError(w, http.StatusForbidden, "forbidden")
-			return
+			// licenseEveryone or GeoTime
+			// Allow self-invite for public events (Joining)
+			if ev.Visibility == visibilityPublic && body.UserID == userID {
+				role = RoleContributor
+			} else {
+				writeError(w, http.StatusForbidden, "forbidden")
+				return
+			}
 		}
+	} else {
+		// Owner is inviting
+		role = RoleContributor
 	}
 
 	if err := checkUserExists(r.Context(), s.httpClient, s.userServiceURL, body.UserID); err != nil {
@@ -68,15 +97,18 @@ func (s *HTTPServer) handleCreateInvite(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := s.store.CreateInvite(r.Context(), id, body.UserID); err != nil {
+	if err := s.store.CreateInvite(r.Context(), id, body.UserID, role); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	// Propagate to playlist-service for Realtime events
-	// Ignore errors here? Or fail? Best to log and ignore to not break logic if data is improved,
-	// BUT for realtime sync it's critical.
-	// We'll log error but return success since DB write succeeded.
+	// Emit event.invited directly to ensure robust realtime delivery
+	go s.publishEvent(context.Background(), "event.invited", map[string]any{
+		"eventId": id,
+		"userId":  body.UserID,
+	})
+
+	// Propagate to playlist-service for Realtime events (kept for backward compat or other services)
 	go func() {
 		// Use a detached context or similar since request context might be cancelled
 		// For simplicity using background context with timeout

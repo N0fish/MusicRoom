@@ -166,6 +166,15 @@ func (s *HTTPServer) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 3. Auto-invite the owner (Creator) so they are a participant and can vote
+	if err := s.store.CreateInvite(r.Context(), id, userID, RoleContributor); err != nil {
+		// Log error but generally we shouldn't fail the whole request if invite fails,
+		// though it leaves owner in bad state.
+		// Given store logic, this should succeed if event exists.
+		log.Printf("vote-service: failed to auto-invite owner %s for event %s: %v", userID, id, err)
+		// We could return error, but event is created. Let's proceed.
+	}
+
 	writeJSON(w, http.StatusCreated, fullEvent)
 }
 
@@ -205,14 +214,27 @@ func (s *HTTPServer) handleGetEvent(w http.ResponseWriter, r *http.Request) {
 	if userID != "" {
 		if ev.OwnerID == userID {
 			ev.IsJoined = true
+			ev.CanVote = true
 		} else {
-			invited, err := s.store.IsInvited(r.Context(), ev.ID, userID)
+			role, err := s.store.GetParticipantRole(r.Context(), ev.ID, userID)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
-			ev.IsJoined = invited
+			ev.IsJoined = (role != "")
+
+			// Compute CanVote for UI
+			if role == RoleContributor || (ev.LicenseMode == licenseEveryone && role != "") {
+				ev.CanVote = true
+			} else {
+				ev.CanVote = false
+			}
 		}
+	} else {
+		// User not logged in? (userID == "")
+		// isJoined = false
+		// CanVote = false
+		ev.CanVote = false
 	}
 
 	writeJSON(w, http.StatusOK, ev)
@@ -479,7 +501,7 @@ func (s *HTTPServer) handleTransferOwnership(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Ensure old owner is now a participant (invited)
-	if err := s.store.CreateInvite(r.Context(), id, userID); err != nil {
+	if err := s.store.CreateInvite(r.Context(), id, userID, RoleContributor); err != nil {
 		// Log error but don't fail the request as transfer already happened
 		log.Printf("ERROR: failed to add old owner %s as participant: %v", userID, err)
 	}

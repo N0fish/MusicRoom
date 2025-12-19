@@ -71,8 +71,13 @@ func (m *MockStore) TransferOwnership(ctx context.Context, id, newOwnerID string
 	return args.Error(0)
 }
 
-func (m *MockStore) CreateInvite(ctx context.Context, eventID, userID string) error {
+func (m *MockStore) GetParticipantRole(ctx context.Context, eventID, userID string) (string, error) {
 	args := m.Called(ctx, eventID, userID)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockStore) CreateInvite(ctx context.Context, eventID, userID, role string) error {
+	args := m.Called(ctx, eventID, userID, role)
 	return args.Error(0)
 }
 

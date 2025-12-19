@@ -16,6 +16,9 @@ const (
 	licenseEveryone = "everyone"
 	licenseInvited  = "invited_only"
 	licenseGeoTime  = "geo_time"
+
+	RoleGuest       = "guest"
+	RoleContributor = "contributor"
 )
 
 type Event struct {
@@ -32,6 +35,7 @@ type Event struct {
 	CreatedAt   time.Time  `json:"createdAt"`
 	UpdatedAt   time.Time  `json:"updatedAt"`
 	IsJoined    bool       `json:"isJoined"`
+	CanVote     bool       `json:"canVote"`
 }
 
 type VoteResponse struct {

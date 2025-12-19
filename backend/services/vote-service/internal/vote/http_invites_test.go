@@ -112,7 +112,34 @@ func TestHandleCreateInvite(t *testing.T) {
 
 		ev := &Event{ID: "ev1", OwnerID: "owner", Visibility: "public"}
 		mockStore.On("LoadEvent", mock.Anything, "ev1").Return(ev, nil)
-		mockStore.On("CreateInvite", mock.Anything, "ev1", "user1").Return(nil)
+		mockStore.On("CreateInvite", mock.Anything, "ev1", "user1", "contributor").Return(nil)
+
+		r.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusNoContent, rec.Code)
+	})
+
+	t.Run("success self invite as guest (public invited_only)", func(t *testing.T) {
+		mockStore := new(MockStore)
+		// User exists check mock
+		userSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer userSrv.Close()
+
+		server := &HTTPServer{store: mockStore, httpClient: http.DefaultClient, userServiceURL: userSrv.URL}
+		r := chi.NewRouter()
+		r.Post("/events/{id}/invites", server.handleCreateInvite)
+
+		payload := map[string]string{"userId": "user1"}
+		b, _ := json.Marshal(payload)
+		req := httptest.NewRequest("POST", "/events/ev1/invites", bytes.NewReader(b))
+		req.Header.Set("X-User-Id", "user1")
+		rec := httptest.NewRecorder()
+
+		// Event is public visibility but invited_only license
+		ev := &Event{ID: "ev1", OwnerID: "owner", Visibility: "public", LicenseMode: "invited_only"}
+		mockStore.On("LoadEvent", mock.Anything, "ev1").Return(ev, nil)
+		mockStore.On("CreateInvite", mock.Anything, "ev1", "user1", "guest").Return(nil)
 
 		r.ServeHTTP(rec, req)
 		assert.Equal(t, http.StatusNoContent, rec.Code)
@@ -161,7 +188,7 @@ func TestHandleCreateInvite(t *testing.T) {
 
 		ev := &Event{ID: "ev1", OwnerID: "owner", Visibility: "private"}
 		mockStore.On("LoadEvent", mock.Anything, "ev1").Return(ev, nil)
-		mockStore.On("CreateInvite", mock.Anything, "ev1", "user1").Return(errors.New("db error"))
+		mockStore.On("CreateInvite", mock.Anything, "ev1", "user1", "contributor").Return(errors.New("db error"))
 
 		r.ServeHTTP(rec, req)
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)

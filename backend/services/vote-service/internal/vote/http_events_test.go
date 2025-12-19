@@ -79,9 +79,13 @@ func TestHandleGetEvent(t *testing.T) {
 		ev := &Event{ID: "ev1", Visibility: "private", OwnerID: "owner"}
 		mockStore.On("LoadEvent", mock.Anything, "ev1").Return(ev, nil)
 		mockStore.On("IsInvited", mock.Anything, "ev1", "invitedUser").Return(true, nil)
+		mockStore.On("GetParticipantRole", mock.Anything, "ev1", "invitedUser").Return("contributor", nil)
 
 		r.ServeHTTP(rec, req)
 		assert.Equal(t, http.StatusOK, rec.Code)
+		var resp Event
+		json.NewDecoder(rec.Body).Decode(&resp)
+		assert.True(t, resp.CanVote)
 	})
 
 	t.Run("not found", func(t *testing.T) {
@@ -97,6 +101,28 @@ func TestHandleGetEvent(t *testing.T) {
 
 		r.ServeHTTP(rec, req)
 		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+
+	t.Run("public event user contributor", func(t *testing.T) {
+		mockStore := new(MockStore)
+		server := &HTTPServer{store: mockStore}
+		r := chi.NewRouter()
+		r.Get("/events/{id}", server.handleGetEvent)
+
+		req := httptest.NewRequest("GET", "/events/ev1", nil)
+		req.Header.Set("X-User-Id", "user1")
+		rec := httptest.NewRecorder()
+
+		ev := &Event{ID: "ev1", Visibility: "public", OwnerID: "owner"}
+		mockStore.On("LoadEvent", mock.Anything, "ev1").Return(ev, nil)
+		mockStore.On("GetParticipantRole", mock.Anything, "ev1", "user1").Return("contributor", nil)
+
+		r.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var resp Event
+		json.NewDecoder(rec.Body).Decode(&resp)
+		assert.True(t, resp.IsJoined)
+		assert.True(t, resp.CanVote)
 	})
 }
 
@@ -173,6 +199,7 @@ func TestHandleCreateEvent(t *testing.T) {
 		// Handler calls LoadEvent after creation
 		ev := &Event{ID: "pl1", Name: "My Event", OwnerID: "user1"}
 		mockStore.On("LoadEvent", mock.Anything, "pl1").Return(ev, nil)
+		mockStore.On("CreateInvite", mock.Anything, "pl1", "user1", "contributor").Return(nil)
 
 		r.ServeHTTP(rec, req)
 		assert.Equal(t, http.StatusCreated, rec.Code)
@@ -515,7 +542,7 @@ func TestHandleTransferOwnership(t *testing.T) {
 		ev := &Event{ID: "ev1", OwnerID: "owner"}
 		mockStore.On("LoadEvent", mock.Anything, "ev1").Return(ev, nil)
 		mockStore.On("TransferOwnership", mock.Anything, "ev1", "newOwner").Return(nil)
-		mockStore.On("CreateInvite", mock.Anything, "ev1", "owner").Return(nil)
+		mockStore.On("CreateInvite", mock.Anything, "ev1", "owner", "contributor").Return(nil)
 
 		r.ServeHTTP(rec, req)
 		assert.Equal(t, http.StatusOK, rec.Code)

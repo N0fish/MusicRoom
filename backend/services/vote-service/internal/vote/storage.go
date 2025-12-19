@@ -13,7 +13,9 @@ import (
 
 type Store interface {
 	LoadEvent(ctx context.Context, id string) (*Event, error)
+	// IsInvited checks if user is a participant. Use GetParticipantRole for finer check.
 	IsInvited(ctx context.Context, eventID, userID string) (bool, error)
+	GetParticipantRole(ctx context.Context, eventID, userID string) (string, error)
 	CastVote(ctx context.Context, eventID, trackID, voterID string) error
 	GetVoteCount(ctx context.Context, eventID, trackID string) (int, error)
 	GetVoteTally(ctx context.Context, eventID, voterID string) ([]Row, error)
@@ -25,7 +27,7 @@ type Store interface {
 	UpdateEvent(ctx context.Context, id string, updates map[string]any) error
 	TransferOwnership(ctx context.Context, id, newOwnerID string) error
 	// Invite Management
-	CreateInvite(ctx context.Context, eventID, userID string) error
+	CreateInvite(ctx context.Context, eventID, userID, role string) error
 	DeleteInvite(ctx context.Context, eventID, userID string) error
 	ListInvites(ctx context.Context, eventID string) ([]Invite, error)
 }
@@ -102,11 +104,17 @@ func AutoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
         CREATE TABLE IF NOT EXISTS event_invites(
             event_id uuid NOT NULL REFERENCES events(id) ON DELETE CASCADE,
             user_id TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'contributor',
             created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
             PRIMARY KEY(event_id, user_id)
         )
     `); err != nil {
 		return err
+	}
+
+	// Ensure role column exists for existing tables
+	if _, err := pool.Exec(ctx, `ALTER TABLE event_invites ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'contributor'`); err != nil {
+		log.Printf("migrate alter event_invites role: %v", err)
 	}
 
 	return nil
@@ -149,6 +157,20 @@ func (s *PostgresStore) IsInvited(ctx context.Context, eventID, userID string) (
 	return exists, nil
 }
 
+func (s *PostgresStore) GetParticipantRole(ctx context.Context, eventID, userID string) (string, error) {
+	var role string
+	err := s.pool.QueryRow(ctx, `
+        SELECT role FROM event_invites WHERE event_id=$1 AND user_id=$2
+    `, eventID, userID).Scan(&role)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil // Not found, no error
+		}
+		return "", err
+	}
+	return role, nil
+}
+
 func (s *PostgresStore) CastVote(ctx context.Context, eventID, trackID, voterID string) error {
 	_, err := s.pool.Exec(ctx, `
         INSERT INTO votes(event_id, track, voter_id)
@@ -165,11 +187,11 @@ func (s *PostgresStore) CastVote(ctx context.Context, eventID, trackID, voterID 
 	return nil
 }
 
-func (s *PostgresStore) CreateInvite(ctx context.Context, eventID, userID string) error {
+func (s *PostgresStore) CreateInvite(ctx context.Context, eventID, userID, role string) error {
 	_, err := s.pool.Exec(ctx, `
-        INSERT INTO event_invites(event_id, user_id)
-        VALUES($1,$2) ON CONFLICT DO NOTHING
-    `, eventID, userID)
+        INSERT INTO event_invites(event_id, user_id, role)
+        VALUES($1,$2,$3) ON CONFLICT(event_id, user_id) DO UPDATE SET role = EXCLUDED.role
+    `, eventID, userID, role)
 	return err
 }
 

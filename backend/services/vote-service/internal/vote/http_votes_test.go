@@ -16,6 +16,7 @@ import (
 )
 
 func TestHandleVote(t *testing.T) {
+	// Updated success case: User must be invited/joined even for "everyone" license.
 	t.Run("success", func(t *testing.T) {
 		mockStore := new(MockStore)
 		server := &HTTPServer{store: mockStore}
@@ -30,6 +31,9 @@ func TestHandleVote(t *testing.T) {
 
 		ev := &Event{ID: "ev1", OwnerID: "owner", LicenseMode: "everyone"}
 		mockStore.On("LoadEvent", mock.Anything, "ev1").Return(ev, nil)
+		// Must return true for IsInvited
+		mockStore.On("IsInvited", mock.Anything, "ev1", "user1").Return(true, nil)
+
 		mockStore.On("CastVote", mock.Anything, "ev1", "tr1", "user1").Return(nil)
 		mockStore.On("GetVoteCount", mock.Anything, "ev1", "tr1").Return(10, nil)
 
@@ -39,6 +43,28 @@ func TestHandleVote(t *testing.T) {
 		var resp VoteResponse
 		json.Unmarshal(rec.Body.Bytes(), &resp)
 		assert.Equal(t, 10, resp.TotalVotes)
+	})
+
+	t.Run("forbidden not joined everyone license", func(t *testing.T) {
+		mockStore := new(MockStore)
+		server := &HTTPServer{store: mockStore}
+		r := chi.NewRouter()
+		r.Post("/events/{id}/vote", server.handleVote)
+
+		payload := voteRequest{TrackID: "tr1"}
+		b, _ := json.Marshal(payload)
+		req := httptest.NewRequest("POST", "/events/ev1/vote", bytes.NewReader(b))
+		req.Header.Set("X-User-Id", "user1")
+		rec := httptest.NewRecorder()
+
+		ev := &Event{ID: "ev1", OwnerID: "owner", LicenseMode: "everyone"}
+		mockStore.On("LoadEvent", mock.Anything, "ev1").Return(ev, nil)
+		// Return false for IsInvited
+		mockStore.On("IsInvited", mock.Anything, "ev1", "user1").Return(false, nil)
+
+		r.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusForbidden, rec.Code)
 	})
 
 	t.Run("missing user id", func(t *testing.T) {

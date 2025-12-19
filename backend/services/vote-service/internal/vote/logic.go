@@ -190,15 +190,25 @@ func canUserVote(ctx context.Context, store Store, ev *Event, userID string, lat
 
 	switch ev.LicenseMode {
 	case "", licenseEveryone:
-		return true, "", nil
-
-	case licenseInvited:
 		invited, err := store.IsInvited(ctx, ev.ID, userID)
 		if err != nil {
 			return false, "", err
 		}
 		if !invited {
+			return false, "you must join the event to vote", nil
+		}
+		return true, "", nil
+
+	case licenseInvited:
+		role, err := store.GetParticipantRole(ctx, ev.ID, userID)
+		if err != nil {
+			return false, "", err
+		}
+		if role == "" {
 			return false, "license requires invitation to vote", nil
+		}
+		if role != RoleContributor {
+			return false, "guests cannot vote in invited-only events", nil
 		}
 		return true, "", nil
 

@@ -25,6 +25,7 @@ func TestRegisterVote(t *testing.T) {
 			LicenseMode: "everyone",
 		}
 		mockStore.On("LoadEvent", ctx, "ev1").Return(ev, nil)
+		mockStore.On("IsInvited", ctx, "ev1", "user1").Return(true, nil)
 		mockStore.On("CastVote", ctx, "ev1", "tr1", "user1").Return(nil)
 		mockStore.On("GetVoteCount", ctx, "ev1", "tr1").Return(5, nil)
 
@@ -48,6 +49,7 @@ func TestRegisterVote(t *testing.T) {
 		mockStore := new(MockStore)
 		ev := &Event{ID: "ev1", OwnerID: "owner"}
 		mockStore.On("LoadEvent", ctx, "ev1").Return(ev, nil)
+		mockStore.On("IsInvited", ctx, "ev1", "user1").Return(true, nil)
 		mockStore.On("CastVote", ctx, "ev1", "tr1", "user1").Return(errors.New("db error"))
 
 		_, err := registerVote(ctx, mockStore, nil, "ev1", "user1", "tr1", nil, nil)
@@ -63,6 +65,13 @@ func TestRemoveVote(t *testing.T) {
 		mockStore := new(MockStore)
 		ev := &Event{ID: "ev1", OwnerID: "owner"}
 		mockStore.On("LoadEvent", ctx, "ev1").Return(ev, nil)
+		// Logic currently doesn't re-check canUserVote fully or IsInvited for removeVote,
+		// but let's see implementation. removeVote calls IsInvited inside logic.go?
+		// Looking at code: removeVote checks voting window but doesn't seem to call canUserVote.
+		// So this should be fine without IsInvited.
+		// Based on logic.go viewing earlier, removeVote only loaded event and checked window.
+		// So this should be fine without IsInvited.
+
 		mockStore.On("RemoveVote", ctx, "ev1", "tr1", "user1").Return(nil)
 		mockStore.On("GetVoteCount", ctx, "ev1", "tr1").Return(4, nil)
 
@@ -115,29 +124,43 @@ func TestCanUserVote(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now()
 
-	t.Run("owner always votes - private", func(t *testing.T) {
+	t.Run("owner votes if joined - private", func(t *testing.T) {
 		mockStore := new(MockStore)
 		ev := &Event{ID: "ev1", OwnerID: "owner", Visibility: "private"}
-		mockStore.On("IsInvited", ctx, "ev1", "owner").Return(false, nil)
+		mockStore.On("IsInvited", ctx, "ev1", "owner").Return(true, nil)
 		ok, _, err := canUserVote(ctx, mockStore, ev, "owner", nil, nil, now)
 		assert.NoError(t, err)
 		assert.True(t, ok)
 	})
 
-	t.Run("owner always votes - invited only", func(t *testing.T) {
+	t.Run("owner votes if joined - invited only", func(t *testing.T) {
 		mockStore := new(MockStore)
 		ev := &Event{ID: "ev1", OwnerID: "owner", LicenseMode: "invited_only"}
-		// No IsInvited call for licenseInvited if user is owner
+		mockStore.On("GetParticipantRole", ctx, "ev1", "owner").Return("contributor", nil)
 		ok, _, err := canUserVote(ctx, mockStore, ev, "owner", nil, nil, now)
 		assert.NoError(t, err)
 		assert.True(t, ok)
 	})
 
 	t.Run("license everyone", func(t *testing.T) {
+		mockStore := new(MockStore)
 		ev := &Event{ID: "ev1", OwnerID: "owner", LicenseMode: "everyone"}
-		ok, _, err := canUserVote(ctx, nil, ev, "user2", nil, nil, now)
+		mockStore.On("IsInvited", ctx, "ev1", "user2").Return(true, nil)
+
+		ok, _, err := canUserVote(ctx, mockStore, ev, "user2", nil, nil, now)
 		assert.NoError(t, err)
 		assert.True(t, ok)
+	})
+
+	t.Run("license everyone not joined", func(t *testing.T) {
+		mockStore := new(MockStore)
+		ev := &Event{ID: "ev1", OwnerID: "owner", LicenseMode: "everyone"}
+		mockStore.On("IsInvited", ctx, "ev1", "user2").Return(false, nil)
+
+		ok, reason, err := canUserVote(ctx, mockStore, ev, "user2", nil, nil, now)
+		assert.NoError(t, err)
+		assert.False(t, ok)
+		assert.Equal(t, "you must join the event to vote", reason)
 	})
 
 	t.Run("private event invited success", func(t *testing.T) {
@@ -164,7 +187,7 @@ func TestCanUserVote(t *testing.T) {
 	t.Run("license invited success", func(t *testing.T) {
 		mockStore := new(MockStore)
 		ev := &Event{ID: "ev1", OwnerID: "owner", LicenseMode: "invited_only"}
-		mockStore.On("IsInvited", ctx, "ev1", "user2").Return(true, nil)
+		mockStore.On("GetParticipantRole", ctx, "ev1", "user2").Return("contributor", nil)
 
 		ok, _, err := canUserVote(ctx, mockStore, ev, "user2", nil, nil, now)
 		assert.NoError(t, err)
@@ -174,12 +197,23 @@ func TestCanUserVote(t *testing.T) {
 	t.Run("license invited not invited", func(t *testing.T) {
 		mockStore := new(MockStore)
 		ev := &Event{ID: "ev1", OwnerID: "owner", LicenseMode: "invited_only"}
-		mockStore.On("IsInvited", ctx, "ev1", "user2").Return(false, nil)
+		mockStore.On("GetParticipantRole", ctx, "ev1", "user2").Return("", nil)
 
 		ok, reason, err := canUserVote(ctx, mockStore, ev, "user2", nil, nil, now)
 		assert.NoError(t, err)
 		assert.False(t, ok)
 		assert.Equal(t, "license requires invitation to vote", reason)
+	})
+
+	t.Run("license invited guest", func(t *testing.T) {
+		mockStore := new(MockStore)
+		ev := &Event{ID: "ev1", OwnerID: "owner", LicenseMode: "invited_only"}
+		mockStore.On("GetParticipantRole", ctx, "ev1", "user2").Return("guest", nil)
+
+		ok, reason, err := canUserVote(ctx, mockStore, ev, "user2", nil, nil, now)
+		assert.NoError(t, err)
+		assert.False(t, ok)
+		assert.Equal(t, "guests cannot vote in invited-only events", reason)
 	})
 
 	t.Run("geo time blocked time - early", func(t *testing.T) {
@@ -475,6 +509,7 @@ func TestLogicErrorPaths(t *testing.T) {
 		mockStore := new(MockStore)
 		ev := &Event{ID: "ev1", OwnerID: "owner"}
 		mockStore.On("LoadEvent", ctx, "ev1").Return(ev, nil)
+		mockStore.On("IsInvited", ctx, "ev1", "u1").Return(true, nil)
 		mockStore.On("CastVote", ctx, "ev1", "t1", "u1").Return(nil)
 		mockStore.On("GetVoteCount", ctx, "ev1", "t1").Return(0, errors.New("count fail"))
 
@@ -592,6 +627,7 @@ func TestLogicEdgeCases(t *testing.T) {
 		m := new(MockStore)
 		ev := &Event{ID: "e1", LicenseMode: "everyone"}
 		m.On("LoadEvent", ctx, "e1").Return(ev, nil)
+		m.On("IsInvited", ctx, "e1", "u1").Return(true, nil)
 		m.On("CastVote", ctx, "e1", "t1", "u1").Return(ErrVoteConflict)
 		_, err := registerVote(ctx, m, nil, "e1", "u1", "t1", nil, nil)
 		assert.Error(t, err)
