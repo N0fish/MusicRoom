@@ -114,6 +114,24 @@ extension AuthenticationClient {
     static func live(urlSession: URLSession = .shared) -> Self {
         let keychain = KeychainHelper()
 
+        @Sendable func logError(
+            _ request: URLRequest, _ response: HTTPURLResponse?, _ data: Data?, _ error: Error?
+        ) {
+            print("\n❌ [AuthenticationClient] Request Failed")
+            print("   URL: \(request.url?.absoluteString ?? "nil")")
+            print("   Method: \(request.httpMethod ?? "GET")")
+            if let response {
+                print("   Status: \(response.statusCode)")
+            }
+            if let data, let body = String(data: data, encoding: .utf8), !body.isEmpty {
+                print("   Response Body: \(body)")
+            }
+            if let error {
+                print("   Error: \(error.localizedDescription)")
+            }
+            print("--------------------------------------------------\n")
+        }
+
         return Self(
             login: { email, password in
                 let baseUrl = BaseURL.resolve()
@@ -125,40 +143,64 @@ extension AuthenticationClient {
                 let body = ["email": email, "password": password]
                 request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-                let (data, response) = try await urlSession.data(for: request)
+                do {
+                    let (data, response) = try await urlSession.data(for: request)
 
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    throw AuthenticationError.networkError("Invalid response")
-                }
-
-                if httpResponse.statusCode == 401 {
-                    throw AuthenticationError.invalidCredentials
-                }
-
-                if httpResponse.statusCode == 500 {
-                    throw AuthenticationError.serverError("Internal Server Error")
-                }
-
-                guard (200...299).contains(httpResponse.statusCode) else {
-                    if httpResponse.statusCode == 400 {
-                        struct ErrorResponse: Decodable { let error: String }
-                        if let errResp = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
-                            throw AuthenticationError.badRequest(errResp.error)
-                        }
+                    guard let httpResponse = response as? HTTPURLResponse else {
+                        throw AuthenticationError.networkError("Invalid response")
                     }
-                    throw AuthenticationError.networkError(
-                        "Server error: \(httpResponse.statusCode)")
+
+                    if httpResponse.statusCode == 401 {
+                        logError(
+                            request, httpResponse, data, AuthenticationError.invalidCredentials)
+                        throw AuthenticationError.invalidCredentials
+                    }
+
+                    if httpResponse.statusCode == 500 {
+                        let error = AuthenticationError.serverError("Internal Server Error")
+                        logError(request, httpResponse, data, error)
+                        throw error
+                    }
+
+                    guard (200...299).contains(httpResponse.statusCode) else {
+                        if httpResponse.statusCode == 400 {
+                            struct ErrorResponse: Decodable { let error: String }
+                            if let errResp = try? JSONDecoder().decode(
+                                ErrorResponse.self, from: data)
+                            {
+                                let error = AuthenticationError.badRequest(errResp.error)
+                                logError(request, httpResponse, data, error)
+                                throw error
+                            }
+                        }
+                        let error = AuthenticationError.networkError(
+                            "Server error: \(httpResponse.statusCode)")
+                        logError(request, httpResponse, data, error)
+                        throw error
+                    }
+
+                    struct AuthResponse: Decodable {
+                        let accessToken: String
+                        let refreshToken: String
+                    }
+
+                    do {
+                        let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
+                        keychain.save(authResponse.accessToken, for: "accessToken")
+                        keychain.save(authResponse.refreshToken, for: "refreshToken")
+                    } catch {
+                        logError(request, httpResponse, data, error)
+                        throw error
+                    }
+                } catch {
+                    // If we haven't already logged it (internal throws), log here if it's a network error caught from URLSession
+                    // Simpler: Just log if it's not one of our typed errors, or just rely on the throw points above?
+                    // URLSession errors (offline etc) land here.
+                    if !(error is AuthenticationError) {
+                        logError(request, nil, nil, error)
+                    }
+                    throw error
                 }
-
-                struct AuthResponse: Decodable {
-                    let accessToken: String
-                    let refreshToken: String
-                }
-
-                let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
-
-                keychain.save(authResponse.accessToken, for: "accessToken")
-                keychain.save(authResponse.refreshToken, for: "refreshToken")
             },
             register: { email, password in
                 let baseUrl = BaseURL.resolve()
@@ -170,39 +212,59 @@ extension AuthenticationClient {
                 let body = ["email": email, "password": password]
                 request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-                let (data, response) = try await urlSession.data(for: request)
+                do {
+                    let (data, response) = try await urlSession.data(for: request)
 
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    throw AuthenticationError.networkError("Registration failed")
-                }
-
-                if httpResponse.statusCode == 409 {
-                    throw AuthenticationError.userAlreadyExists
-                }
-
-                if httpResponse.statusCode == 500 {
-                    throw AuthenticationError.serverError("Internal Server Error")
-                }
-
-                guard (200...299).contains(httpResponse.statusCode) else {
-                    if httpResponse.statusCode == 400 {
-                        struct ErrorResponse: Decodable { let error: String }
-                        if let errResp = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
-                            throw AuthenticationError.badRequest(errResp.error)
-                        }
+                    guard let httpResponse = response as? HTTPURLResponse else {
+                        throw AuthenticationError.networkError("Registration failed")
                     }
-                    throw AuthenticationError.networkError("Registration failed")
+
+                    if httpResponse.statusCode == 409 {
+                        logError(request, httpResponse, data, AuthenticationError.userAlreadyExists)
+                        throw AuthenticationError.userAlreadyExists
+                    }
+
+                    if httpResponse.statusCode == 500 {
+                        let error = AuthenticationError.serverError("Internal Server Error")
+                        logError(request, httpResponse, data, error)
+                        throw error
+                    }
+
+                    guard (200...299).contains(httpResponse.statusCode) else {
+                        if httpResponse.statusCode == 400 {
+                            struct ErrorResponse: Decodable { let error: String }
+                            if let errResp = try? JSONDecoder().decode(
+                                ErrorResponse.self, from: data)
+                            {
+                                let error = AuthenticationError.badRequest(errResp.error)
+                                logError(request, httpResponse, data, error)
+                                throw error
+                            }
+                        }
+                        let error = AuthenticationError.networkError("Registration failed")
+                        logError(request, httpResponse, data, error)
+                        throw error
+                    }
+
+                    struct AuthResponse: Decodable {
+                        let accessToken: String
+                        let refreshToken: String
+                    }
+
+                    do {
+                        let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
+                        keychain.save(authResponse.accessToken, for: "accessToken")
+                        keychain.save(authResponse.refreshToken, for: "refreshToken")
+                    } catch {
+                        logError(request, httpResponse, data, error)
+                        throw error
+                    }
+                } catch {
+                    if !(error is AuthenticationError) {
+                        logError(request, nil, nil, error)
+                    }
+                    throw error
                 }
-
-                struct AuthResponse: Decodable {
-                    let accessToken: String
-                    let refreshToken: String
-                }
-
-                let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
-
-                keychain.save(authResponse.accessToken, for: "accessToken")
-                keychain.save(authResponse.refreshToken, for: "refreshToken")
             },
             logout: {
                 keychain.delete("accessToken")
@@ -232,33 +294,49 @@ extension AuthenticationClient {
                 let body = ["refreshToken": currentRefreshToken]
                 request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-                let (data, response) = try await urlSession.data(for: request)
+                do {
+                    let (data, response) = try await urlSession.data(for: request)
 
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    throw AuthenticationError.networkError("Invalid response")
+                    guard let httpResponse = response as? HTTPURLResponse else {
+                        throw AuthenticationError.networkError("Invalid response")
+                    }
+
+                    if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                        // Refresh token invalid/expired
+                        keychain.delete("accessToken")
+                        keychain.delete("refreshToken")
+                        logError(
+                            request, httpResponse, data, AuthenticationError.invalidCredentials)
+                        throw AuthenticationError.invalidCredentials
+                    }
+
+                    guard (200...299).contains(httpResponse.statusCode) else {
+                        let error = AuthenticationError.networkError(
+                            "Server error: \(httpResponse.statusCode)")
+                        logError(request, httpResponse, data, error)
+                        throw error
+                    }
+
+                    struct RefreshResponse: Decodable {
+                        let accessToken: String
+                        let refreshToken: String
+                    }
+
+                    do {
+                        let refreshResponse = try JSONDecoder().decode(
+                            RefreshResponse.self, from: data)
+                        keychain.save(refreshResponse.accessToken, for: "accessToken")
+                        keychain.save(refreshResponse.refreshToken, for: "refreshToken")
+                    } catch {
+                        logError(request, httpResponse, data, error)
+                        throw error
+                    }
+                } catch {
+                    if !(error is AuthenticationError) {
+                        logError(request, nil, nil, error)
+                    }
+                    throw error
                 }
-
-                if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
-                    // Refresh token invalid/expired
-                    keychain.delete("accessToken")
-                    keychain.delete("refreshToken")
-                    throw AuthenticationError.invalidCredentials
-                }
-
-                guard (200...299).contains(httpResponse.statusCode) else {
-                    throw AuthenticationError.networkError(
-                        "Server error: \(httpResponse.statusCode)")
-                }
-
-                struct RefreshResponse: Decodable {
-                    let accessToken: String
-                    let refreshToken: String
-                }
-
-                let refreshResponse = try JSONDecoder().decode(RefreshResponse.self, from: data)
-
-                keychain.save(refreshResponse.accessToken, for: "accessToken")
-                keychain.save(refreshResponse.refreshToken, for: "refreshToken")
             },
             forgotPassword: { email in
                 let baseUrl = BaseURL.resolve()
@@ -270,12 +348,22 @@ extension AuthenticationClient {
                 let body = ["email": email]
                 request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-                let (_, response) = try await urlSession.data(for: request)
+                do {
+                    let (data, response) = try await urlSession.data(for: request)
 
-                guard let httpResponse = response as? HTTPURLResponse,
-                    (200...299).contains(httpResponse.statusCode)
-                else {
-                    throw AuthenticationError.networkError("Forgot password request failed")
+                    guard let httpResponse = response as? HTTPURLResponse,
+                        (200...299).contains(httpResponse.statusCode)
+                    else {
+                        let error = AuthenticationError.networkError(
+                            "Forgot password request failed")
+                        logError(request, response as? HTTPURLResponse, data, error)
+                        throw error
+                    }
+                } catch {
+                    if !(error is AuthenticationError) {
+                        logError(request, nil, nil, error)
+                    }
+                    throw error
                 }
             }
         )

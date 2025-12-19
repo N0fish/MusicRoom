@@ -46,7 +46,7 @@ public struct FriendRequest: Codable, Equatable, Identifiable, Sendable {
 
 // MARK: - API Response Models (Internal)
 
-struct UserListItem: Codable {
+struct UserListItem: Codable, Sendable {
     let userId: String
     let username: String
     let displayName: String
@@ -63,23 +63,23 @@ struct UserListItem: Codable {
     }
 }
 
-struct FriendsListResponse: Codable {
+struct FriendsListResponse: Codable, Sendable {
     let items: [UserListItem]?
 }
 
-struct BackendFriendItem: Codable {
+struct BackendFriendItem: Codable, Sendable {
     let userId: String
     let username: String
     let displayName: String
     let avatarUrl: String?
 }
 
-struct IncomingRequestItem: Codable {
+struct IncomingRequestItem: Codable, Sendable {
     let from: BackendFriendItem
     let createdAt: String  // Default Go JSON marshaling for time.Time is ISO8601 string
 }
 
-struct IncomingRequestsResponse: Codable {
+struct IncomingRequestsResponse: Codable, Sendable {
     let items: [IncomingRequestItem]?
 }
 
@@ -161,19 +161,86 @@ extension DependencyValues {
 
 extension FriendsClient {
     static func live() -> Self {
+        @Sendable func logError(
+            _ request: URLRequest, _ response: HTTPURLResponse?, _ data: Data?, _ error: Error?
+        ) {
+            print("\n❌ [FriendsClient] Request Failed")
+            print("   URL: \(request.url?.absoluteString ?? "nil")")
+            print("   Method: \(request.httpMethod ?? "GET")")
+            if let response {
+                print("   Status: \(response.statusCode)")
+            }
+            if let data, let body = String(data: data, encoding: .utf8), !body.isEmpty {
+                print("   Response Body: \(body)")
+            }
+            if let error {
+                print("   Error: \(error.localizedDescription)")
+            }
+            print("--------------------------------------------------\n")
+        }
+
+        @Sendable func performRequest<T: Decodable & Sendable>(
+            _ request: URLRequest
+        ) async throws -> T {
+            var request = request
+            attachAuth(to: &request)
+
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw URLError(.badServerResponse)
+                }
+
+                if !(200...299).contains(httpResponse.statusCode) {
+                    let error = URLError(.badServerResponse)  // Or custom error
+                    logError(request, httpResponse, data, error)
+                    throw error
+                }
+
+                let decoder = JSONDecoder()
+                do {
+                    return try decoder.decode(T.self, from: data)
+                } catch {
+                    logError(request, httpResponse, data, error)
+                    throw error
+                }
+            } catch {
+                logError(request, nil, nil, error)
+                throw error
+            }
+        }
+
+        @Sendable func performRequestNoContent(_ request: URLRequest) async throws {
+            var request = request
+            attachAuth(to: &request)
+
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw URLError(.badServerResponse)
+                }
+
+                if !(200...299).contains(httpResponse.statusCode) {
+                    let error = URLError(.badServerResponse)
+                    logError(request, httpResponse, data, error)
+                    throw error
+                }
+            } catch {
+                logError(request, nil, nil, error)
+                throw error
+            }
+        }
+
         return Self(
             listFriends: {
                 let baseUrl = BaseURL.resolve()
                 let url = URL(string: "\(baseUrl)/users/me/friends")!
                 var request = URLRequest(url: url)
-
                 request.httpMethod = "GET"
-                attachAuth(to: &request)
 
-                let (data, response) = try await URLSession.shared.data(for: request)
-                try validate(response: response)
-
-                let list = try JSONDecoder().decode(FriendsListResponse.self, from: data)
+                let list: FriendsListResponse = try await performRequest(request)
                 return (list.items ?? []).map { item in
                     var friend = item.toFriend()
                     if let avatarUrl = friend.avatarUrl, !avatarUrl.hasPrefix("http") {
@@ -193,30 +260,22 @@ extension FriendsClient {
                 let url = URL(string: "\(baseUrl)/users/me/friends/requests/incoming")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "GET"
-                attachAuth(to: &request)
 
-                let (data, response) = try await URLSession.shared.data(for: request)
-                try validate(response: response)
-
-                let decoder = JSONDecoder()
-
-                let list = try decoder.decode(IncomingRequestsResponse.self, from: data)
+                let list: IncomingRequestsResponse = try await performRequest(request)
                 return (list.items ?? []).map { item in
-                    // Flexible Date Parsing safely
                     let date = ISO8601DateFormatter().date(from: item.createdAt) ?? Date()
-
                     var avatarUrl = item.from.avatarUrl
                     if let url = avatarUrl, !url.hasPrefix("http") {
                         avatarUrl = baseUrl + url
                     }
 
                     return FriendRequest(
-                        id: item.from.userId,  // Use userId as request ID key since API doesn't return request ID here explicitly in "from"
+                        id: item.from.userId,
                         senderId: item.from.userId,
                         senderUsername: item.from.username,
                         senderDisplayName: item.from.displayName,
                         senderAvatarUrl: avatarUrl,
-                        status: "pending",  // Implicitly pending for incoming requests
+                        status: "pending",
                         sentAt: date
                     )
                 }
@@ -226,40 +285,28 @@ extension FriendsClient {
                 let url = URL(string: "\(baseUrl)/users/me/friends/\(userId)/request")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
-                attachAuth(to: &request)
-
-                let (_, response) = try await URLSession.shared.data(for: request)
-                try validate(response: response)
+                try await performRequestNoContent(request)
             },
             acceptRequest: { senderId in
                 let baseUrl = BaseURL.resolve()
                 let url = URL(string: "\(baseUrl)/users/me/friends/\(senderId)/accept")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
-                attachAuth(to: &request)
-
-                let (_, response) = try await URLSession.shared.data(for: request)
-                try validate(response: response)
+                try await performRequestNoContent(request)
             },
             rejectRequest: { senderId in
                 let baseUrl = BaseURL.resolve()
                 let url = URL(string: "\(baseUrl)/users/me/friends/\(senderId)/reject")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
-                attachAuth(to: &request)
-
-                let (_, response) = try await URLSession.shared.data(for: request)
-                try validate(response: response)
+                try await performRequestNoContent(request)
             },
             removeFriend: { friendId in
                 let baseUrl = BaseURL.resolve()
                 let url = URL(string: "\(baseUrl)/users/me/friends/\(friendId)")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "DELETE"
-                attachAuth(to: &request)
-
-                let (_, response) = try await URLSession.shared.data(for: request)
-                try validate(response: response)
+                try await performRequestNoContent(request)
             },
             searchUsers: { query in
                 guard !query.isEmpty else { return [] }
@@ -269,12 +316,8 @@ extension FriendsClient {
 
                 var request = URLRequest(url: components.url!)
                 request.httpMethod = "GET"
-                attachAuth(to: &request)
 
-                let (data, response) = try await URLSession.shared.data(for: request)
-                try validate(response: response)
-
-                let list = try JSONDecoder().decode(FriendsListResponse.self, from: data)
+                let list: FriendsListResponse = try await performRequest(request)
                 return (list.items ?? []).map { item in
                     var friend = item.toFriend()
                     if let avatarUrl = friend.avatarUrl, !avatarUrl.hasPrefix("http") {
@@ -294,12 +337,8 @@ extension FriendsClient {
                 let url = URL(string: "\(baseUrl)/users/\(userId)")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "GET"
-                attachAuth(to: &request)
 
-                let (data, response) = try await URLSession.shared.data(for: request)
-                try validate(response: response)
-
-                var profile = try JSONDecoder().decode(PublicUserProfile.self, from: data)
+                var profile: PublicUserProfile = try await performRequest(request)
                 if let avatarUrl = profile.avatarUrl, !avatarUrl.hasPrefix("http") {
                     profile = PublicUserProfile(
                         userId: profile.userId,
@@ -319,14 +358,6 @@ extension FriendsClient {
     private static func attachAuth(to request: inout URLRequest) {
         if let token = KeychainHelper().read("accessToken") {
             request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-    }
-
-    private static func validate(response: URLResponse) throws {
-        guard let httpResponse = response as? HTTPURLResponse,
-            (200...299).contains(httpResponse.statusCode)
-        else {
-            throw URLError(.badServerResponse)
         }
     }
 }

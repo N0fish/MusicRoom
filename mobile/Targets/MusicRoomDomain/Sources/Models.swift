@@ -96,6 +96,7 @@ public struct Event: Identifiable, Equatable, Sendable, Codable {
     public var createdAt: Date
     public var updatedAt: Date
     public var isJoined: Bool?
+    public var canVote: Bool?
 
     public init(
         id: UUID,
@@ -110,7 +111,8 @@ public struct Event: Identifiable, Equatable, Sendable, Codable {
         voteEnd: Date? = nil,
         createdAt: Date,
         updatedAt: Date,
-        isJoined: Bool? = false
+        isJoined: Bool? = false,
+        canVote: Bool? = false
     ) {
         self.id = id
         self.name = name
@@ -125,6 +127,7 @@ public struct Event: Identifiable, Equatable, Sendable, Codable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.isJoined = isJoined
+        self.canVote = canVote
     }
 }
 
@@ -320,5 +323,21 @@ public struct PlaylistResponse: Codable, Sendable, Equatable {
     public init(playlist: PlaylistMetadata, tracks: [Track]) {
         self.playlist = playlist
         self.tracks = tracks
+    }
+
+    // Default memberwise initializer is lost if we add a custom init(from:),
+    // but the one above covers manual creation.
+    // We strictly need init(from:) to handle decoding null tracks.
+
+    enum CodingKeys: String, CodingKey {
+        case playlist
+        case tracks
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.playlist = try container.decode(PlaylistMetadata.self, forKey: .playlist)
+        // If tracks is missing or null, default to empty array
+        self.tracks = try container.decodeIfPresent([Track].self, forKey: .tracks) ?? []
     }
 }

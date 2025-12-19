@@ -239,6 +239,89 @@ extension UserClient {
     // in UserClient.swift
 
     static func live() -> Self {
+        @Sendable func logError(
+            _ request: URLRequest, _ response: HTTPURLResponse?, _ data: Data?, _ error: Error?
+        ) {
+            print("\n❌ [UserClient] Request Failed")
+            print("   URL: \(request.url?.absoluteString ?? "nil")")
+            print("   Method: \(request.httpMethod ?? "GET")")
+            if let response {
+                print("   Status: \(response.statusCode)")
+            }
+            if let data, let body = String(data: data, encoding: .utf8), !body.isEmpty {
+                print("   Response Body: \(body)")
+            }
+            if let error {
+                print("   Error: \(error.localizedDescription)")
+            }
+            print("--------------------------------------------------\n")
+        }
+
+        @Sendable func performRequest<T: Decodable & Sendable>(
+            _ request: URLRequest
+        ) async throws -> T {
+            var request = request
+            if let token = KeychainHelper().read("accessToken") {
+                request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            }
+
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw URLError(.badServerResponse)
+                }
+
+                if !(200...299).contains(httpResponse.statusCode) {
+                    // Try to decode error response if possible, or just log
+                    let error = URLError(.badServerResponse)
+                    logError(request, httpResponse, data, error)
+
+                    // Specific case for server error to match existing logic if needed?
+                    if httpResponse.statusCode == 500 {
+                        throw UserClientError.serverError(statusCode: 500)
+                    }
+                    throw error
+                }
+
+                let decoder = JSONDecoder()
+                do {
+                    return try decoder.decode(T.self, from: data)
+                } catch {
+                    logError(request, httpResponse, data, error)
+                    throw error
+                }
+            } catch {
+                if let err = error as? UserClientError { throw err }
+                logError(request, nil, nil, error)
+                throw error
+            }
+        }
+
+        @Sendable func performRequestNoReturn(_ request: URLRequest) async throws {
+            var request = request
+            if let token = KeychainHelper().read("accessToken") {
+                request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            }
+
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw URLError(.badServerResponse)
+                }
+
+                if !(200...299).contains(httpResponse.statusCode) {
+                    let error = URLError(.badServerResponse)
+                    logError(request, httpResponse, data, error)
+                    throw error
+                }
+            } catch {
+                logError(request, nil, nil, error)
+                throw error
+            }
+        }
+
         return Self(
             me: {
                 let baseUrl = BaseURL.resolve()
@@ -247,32 +330,12 @@ extension UserClient {
                 var reqProfile = URLRequest(url: urlProfile)
                 reqProfile.httpMethod = "GET"
 
-                if let token = KeychainHelper().read("accessToken") {
-                    reqProfile.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-                }
-
-                let (dataProfile, respProfile) = try await URLSession.shared.data(for: reqProfile)
-
-                guard let httpRespProfile = respProfile as? HTTPURLResponse,
-                    (200...299).contains(httpRespProfile.statusCode)
-                else {
-                    throw URLError(.badServerResponse)
-                }
-
-                var profile = try JSONDecoder().decode(UserProfile.self, from: dataProfile)
+                var profile: UserProfile = try await performRequest(reqProfile)
 
                 // 2. Fetch Auth Info (Linked Providers)
                 let urlAuth = URL(string: "\(baseUrl)/auth/me")!
                 var reqAuth = URLRequest(url: urlAuth)
                 reqAuth.httpMethod = "GET"
-                if let token = KeychainHelper().read("accessToken") {
-                    reqAuth.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-                }
-
-                // We try-catch auth fetch so we don't block profile load if auth service fails?
-                // But user explicitly complained about linking. So failure should probably be visible.
-                // However, failing entire profile load because auth/me failed might be harsh.
-                // Let's try to fetch it, if it fails, default to empty.
 
                 struct AuthMeResponse: Decodable {
                     let linkedProviders: [String]?
@@ -280,14 +343,10 @@ extension UserClient {
                 }
 
                 do {
-                    let (dataAuth, respAuth) = try await URLSession.shared.data(for: reqAuth)
-                    if let httpRespAuth = respAuth as? HTTPURLResponse,
-                        (200...299).contains(httpRespAuth.statusCode)
-                    {
-                        let authData = try JSONDecoder().decode(AuthMeResponse.self, from: dataAuth)
-                        profile.linkedProviders = authData.linkedProviders ?? []
-                        profile.email = authData.email
-                    }
+                    // We use performRequest but catch error locally to not fail the whole load
+                    let authInfo: AuthMeResponse = try await performRequest(reqAuth)
+                    profile.linkedProviders = authInfo.linkedProviders ?? []
+                    profile.email = authInfo.email
                 } catch {
                     print("UserClient: Failed to fetch auth/me: \(error)")
                     // Keep default empty linkedProviders
@@ -318,10 +377,6 @@ extension UserClient {
                 request.httpMethod = "PATCH"
                 request.addValue("application/json", forHTTPHeaderField: "Content-Type")
 
-                if let token = KeychainHelper().read("accessToken") {
-                    request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-                }
-
                 struct UpdateRequest: Encodable {
                     let displayName: String
                     let bio: String
@@ -338,15 +393,8 @@ extension UserClient {
 
                 request.httpBody = try JSONEncoder().encode(updateReq)
 
-                let (data, response) = try await URLSession.shared.data(for: request)
+                var updatedProfile: UserProfile = try await performRequest(request)
 
-                guard let httpResponse = response as? HTTPURLResponse,
-                    (200...299).contains(httpResponse.statusCode)
-                else {
-                    throw URLError(.badServerResponse)
-                }
-
-                var updatedProfile = try JSONDecoder().decode(UserProfile.self, from: data)
                 if let avatarUrl = updatedProfile.avatarUrl, !avatarUrl.hasPrefix("http") {
                     updatedProfile = UserProfile(
                         id: updatedProfile.id,
@@ -371,70 +419,35 @@ extension UserClient {
                 request.httpMethod = "POST"
                 request.addValue("application/json", forHTTPHeaderField: "Content-Type")
 
-                if let accessToken = KeychainHelper().read("accessToken") {
-                    request.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-                }
-
-                // Send the provider's token (accessToken/idToken) as body
                 let body = ["token": token]
                 request.httpBody = try JSONEncoder().encode(body)
 
-                let (_, response) = try await URLSession.shared.data(for: request)
+                try await performRequestNoReturn(request)
 
-                guard let httpResponse = response as? HTTPURLResponse,
-                    (200...299).contains(httpResponse.statusCode)
-                else {
-                    if let httpResponse = response as? HTTPURLResponse {
-                        throw UserClientError.serverError(statusCode: httpResponse.statusCode)
-                    }
-                    throw URLError(.badServerResponse)
-                }
+                // Refetch logic duplicate? No, I can call the implementation of `me` or just fetch manually.
+                // Since I cannot call `self.me()` which is not available in closure context yet.
+                // I'll replicate the exact logic from `me` above.
 
-                // After linking, fetch updated profile to reflect changes
-                // We recursively call self.me() if we could, but here we'll just fetch manually
-                // to match the expected return type.
+                // 1. Fetch User Profile
+                let urlProfile = URL(string: "\(baseUrl)/users/me")!
+                var reqProfile = URLRequest(url: urlProfile)
+                reqProfile.httpMethod = "GET"
+                var profile: UserProfile = try await performRequest(reqProfile)
 
-                // Note: The caller (ProfileFeature) will reload profile anyway if we return success.
-                // But we must return a UserProfile.
-                // Let's refactor `me` logic into a reusable private helper if possible,
-                // but `live` is a static function.
-
-                // Hack: We'll copy-paste the 'me()' logic or just return a placeholder
-                // and rely on ProfileFeature refreshing (which it does not do automatically on link response?
-                // ProfileFeature updates state with the returned profile).
-                // So we MUST return the fresh profile.
-
-                // Re-fetch /users/me
-                let meUrl = URL(string: "\(baseUrl)/users/me")!
-                var meReq = URLRequest(url: meUrl)
-                meReq.httpMethod = "GET"
-                if let accessToken = KeychainHelper().read("accessToken") {
-                    meReq.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-                }
-                let (meData, _) = try await URLSession.shared.data(for: meReq)
-                var profile = try JSONDecoder().decode(UserProfile.self, from: meData)
-
-                // Re-fetch /auth/me for linked providers
-                let authUrl = URL(string: "\(baseUrl)/auth/me")!
-                var authReq = URLRequest(url: authUrl)
-                authReq.httpMethod = "GET"
-                if let accessToken = KeychainHelper().read("accessToken") {
-                    authReq.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-                }
+                // 2. Auth Info
+                let urlAuth = URL(string: "\(baseUrl)/auth/me")!
+                var reqAuth = URLRequest(url: urlAuth)
+                reqAuth.httpMethod = "GET"
 
                 struct AuthMeResponse: Decodable {
                     let linkedProviders: [String]?
                     let email: String?
                 }
-
                 do {
-                    let (authData, _) = try await URLSession.shared.data(for: authReq)
-                    let authInfo = try JSONDecoder().decode(AuthMeResponse.self, from: authData)
+                    let authInfo: AuthMeResponse = try await performRequest(reqAuth)
                     profile.linkedProviders = authInfo.linkedProviders ?? []
                     profile.email = authInfo.email
-                } catch {
-                    print("UserClient: Failed to fetch auth/me after link: \(error)")
-                }
+                } catch {}
 
                 if let avatarUrl = profile.avatarUrl, !avatarUrl.hasPrefix("http") {
                     profile = UserProfile(
@@ -451,7 +464,6 @@ extension UserClient {
                         email: profile.email
                     )
                 }
-
                 return profile
             },
             unlink: { provider in
@@ -460,49 +472,26 @@ extension UserClient {
                 var request = URLRequest(url: url)
                 request.httpMethod = "DELETE"
 
-                if let accessToken = KeychainHelper().read("accessToken") {
-                    request.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-                }
+                try await performRequestNoReturn(request)
 
-                let (_, response) = try await URLSession.shared.data(for: request)
+                // Re-fetch logic
+                let urlProfile = URL(string: "\(baseUrl)/users/me")!
+                var reqProfile = URLRequest(url: urlProfile)
+                reqProfile.httpMethod = "GET"
+                var profile: UserProfile = try await performRequest(reqProfile)
 
-                guard let httpResponse = response as? HTTPURLResponse,
-                    (200...299).contains(httpResponse.statusCode)
-                else {
-                    throw URLError(.badServerResponse)
-                }
-
-                // Re-fetch /users/me
-                let meUrl = URL(string: "\(baseUrl)/users/me")!
-                var meReq = URLRequest(url: meUrl)
-                meReq.httpMethod = "GET"
-                if let accessToken = KeychainHelper().read("accessToken") {
-                    meReq.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-                }
-                let (meData, _) = try await URLSession.shared.data(for: meReq)
-                var profile = try JSONDecoder().decode(UserProfile.self, from: meData)
-
-                // Re-fetch /auth/me
-                let authUrl = URL(string: "\(baseUrl)/auth/me")!
-                var authReq = URLRequest(url: authUrl)
-                authReq.httpMethod = "GET"
-                if let accessToken = KeychainHelper().read("accessToken") {
-                    authReq.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-                }
-
+                let urlAuth = URL(string: "\(baseUrl)/auth/me")!
+                var reqAuth = URLRequest(url: urlAuth)
+                reqAuth.httpMethod = "GET"
                 struct AuthMeResponse: Decodable {
                     let linkedProviders: [String]?
                     let email: String?
                 }
-
                 do {
-                    let (authData, _) = try await URLSession.shared.data(for: authReq)
-                    let authInfo = try JSONDecoder().decode(AuthMeResponse.self, from: authData)
+                    let authInfo: AuthMeResponse = try await performRequest(reqAuth)
                     profile.linkedProviders = authInfo.linkedProviders ?? []
                     profile.email = authInfo.email
-                } catch {
-                    print("UserClient: Failed to fetch auth/me after unlink: \(error)")
-                }
+                } catch {}
 
                 if let avatarUrl = profile.avatarUrl, !avatarUrl.hasPrefix("http") {
                     profile = UserProfile(
@@ -528,20 +517,10 @@ extension UserClient {
                 request.httpMethod = "POST"
                 request.addValue("application/json", forHTTPHeaderField: "Content-Type")
 
-                if let accessToken = KeychainHelper().read("accessToken") {
-                    request.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-                }
-
                 let body = ["currentPassword": current, "newPassword": new]
                 request.httpBody = try JSONEncoder().encode(body)
 
-                let (_, response) = try await URLSession.shared.data(for: request)
-
-                guard let httpResponse = response as? HTTPURLResponse,
-                    (200...299).contains(httpResponse.statusCode)
-                else {
-                    throw URLError(.badServerResponse)
-                }
+                try await performRequestNoReturn(request)
             },
             generateRandomAvatar: {
                 let baseUrl = BaseURL.resolve()
@@ -549,33 +528,9 @@ extension UserClient {
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
 
-                if let accessToken = KeychainHelper().read("accessToken") {
-                    request.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-                }
+                // This endpoint returns UserProfile.
+                var updatedProfile: UserProfile = try await performRequest(request)
 
-                // Assuming POST to /random returns the updated profile OR just succeeds.
-                // We will try to decode UserProfile. If it fails (empty body?), we might need to fetch /me.
-                // But generally resource updates return the resource.
-
-                let (data, response) = try await URLSession.shared.data(for: request)
-
-                guard let httpResponse = response as? HTTPURLResponse,
-                    (200...299).contains(httpResponse.statusCode)
-                else {
-                    throw URLError(.badServerResponse)
-                }
-
-                // If the response is empty, fetch me. If not, decode.
-                if data.isEmpty {
-                    // Fallback if backend returns 200 OK but no body
-                    // Recursively call self.me() – but we can't easily access self.me here inside strict closure.
-                    // Because `live()` creates the struct.
-                    // Instead, let's assume it returns JSON. If not, we might need a separate client function.
-                    // But for now, let's try decode.
-                    throw URLError(.cannotDecodeContentData)
-                }
-
-                var updatedProfile = try JSONDecoder().decode(UserProfile.self, from: data)
                 if let avatarUrl = updatedProfile.avatarUrl, !avatarUrl.hasPrefix("http") {
                     updatedProfile = UserProfile(
                         id: updatedProfile.id,

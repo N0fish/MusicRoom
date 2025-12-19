@@ -76,6 +76,24 @@ extension MusicRoomAPIClient: DependencyKey {
         let appVersion =
             Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
 
+        @Sendable func logError(
+            _ request: URLRequest, _ response: HTTPURLResponse?, _ data: Data?, _ error: Error?
+        ) {
+            print("\n❌ [MusicRoomAPI] Request Failed")
+            print("   URL: \(request.url?.absoluteString ?? "nil")")
+            print("   Method: \(request.httpMethod ?? "GET")")
+            if let response {
+                print("   Status: \(response.statusCode)")
+            }
+            if let data, let body = String(data: data, encoding: .utf8), !body.isEmpty {
+                print("   Response Body: \(body)")
+            }
+            if let error {
+                print("   Error: \(error.localizedDescription)")
+            }
+            print("--------------------------------------------------\n")
+        }
+
         @Sendable func performRequest<T: Decodable & Sendable>(
             _ request: URLRequest, retryCount: Int = 0
         )
@@ -109,9 +127,11 @@ extension MusicRoomAPIClient: DependencyKey {
                             // Update token in new request is handled by recursive call
                             return try await performRequest(request, retryCount: retryCount + 1)
                         } catch {
+                            logError(request, httpResponse, data, MusicRoomAPIError.sessionExpired)
                             throw MusicRoomAPIError.sessionExpired
                         }
                     } else {
+                        logError(request, httpResponse, data, MusicRoomAPIError.sessionExpired)
                         throw MusicRoomAPIError.sessionExpired
                     }
                 }
@@ -121,19 +141,30 @@ extension MusicRoomAPIClient: DependencyKey {
                 case 200...299:
                     break
                 case 403:
+                    logError(request, httpResponse, data, MusicRoomAPIError.forbidden)
                     throw MusicRoomAPIError.forbidden
                 case 404:
+                    logError(request, httpResponse, data, MusicRoomAPIError.notFound)
                     throw MusicRoomAPIError.notFound
                 default:
-                    throw MusicRoomAPIError.serverError(statusCode: httpResponse.statusCode)
+                    let err = MusicRoomAPIError.serverError(statusCode: httpResponse.statusCode)
+                    logError(request, httpResponse, data, err)
+                    throw err
                 }
 
                 let decoder = JSONDecoder()
                 decoder.dateDecodingStrategy = .iso8601
-                return try decoder.decode(T.self, from: data)
+                do {
+                    return try decoder.decode(T.self, from: data)
+                } catch {
+                    logError(request, httpResponse, data, error)
+                    throw error
+                }
             } catch let error as MusicRoomAPIError {
                 throw error
             } catch {
+                // If it's a network error (not raised by us via throw above)
+                logError(request, nil, nil, error)
                 throw MusicRoomAPIError.networkError(error.localizedDescription)
             }
         }
@@ -154,7 +185,7 @@ extension MusicRoomAPIClient: DependencyKey {
             }
 
             do {
-                let (_, response) = try await urlSession.data(for: request)
+                let (data, response) = try await urlSession.data(for: request)
 
                 guard let httpResponse = response as? HTTPURLResponse else {
                     throw MusicRoomAPIError.networkError("Invalid response")
@@ -167,9 +198,11 @@ extension MusicRoomAPIClient: DependencyKey {
                             return try await performRequestNoContent(
                                 request, retryCount: retryCount + 1)
                         } catch {
+                            logError(request, httpResponse, data, MusicRoomAPIError.sessionExpired)
                             throw MusicRoomAPIError.sessionExpired
                         }
                     } else {
+                        logError(request, httpResponse, data, MusicRoomAPIError.sessionExpired)
                         throw MusicRoomAPIError.sessionExpired
                     }
                 }
@@ -178,15 +211,20 @@ extension MusicRoomAPIClient: DependencyKey {
                 case 200...299:
                     break
                 case 403:
+                    logError(request, httpResponse, data, MusicRoomAPIError.forbidden)
                     throw MusicRoomAPIError.forbidden
                 case 404:
+                    logError(request, httpResponse, data, MusicRoomAPIError.notFound)
                     throw MusicRoomAPIError.notFound
                 default:
-                    throw MusicRoomAPIError.serverError(statusCode: httpResponse.statusCode)
+                    let err = MusicRoomAPIError.serverError(statusCode: httpResponse.statusCode)
+                    logError(request, httpResponse, data, err)
+                    throw err
                 }
             } catch let error as MusicRoomAPIError {
                 throw error
             } catch {
+                logError(request, nil, nil, error)
                 throw MusicRoomAPIError.networkError(error.localizedDescription)
             }
         }
@@ -371,9 +409,14 @@ extension MusicRoomAPIClient: DependencyKey {
             inviteUser: { eventId, userId in
                 let url = settings.load().backendURL.appendingPathComponent("events")
                     .appendingPathComponent(eventId.uuidString)
-                    .appendingPathComponent(userId)
+                    .appendingPathComponent("invites")
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+                let body = ["userId": userId]
+                request.httpBody = try JSONEncoder().encode(body)
+
                 try await performRequestNoContent(request)
             },
             listInvites: { eventId in
