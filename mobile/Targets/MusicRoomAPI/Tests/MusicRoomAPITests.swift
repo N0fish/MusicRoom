@@ -211,7 +211,7 @@ final class MusicRoomAPITests: XCTestCase {
 
     func testVote() async throws {
         // Setup mock response
-        let jsonString = "{\"voteCount\": 42}"
+        let jsonString = "{\"totalVotes\": 42}"
         let data = jsonString.data(using: .utf8)!
 
         MockURLProtocol.requestHandler = { request in

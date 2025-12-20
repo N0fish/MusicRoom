@@ -113,8 +113,6 @@ final class FriendProfileFeatureTests: XCTestCase {
             )
         }
 
-        await store.receive(\.userLoaded.success) {
-            $0.isMe = false
-        }
+        await store.receive(\.userLoaded.success)
     }
 }

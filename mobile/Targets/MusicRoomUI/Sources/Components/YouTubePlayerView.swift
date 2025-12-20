@@ -46,7 +46,14 @@ public struct YouTubePlayerView: UIViewRepresentable {
             context.coordinator.currentVideoId = nil
         }
 
-        // Handle play/pause state if needed via binding, though typically load starts it.
+        // Handle play/pause state if needed via binding
+        if context.coordinator.currentVideoId != nil {
+            if isPlaying {
+                uiView.playVideo()
+            } else {
+                uiView.pauseVideo()
+            }
+        }
     }
 
     public func makeCoordinator() -> Coordinator {

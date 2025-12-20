@@ -1,6 +1,7 @@
 import ComposableArchitecture
 import MusicRoomAPI
 import MusicRoomDomain
+import SearchFeature
 import XCTest
 
 @testable import EventFeature
@@ -97,5 +98,6 @@ final class MusicSearchFeatureTests: XCTestCase {
 
         // Track tapped is a "delegate" action (no state change, just notification)
         await store.send(MusicSearchFeature.Action.trackTapped(item))
+        await store.receive(.delegate(.trackTapped(item)))
     }
 }

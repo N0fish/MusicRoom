@@ -1,6 +1,7 @@
 import Clocks
 import ComposableArchitecture
 import CoreLocation
+import SearchFeature
 import XCTest
 
 @testable import AppSupportClients
@@ -28,7 +29,7 @@ final class EventDetailFeatureTests: XCTestCase {
         } withDependencies: {
             $0.musicRoomAPI.getPlaylist = { _ in
                 PlaylistResponse(
-                    playlist: PlaylistResponse.PlaylistMetadata(
+                    playlist: Playlist(
                         id: event.id.uuidString, ownerId: "u1", name: "P", isPublic: true,
                         editMode: "open"),
                     tracks: tracks
@@ -69,16 +70,9 @@ final class EventDetailFeatureTests: XCTestCase {
         await store.receive(\.playlistLoaded.success) {
             $0.isLoading = false
             $0.tracks = tracks
-            $0.metadata = PlaylistResponse.PlaylistMetadata(
+            $0.metadata = Playlist(
                 id: event.id.uuidString, ownerId: "u1", name: "P", isPublic: true,
                 editMode: "open")
-            $0.currentTrackDuration = nil  // 0 duration in track means nil? No, track has nil duration?
-            // Track 1 has nil duration in setup? "thumbnailUrl: nil, votes: 10)". Duration not set (default 0).
-            // Logic: if durationMs 0, currentTrackDuration is 0.0?
-            // Logic:
-            // if let currentId = ...
-            // track.durationMs / 1000.0
-            // Metadata currentTrackId is nil. So currentTrackDuration = nil.
         }
 
         await store.receive(\.eventLoaded.success)
@@ -151,7 +145,7 @@ final class EventDetailFeatureTests: XCTestCase {
             $0.musicRoomAPI.tally = { _ in [] }
             $0.musicRoomAPI.getPlaylist = { _ in
                 PlaylistResponse(
-                    playlist: PlaylistResponse.PlaylistMetadata(
+                    playlist: Playlist(
                         id: "1", ownerId: "u", name: "P", isPublic: true, editMode: "o"),
                     tracks: [track]
                 )
@@ -262,7 +256,7 @@ final class EventDetailFeatureTests: XCTestCase {
             $0.musicRoomAPI.tally = { _ in [] }
             $0.musicRoomAPI.getPlaylist = { _ in
                 PlaylistResponse(
-                    playlist: PlaylistResponse.PlaylistMetadata(
+                    playlist: Playlist(
                         id: event.id.uuidString, ownerId: "u1", name: "P", isPublic: true,
                         editMode: "o"),
                     tracks: [addedTrack]
@@ -330,7 +324,7 @@ final class EventDetailFeatureTests: XCTestCase {
             // Stubs for onAppear checks if triggered, but we are just testing the action flow
             $0.musicRoomAPI.getPlaylist = { _ in
                 PlaylistResponse(
-                    playlist: PlaylistResponse.PlaylistMetadata(
+                    playlist: Playlist(
                         id: event.id.uuidString, ownerId: "u1", name: "P", isPublic: true,
                         editMode: "o"),
                     tracks: []
