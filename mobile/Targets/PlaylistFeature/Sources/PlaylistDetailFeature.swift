@@ -14,6 +14,8 @@ public struct PlaylistDetailFeature: Sendable {
         public var tracks: [Track] = []
         public var isLoading = false
         public var friends: [Friend] = []
+        public var playingTrackId: String?
+        public var isPlaying: Bool = false
         @Presents public var musicSearch: MusicSearchFeature.State?
         @Presents public var destination: Destination.State?
 
@@ -37,6 +39,10 @@ public struct PlaylistDetailFeature: Sendable {
         case friendsLoaded(TaskResult<[Friend]>)
         case inviteFriendTapped(Friend)
         case inviteFriendResponse(TaskResult<Bool>)
+        case togglePlayback(Track)
+        case pauseTrack
+        case resumeTrack
+        case playbackFinished
     }
 
     @Dependency(\.playlistClient) var playlistClient
@@ -122,8 +128,9 @@ public struct PlaylistDetailFeature: Sendable {
                 return .none
 
             case .inviteFriendTapped(let friend):
-                state.destination = nil  // Dismiss sheet
+                state.destination = nil  // Dismiss sheet immediately
                 return .run { [playlistId = state.playlist.id, userId = friend.userId] send in
+                    print("Attempting to invite user \(userId) to playlist \(playlistId)")
                     await send(
                         .inviteFriendResponse(
                             TaskResult {
@@ -132,7 +139,14 @@ public struct PlaylistDetailFeature: Sendable {
                             }))
                 }
 
-            case .inviteFriendResponse:
+            case .inviteFriendResponse(.success):
+                print("Invite sent successfully")
+                return .none
+
+            case .inviteFriendResponse(.failure(let error)):
+                print("Failed to send invite: \(error)")
+                // In a real app, we might want to show an alert here, but since the sheet is gone,
+                // we'd need a different mechanism (toast/banner).
                 return .none
 
             case .destination:
@@ -164,6 +178,43 @@ public struct PlaylistDetailFeature: Sendable {
                 default:
                     return .none
                 }
+
+            case .togglePlayback(let track):
+                if state.playingTrackId == track.id {
+                    state.isPlaying.toggle()
+                } else {
+                    state.playingTrackId = track.id
+                    state.isPlaying = true
+                }
+                return .none
+
+            case .pauseTrack:
+                state.isPlaying = false
+                return .none
+
+            case .resumeTrack:
+                if state.playingTrackId != nil {
+                    state.isPlaying = true
+                }
+                return .none
+            case .playbackFinished:
+                guard let currentId = state.playingTrackId,
+                    let currentIndex = state.tracks.firstIndex(where: { $0.id == currentId })
+                else {
+                    state.isPlaying = false
+                    state.playingTrackId = nil
+                    return .none
+                }
+
+                let nextIndex = currentIndex + 1
+                if nextIndex < state.tracks.count {
+                    state.playingTrackId = state.tracks[nextIndex].id
+                    state.isPlaying = true
+                } else {
+                    state.isPlaying = false
+                    state.playingTrackId = nil
+                }
+                return .none
             }
         }
         .ifLet(\.$musicSearch, action: \.musicSearch) {
@@ -216,6 +267,12 @@ public struct PlaylistDetailView: View {
         ZStack {
             LiquidBackground()
                 .ignoresSafeArea()
+
+            // Hidden YouTube Player for Playlists
+            // Hidden YouTube Player for Playlists
+            PlaylistYouTubePlayerView(store: store)
+                .frame(width: 1, height: 1)
+                .opacity(0.01)
 
             viewContent
         }
@@ -288,9 +345,17 @@ public struct PlaylistDetailView: View {
                 ScrollView {
                     LazyVStack(spacing: 12) {
                         ForEach(store.tracks) { track in
-                            TrackRow(track: track) {
-                                store.send(.deleteTrackTapped(track))
-                            }
+                            TrackRow(
+                                track: track,
+                                isPlaying: store.playingTrackId == track.id && store.isPlaying,
+                                isCurrent: store.playingTrackId == track.id,
+                                onPlayPause: {
+                                    store.send(.togglePlayback(track))
+                                },
+                                onDelete: {
+                                    store.send(.deleteTrackTapped(track))
+                                }
+                            )
                         }
                     }
                     .padding()
@@ -312,27 +377,45 @@ struct InviteFriendSheet: View {
                 Button {
                     onSelect(friend)
                 } label: {
-                    HStack {
+                    HStack(spacing: 12) {
                         if let url = friend.avatarUrl, let uri = URL(string: url) {
                             AsyncImage(url: uri) { image in
                                 image.resizable().aspectRatio(contentMode: .fill)
                             } placeholder: {
                                 Color.gray.opacity(0.3)
                             }
-                            .frame(width: 40, height: 40)
+                            .frame(width: 50, height: 50)
                             .clipShape(Circle())
                         } else {
                             Circle()
                                 .fill(Color.gray.opacity(0.3))
-                                .frame(width: 40, height: 40)
+                                .frame(width: 50, height: 50)
                                 .overlay(Text(String(friend.initials)).foregroundColor(.white))
                         }
-                        Text(friend.displayName)
-                            .foregroundColor(.primary)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(friend.displayName)
+                                .font(.body)
+                                .fontWeight(.medium)
+                                .foregroundColor(.primary)
+
+                            Text("@\(friend.username)")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "paperplane")
+                            .foregroundColor(.accentColor)
                     }
+                    .contentShape(Rectangle())  // Ensure entire row is tappable
                 }
+                .buttonStyle(.plain)  // Standard list row behavior
             }
+            .listStyle(.plain)
             .navigationTitle("Invite Friend")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
@@ -356,6 +439,9 @@ extension Friend {
 
 struct TrackRow: View {
     let track: Track
+    var isPlaying: Bool = false
+    var isCurrent: Bool = false
+    var onPlayPause: () -> Void = {}
     let onDelete: () -> Void
 
     var body: some View {
@@ -381,7 +467,7 @@ struct TrackRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(track.title)
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(isCurrent ? .accentColor : .white)
                         .lineLimit(1)
                     Text(track.artist)
                         .font(.subheadline)
@@ -391,12 +477,50 @@ struct TrackRow: View {
 
                 Spacer()
 
+                Button(action: onPlayPause) {
+                    Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                        .font(.system(size: 32))
+                        .foregroundColor(.white)
+                }
+                .padding(.trailing, 8)
+
                 Button(action: onDelete) {
                     Image(systemName: "trash")
                         .foregroundColor(.red.opacity(0.7))
                 }
             }
             .padding(12)
+        }
+    }
+}
+
+struct PlaylistYouTubePlayerView: View {
+    let store: StoreOf<PlaylistDetailFeature>
+
+    var body: some View {
+        @Bindable var store = store
+        if let videoId = store.playingTrackId,
+            let track = store.tracks.first(where: { $0.id == videoId })
+        {
+            YouTubePlayerView(
+                videoId: Binding(
+                    get: { Optional(track.providerTrackId) },
+                    set: { _ in }
+                ),
+                isPlaying: Binding(
+                    get: { store.isPlaying },
+                    set: { isPlaying in
+                        if isPlaying {
+                            store.send(.resumeTrack)
+                        } else {
+                            store.send(.pauseTrack)
+                        }
+                    }
+                ),
+                onEnded: {
+                    store.send(.playbackFinished)
+                }
+            )
         }
     }
 }
