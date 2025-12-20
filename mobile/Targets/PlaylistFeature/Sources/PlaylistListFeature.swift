@@ -1,5 +1,6 @@
 import AppSupportClients
 import ComposableArchitecture
+import MusicRoomAPI
 import MusicRoomDomain
 import MusicRoomUI
 import SwiftUI
@@ -25,9 +26,14 @@ public struct PlaylistListFeature: Sendable {
         case createPlaylistButtonTapped
         case createPlaylist(PresentationAction<CreatePlaylistFeature.Action>)
         case path(StackAction<PlaylistDetailFeature.State, PlaylistDetailFeature.Action>)
+        case startRealtimeConnection
+        case realtimeMessageReceived(RealtimeMessage)
     }
 
+    private enum CancelID { case realtime }
+
     @Dependency(\.playlistClient) var playlistClient
+    @Dependency(\.musicRoomAPI) var musicRoomAPI
 
     public init() {}
 
@@ -35,7 +41,10 @@ public struct PlaylistListFeature: Sendable {
         Reduce { state, action in
             switch action {
             case .onAppear:
-                return .send(.loadPlaylists)
+                return .merge(
+                    .send(.loadPlaylists),
+                    .send(.startRealtimeConnection)
+                )
 
             case .loadPlaylists:
                 state.isLoading = true
@@ -71,6 +80,23 @@ public struct PlaylistListFeature: Sendable {
 
             case .path:
                 return .none
+
+            case .startRealtimeConnection:
+                return .run { send in
+                    for await message in musicRoomAPI.connectToRealtime() {
+                        await send(.realtimeMessageReceived(message))
+                    }
+                }
+                .cancellable(id: CancelID.realtime, cancelInFlight: true)
+
+            case .realtimeMessageReceived(let msg):
+                switch msg.type {
+                case "playlist.invited":
+                    // Reload playlists when invited
+                    return .send(.loadPlaylists)
+                default:
+                    return .none
+                }
             }
         }
         .forEach(\.path, action: \.path) {
