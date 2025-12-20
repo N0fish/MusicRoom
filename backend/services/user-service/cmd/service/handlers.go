@@ -50,6 +50,7 @@ func (s *Server) handleSearchUsers(w http.ResponseWriter, r *http.Request) {
 			Username:    p.Username,
 			DisplayName: p.DisplayName,
 			AvatarURL:   resolveAvatarForViewer(p, false, false),
+			IsPremium:   p.IsPremium,
 		})
 	}
 	if err := rows.Err(); err != nil {
