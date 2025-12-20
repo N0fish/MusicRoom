@@ -1,11 +1,13 @@
 import AppSupportClients
 import ComposableArchitecture
+import ImagePlayground
 import MusicRoomAPI
 import MusicRoomUI
 import SwiftUI
 
 public struct ProfileView: View {
     @Bindable var store: StoreOf<ProfileFeature>
+    @Environment(\.supportsImagePlayground) var supportsImagePlayground
 
     public init(store: StoreOf<ProfileFeature>) {
         self.store = store
@@ -67,6 +69,22 @@ public struct ProfileView: View {
                                 }
                                 .disabled(store.isAvatarLoading)
                                 .padding(.top, 4)
+
+                                if profile.isPremium && supportsImagePlayground {
+                                    Button(action: { store.send(.toggleImagePlayground(true)) }) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "sparkles")
+                                            Text("Generate with AI")
+                                        }
+                                        .font(.caption)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 6)
+                                        .background(Color.purple)
+                                        .foregroundColor(.white)
+                                        .clipShape(Capsule())
+                                    }
+                                    .padding(.top, 4)
+                                }
                             }
 
                             VStack(spacing: 4) {
@@ -340,6 +358,12 @@ public struct ProfileView: View {
         }
         .onAppear {
             store.send(.onAppear)
+        }
+        .imagePlaygroundSheet(
+            isPresented: $store.isImagePlaygroundPresented.sending(\.toggleImagePlayground),
+            concept: "Music lover, dj, cool avatar"
+        ) { url in
+            store.send(.imagePlaygroundResponse(url))
         }
         .preferredColorScheme(.dark)
     }

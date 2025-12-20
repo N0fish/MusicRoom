@@ -88,6 +88,7 @@ public struct UserClient: Sendable {
     public var changePassword: @Sendable (_ current: String, _ new: String) async throws -> Void
     public var generateRandomAvatar: @Sendable () async throws -> UserProfile
     public var becomePremium: @Sendable () async throws -> UserProfile
+    public var uploadAvatar: @Sendable (Data) async throws -> UserProfile
 }
 
 public enum UserClientError: Error, Equatable {
@@ -182,6 +183,22 @@ extension UserClient: DependencyKey {
                 linkedProviders: ["google"],
                 email: "preview@example.com"
             )
+        },
+        uploadAvatar: { _ in
+            UserProfile(
+                id: "mock-id",
+                userId: "mock-user-id",
+                username: "Preview User",
+                displayName: "Preview Display Name",
+                avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=uploaded",
+                hasCustomAvatar: true,
+                bio: "Music lover",
+                visibility: "public",
+                preferences: UserPreferences(genres: ["Pop", "Rock"]),
+                isPremium: false,
+                linkedProviders: ["google"],
+                email: "preview@example.com"
+            )
         }
     )
 
@@ -266,6 +283,22 @@ extension UserClient: DependencyKey {
                 visibility: "public",
                 preferences: UserPreferences(),
                 isPremium: true,
+                linkedProviders: ["google"],
+                email: "test@example.com"
+            )
+        },
+        uploadAvatar: { _ in
+            UserProfile(
+                id: "test-id",
+                userId: "test-user-id",
+                username: "Test User",
+                displayName: "Test Display Name",
+                avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=uploaded",
+                hasCustomAvatar: true,
+                bio: nil,
+                visibility: "public",
+                preferences: UserPreferences(),
+                isPremium: false,
                 linkedProviders: ["google"],
                 email: "test@example.com"
             )
@@ -603,6 +636,45 @@ extension UserClient {
                 let url = URL(string: "\(baseUrl)/users/me/premium")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
+
+                var updatedProfile: UserProfile = try await performRequest(request)
+
+                if let avatarUrl = updatedProfile.avatarUrl, !avatarUrl.hasPrefix("http") {
+                    updatedProfile = UserProfile(
+                        id: updatedProfile.id,
+                        userId: updatedProfile.userId,
+                        username: updatedProfile.username,
+                        displayName: updatedProfile.displayName,
+                        avatarUrl: baseUrl + avatarUrl,
+                        hasCustomAvatar: updatedProfile.hasCustomAvatar,
+                        bio: updatedProfile.bio,
+                        visibility: updatedProfile.visibility,
+                        preferences: updatedProfile.preferences,
+                        isPremium: updatedProfile.isPremium,
+                        linkedProviders: updatedProfile.linkedProviders,
+                        email: updatedProfile.email
+                    )
+                }
+                return updatedProfile
+            },
+            uploadAvatar: { imageData in
+                let baseUrl = BaseURL.resolve()
+                let url = URL(string: "\(baseUrl)/users/me/avatar/upload")!
+                let boundary = "Boundary-\(UUID().uuidString)"
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue(
+                    "multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+                var body = Data()
+                body.append("--\(boundary)\r\n".data(using: .utf8)!)
+                body.append(
+                    "Content-Disposition: form-data; name=\"avatar\"; filename=\"avatar.jpg\"\r\n"
+                        .data(using: .utf8)!)
+                body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+                body.append(imageData)
+                body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+                request.httpBody = body
 
                 var updatedProfile: UserProfile = try await performRequest(request)
 

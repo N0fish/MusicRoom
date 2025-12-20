@@ -31,6 +31,7 @@ public struct ProfileFeature: Sendable {
         public var passwordChangeSuccessMessage: String?
         public var isOffline: Bool = false
         public var hasLoaded: Bool = false
+        public var isImagePlaygroundPresented: Bool = false
 
         public init() {}
     }
@@ -55,6 +56,10 @@ public struct ProfileFeature: Sendable {
         case statsResponse(TaskResult<MusicRoomAPIClient.UserStats>)
         case becomePremiumTapped
         case becomePremiumResponse(TaskResult<UserProfile>)
+        case toggleImagePlayground(Bool)
+        case imagePlaygroundResponse(URL?)
+        case uploadGeneratedAvatar(Data)
+        case uploadGeneratedAvatarResponse(TaskResult<UserProfile>)
     }
 
     @Dependency(\.user) var userClient
@@ -382,6 +387,51 @@ public struct ProfileFeature: Sendable {
             case .becomePremiumResponse(.failure(let error)):
                 state.isLoading = false
                 state.errorMessage = "Premium activation failed: \(error.localizedDescription)"
+                return .none
+
+            case .toggleImagePlayground(let isPresented):
+                state.isImagePlaygroundPresented = isPresented
+                return .none
+
+            case .imagePlaygroundResponse(let url):
+                state.isImagePlaygroundPresented = false
+                guard let url = url else { return .none }
+                state.isAvatarLoading = true
+
+                return .run { send in
+                    do {
+                        let data = try Data(contentsOf: url)
+                        guard let image = UIImage(data: data),
+                            let jpegData = image.jpegData(compressionQuality: 0.8)
+                        else {
+                            await send(
+                                .uploadGeneratedAvatarResponse(
+                                    .failure(URLError(.cannotDecodeContentData))))
+                            return
+                        }
+                        await send(.uploadGeneratedAvatar(jpegData))
+                    } catch {
+                        await send(.uploadGeneratedAvatarResponse(.failure(error)))
+                    }
+                }
+
+            case .uploadGeneratedAvatar(let data):
+                return .run { [userClient] send in
+                    await send(
+                        .uploadGeneratedAvatarResponse(
+                            TaskResult { try await userClient.uploadAvatar(data) }
+                        )
+                    )
+                }
+
+            case .uploadGeneratedAvatarResponse(.success(let profile)):
+                state.isAvatarLoading = false
+                state.userProfile = normalizeAvatarUrl(profile)
+                return .none
+
+            case .uploadGeneratedAvatarResponse(.failure(let error)):
+                state.isAvatarLoading = false
+                state.errorMessage = "Failed to upload AI avatar: \(error.localizedDescription)"
                 return .none
 
             case .binding:
