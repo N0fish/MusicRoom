@@ -28,6 +28,44 @@ paths:
                   status: ok
                   service: api-gateway
 
+  /audit/logs:
+    post:
+      summary: External log ingestion for mobile/frontend auditing
+      description: >
+        Receives logs from clients and prints them to server console.
+        Requires client identification headers.
+      tags: [system]
+      parameters:
+        - in: header
+          name: X-Client-Platform
+          required: false
+          schema:
+            type: string
+        - in: header
+          name: X-Client-Device
+          required: false
+          schema:
+            type: string
+        - in: header
+          name: X-Client-App-Version
+          required: false
+          schema:
+            type: string
+        - in: header
+          name: X-User-Id
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Log received
+
   # --------------------
   # AUTH: email + password, tokens
   # --------------------
@@ -146,6 +184,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/link/{provider}:
+    post:
+      summary: Link a third-party account to the current user
+      tags: [auth, oauth]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema:
+            type: string
+            enum: [google, 42]
+          description: The OAuth provider to link
+      responses:
+        '200':
+          description: Provider successfully linked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '400':
+          description: Provider already linked or auth failed
+        '401':
+          description: Unauthorized
+
+    delete:
+      summary: Unlink a third-party account from the current user
+      tags: [auth, oauth]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema:
+            type: string
+            enum: [google, 42]
+      responses:
+        '200':
+          description: Provider successfully unlinked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '401':
+          description: Unauthorized
 
   # --------------------
   # AUTH: email verification & password reset
@@ -448,6 +534,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  /avatars/{filename}:
+    get:
+      summary: Retrieve a user avatar image
+      tags: [users]
+      parameters:
+        - in: path
+          name: filename
+          required: true
+          schema:
+            type: string
+          description: The name of the avatar file
+      responses:
+        '200':
+          description: Avatar image data
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Avatar not found
 
   /users/{id}:
     get:
@@ -1068,6 +1176,59 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /playlists/{id}/tracks/{trackId}/vote:
+    post:
+      summary: Upvote a track inside a playlist
+      tags: [playlists]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: trackId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Vote registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '401':
+          description: Unauthorized
+        '404':
+          description: Playlist or track not found
+
+  /playlists/{id}/next:
+    post:
+      summary: Skip to the next track in the playlist
+      tags: [playlists]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successfully skipped to next track
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden (not the owner)
+
   /playlists/{id}/invites:
     get:
       summary: List invited users for a playlist
@@ -1389,6 +1550,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /events/{id}/transfer-ownership:
+    post:
+      summary: Transfer event ownership to another user
+      tags: [events]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newOwnerId]
+              properties:
+                newOwnerId:
+                  type: string
+      responses:
+        '200':
+          description: Ownership transferred
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden (not the current owner)
+        '404':
+          description: Event not found
+
   /events/{id}/invites:
     get:
       summary: List invites for an event
@@ -1573,6 +1770,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      summary: Cancel a vote in an event
+      tags: [votes]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Vote cancelled
+        '401':
+          description: Unauthorized
+        '404':
+          description: Event or vote not found
 
   /events/{id}/tally:
     get:
