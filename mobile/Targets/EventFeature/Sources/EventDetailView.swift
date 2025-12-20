@@ -4,6 +4,7 @@ import Dependencies
 import MusicRoomAPI
 import MusicRoomDomain
 import MusicRoomUI
+import SearchFeature
 import SwiftUI
 
 public struct EventDetailView: View {
@@ -495,10 +496,22 @@ struct PlaylistView: View {
         if store.tracks.filter({ $0.status == "queued" || $0.status == nil })
             .isEmpty && !store.isLoading
         {
-            Text("Queue empty. Add tracks!")
-                .font(.liquidBody)
-                .foregroundStyle(Color.white.opacity(0.6))
-                .padding(.horizontal)
+            if store.isEventEnded {
+                Text("No upcoming tracks")
+                    .font(.liquidBody)
+                    .foregroundStyle(Color.white.opacity(0.6))
+                    .padding(.horizontal)
+            } else if store.canVote {
+                Text("Queue empty. Add tracks!")
+                    .font(.liquidBody)
+                    .foregroundStyle(Color.white.opacity(0.6))
+                    .padding(.horizontal)
+            } else {
+                Text("Queue is empty")
+                    .font(.liquidBody)
+                    .foregroundStyle(Color.white.opacity(0.6))
+                    .padding(.horizontal)
+            }
         } else {
             LazyVStack(spacing: 12) {
                 // Filter only queued (or nil status if legacy)
@@ -627,7 +640,7 @@ struct AddTrackButtonView: View {
     @Bindable var store: StoreOf<EventDetailFeature>
 
     var body: some View {
-        if store.canVote {
+        if store.canVote && !store.isEventEnded {
             LiquidButton(
                 useGlass: true,
                 action: {

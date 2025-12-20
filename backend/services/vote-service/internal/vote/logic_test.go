@@ -437,10 +437,10 @@ func TestValidateVotingWindow(t *testing.T) {
 
 	t.Run("window too small", func(t *testing.T) {
 		start := now.Add(1 * time.Hour)
-		end := now.Add(1*time.Hour + 30*time.Minute)
+		end := now.Add(1*time.Hour + 30*time.Second)
 		err := validateVotingWindow(&start, &end, now)
 		assert.Error(t, err)
-		assert.Equal(t, "voting window must be at least 1 hour", err.Error())
+		assert.Equal(t, "voting window must be at least 1 minute", err.Error())
 	})
 }
 

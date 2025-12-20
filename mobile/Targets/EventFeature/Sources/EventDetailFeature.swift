@@ -1,9 +1,12 @@
 import AppSupportClients
 import ComposableArchitecture
-import Dependencies
+import CoreLocation
 import Foundation
 import MusicRoomAPI
 import MusicRoomDomain
+import MusicRoomUI
+import SearchFeature
+import SwiftUI
 
 @Reducer
 public struct EventDetailFeature: Sendable {
@@ -15,7 +18,7 @@ public struct EventDetailFeature: Sendable {
         public var isVoting: Bool = false
         public var userAlert: UserAlert?
         public var isOffline: Bool = false
-        public var metadata: PlaylistResponse.PlaylistMetadata?
+        public var metadata: Playlist?
         public var currentUserId: String?
         public var timeRemaining: TimeInterval?
         public var currentTrackDuration: TimeInterval?
@@ -28,6 +31,13 @@ public struct EventDetailFeature: Sendable {
 
         public var canVote: Bool {
             return event.canVote ?? false
+        }
+
+        public var isEventEnded: Bool {
+            guard !tracks.isEmpty else { return false }
+            let isPlaying = tracks.contains { $0.status == "playing" }
+            let hasQueued = tracks.contains { $0.status == "queued" || $0.status == nil }
+            return !isPlaying && !hasQueued
         }
 
         public var participants: [PublicUserProfile] = []
@@ -73,6 +83,7 @@ public struct EventDetailFeature: Sendable {
 
         // Search
         case addTrackButtonTapped
+        case showMusicSearch  // Internal action
         case dismissMusicSearch
         case musicSearch(PresentationAction<MusicSearchFeature.Action>)
 
@@ -145,7 +156,7 @@ public struct EventDetailFeature: Sendable {
                 else { return .none }
                 state.event.isJoined = true  // Optimistic update
                 // Optimistic vote permission for public open events
-                if state.event.licenseMode == .everyone {
+                if state.event.licenseMode == .everyone || state.event.licenseMode == .geoTime {
                     state.event.canVote = true
                 }
                 return .run { [eventId = state.event.id] send in
@@ -334,14 +345,26 @@ public struct EventDetailFeature: Sendable {
                     return .send(.loadPlaylist)  // Reload to revert
                 }
 
-                return .run { [event = state.event, telemetry] send in
+                return .run { [event = state.event, telemetry, locationClient] send in
                     await telemetry.log(
                         "event.vote.attempt", ["eventId": event.id.uuidString, "trackId": trackId])
 
                     await send(
                         .voteResponse(
                             TaskResult {
-                                try await musicRoomAPI.vote(event.id.uuidString, trackId)
+                                var lat: Double?
+                                var lng: Double?
+
+                                if event.licenseMode == .geoTime {
+                                    // Ensure we have permission/location
+                                    await locationClient.requestWhenInUseAuthorization()
+                                    let location = try await locationClient.getCurrentLocation()
+                                    lat = location.latitude
+                                    lng = location.longitude
+                                }
+
+                                return try await musicRoomAPI.vote(
+                                    event.id.uuidString, trackId, lat, lng)
                             }, trackId: trackId))
                 }
 
@@ -418,6 +441,14 @@ public struct EventDetailFeature: Sendable {
 
             case .addTrackButtonTapped:
                 guard state.canVote else { return .none }
+                if state.isEventEnded {
+                    state.userAlert = UserAlert(
+                        title: "Event Ended",
+                        message: "The event has ended. You cannot add more tracks.",
+                        type: .info
+                    )
+                    return .none
+                }
                 if state.isOffline {
                     state.userAlert = UserAlert(
                         title: "Offline",
@@ -426,6 +457,41 @@ public struct EventDetailFeature: Sendable {
                     )
                     return .none
                 }
+
+                if state.event.licenseMode == .geoTime {
+                    return .run { [event = state.event, locationClient] send in
+                        await locationClient.requestWhenInUseAuthorization()
+                        do {
+                            let location = try await locationClient.getCurrentLocation()
+                            let userLoc = CLLocation(
+                                latitude: location.latitude, longitude: location.longitude)
+                            let eventLoc = CLLocation(
+                                latitude: event.geoLat ?? 0, longitude: event.geoLng ?? 0)
+                            let distance = userLoc.distance(from: eventLoc)
+
+                            if distance > Double(event.geoRadiusM ?? 0) {
+                                await send(
+                                    .addTrackResponse(
+                                        .failure(
+                                            MusicRoomAPIError.apiError(
+                                                "You are outside the allowed area to add tracks.")))
+                                )
+                            } else {
+                                await send(.showMusicSearch)
+                            }
+                        } catch {
+                            await send(
+                                .addTrackResponse(
+                                    .failure(
+                                        MusicRoomAPIError.apiError(
+                                            "Location error: \(error.localizedDescription)"))))
+                        }
+                    }
+                }
+
+                return .send(.showMusicSearch)
+
+            case .showMusicSearch:
                 state.musicSearch = MusicSearchFeature.State()
                 return .none
 

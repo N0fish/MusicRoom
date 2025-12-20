@@ -215,7 +215,8 @@ func setupRouter(cfg Config) *chi.Mux {
 	})
 
 	// Playlists
-	r.Method(http.MethodGet, "/playlists", playlistProxy) // public playlists
+	r.With(jwtAuthOptionalMiddleware(cfg.JWTSecret)).
+		Method(http.MethodGet, "/playlists", playlistProxy) // public + owned playlists
 	r.Group(func(r chi.Router) {
 		if len(cfg.JWTSecret) != 0 {
 			r.Use(jwtAuthMiddleware(cfg.JWTSecret))

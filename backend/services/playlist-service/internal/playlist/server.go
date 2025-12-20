@@ -40,7 +40,7 @@ func (s *Server) Router(middlewares ...func(http.Handler) http.Handler) chi.Rout
 
 	r.Get("/health", s.handleHealth)
 
-	r.Get("/playlists", s.handleListPublicPlaylists)
+	r.Get("/playlists", s.handleListPlaylists)
 	r.Post("/realtime/event", s.handleBroadcastEvent)
 
 	r.Group(func(r chi.Router) {

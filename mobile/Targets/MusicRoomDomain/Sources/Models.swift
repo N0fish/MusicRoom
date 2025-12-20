@@ -238,6 +238,10 @@ public struct VoteResponse: Codable, Sendable, Equatable {
     public init(voteCount: Int) {
         self.voteCount = voteCount
     }
+
+    enum CodingKeys: String, CodingKey {
+        case voteCount = "totalVotes"
+    }
 }
 
 public struct MusicSearchItem: Codable, Sendable, Identifiable, Equatable {
@@ -288,46 +292,82 @@ public struct PlaylistUpdate: Sendable, Equatable {
     }
 }
 
-public struct PlaylistResponse: Codable, Sendable, Equatable {
-    // We can add the Playlist metadata struct if needed, but for now we might just want tracks
-    // Backend returns { "playlist": ..., "tracks": ... }
-    // Let's define a minimal Playlist struct inside or reuse if we had one.
-    // We don't have a Playlist struct in Models.swift yet.
+public struct Playlist: Codable, Sendable, Equatable, Identifiable {
+    public let id: String
+    public let ownerId: String
+    public var name: String
+    public var description: String
+    public var isPublic: Bool
+    public var editMode: String  // "everyone" | "invited"
+    public var createdAt: Date
+    public var currentTrackId: String?
+    public var playingStartedAt: Date?
 
-    public struct PlaylistMetadata: Codable, Sendable, Equatable {
-        public let id: String
-        public let ownerId: String
-        public let name: String
-        public let isPublic: Bool
-        public let editMode: String
-        public var currentTrackId: String?
-        public var playingStartedAt: Date?
-
-        public init(
-            id: String, ownerId: String, name: String, isPublic: Bool, editMode: String,
-            currentTrackId: String? = nil, playingStartedAt: Date? = nil
-        ) {
-            self.id = id
-            self.ownerId = ownerId
-            self.name = name
-            self.isPublic = isPublic
-            self.editMode = editMode
-            self.currentTrackId = currentTrackId
-            self.playingStartedAt = playingStartedAt
-        }
+    public init(
+        id: String,
+        ownerId: String,
+        name: String,
+        description: String = "",
+        isPublic: Bool = true,
+        editMode: String = "everyone",
+        createdAt: Date = Date(),
+        currentTrackId: String? = nil,
+        playingStartedAt: Date? = nil
+    ) {
+        self.id = id
+        self.ownerId = ownerId
+        self.name = name
+        self.description = description
+        self.isPublic = isPublic
+        self.editMode = editMode
+        self.createdAt = createdAt
+        self.currentTrackId = currentTrackId
+        self.playingStartedAt = playingStartedAt
     }
+}
 
-    public let playlist: PlaylistMetadata
+public struct CreatePlaylistRequest: Codable, Sendable {
+    public let name: String
+    public let description: String
+    public let isPublic: Bool
+    public let editMode: String
+
+    public init(
+        name: String, description: String = "", isPublic: Bool = true,
+        editMode: String = "everyone"
+    ) {
+        self.name = name
+        self.description = description
+        self.isPublic = isPublic
+        self.editMode = editMode
+    }
+}
+
+public struct UpdatePlaylistRequest: Codable, Sendable {
+    public let name: String?
+    public let description: String?
+    public let isPublic: Bool?
+    public let editMode: String?
+
+    public init(
+        name: String? = nil, description: String? = nil, isPublic: Bool? = nil,
+        editMode: String? = nil
+    ) {
+        self.name = name
+        self.description = description
+        self.isPublic = isPublic
+        self.editMode = editMode
+    }
+}
+
+public struct PlaylistResponse: Codable, Sendable, Equatable {
+    public let playlist: Playlist
     public let tracks: [Track]
 
-    public init(playlist: PlaylistMetadata, tracks: [Track]) {
+    public init(playlist: Playlist, tracks: [Track] = []) {
         self.playlist = playlist
         self.tracks = tracks
     }
-
-    // Default memberwise initializer is lost if we add a custom init(from:),
-    // but the one above covers manual creation.
-    // We strictly need init(from:) to handle decoding null tracks.
 
     enum CodingKeys: String, CodingKey {
         case playlist
@@ -336,8 +376,9 @@ public struct PlaylistResponse: Codable, Sendable, Equatable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.playlist = try container.decode(PlaylistMetadata.self, forKey: .playlist)
+        self.playlist = try container.decode(Playlist.self, forKey: .playlist)
         // If tracks is missing or null, default to empty array
-        self.tracks = try container.decodeIfPresent([Track].self, forKey: .tracks) ?? []
+        let decodedTracks = try container.decodeIfPresent([Track].self, forKey: .tracks)
+        self.tracks = decodedTracks ?? []
     }
 }

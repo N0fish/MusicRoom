@@ -10,7 +10,9 @@ public struct MusicRoomAPIClient: Sendable {
     public var listEvents: @Sendable () async throws -> [Event]
     public var getEvent: @Sendable (UUID) async throws -> Event
     public var vote:
-        @Sendable (_ playlistId: String, _ trackId: String) async throws
+        @Sendable (
+            _ playlistId: String, _ trackId: String, _ lat: Double?, _ lng: Double?
+        ) async throws
             -> VoteResponse
     public var nextTrack: @Sendable (_ playlistId: String) async throws -> NextTrackResponse
     public var tally: @Sendable (UUID) async throws -> [TallyItem]
@@ -94,6 +96,10 @@ extension MusicRoomAPIClient: DependencyKey {
             print("--------------------------------------------------\n")
         }
 
+        struct APIErrorResponse: Decodable {
+            let error: String
+        }
+
         @Sendable func performRequest<T: Decodable & Sendable>(
             _ request: URLRequest, retryCount: Int = 0
         )
@@ -140,13 +146,15 @@ extension MusicRoomAPIClient: DependencyKey {
                 switch httpResponse.statusCode {
                 case 200...299:
                     break
-                case 403:
-                    logError(request, httpResponse, data, MusicRoomAPIError.forbidden)
-                    throw MusicRoomAPIError.forbidden
-                case 404:
-                    logError(request, httpResponse, data, MusicRoomAPIError.notFound)
-                    throw MusicRoomAPIError.notFound
                 default:
+                    // Try to parse detailed error
+                    if httpResponse.statusCode != 401,
+                        let errorObj = try? JSONDecoder().decode(APIErrorResponse.self, from: data)
+                    {
+                        let err = MusicRoomAPIError.apiError(errorObj.error)
+                        logError(request, httpResponse, data, err)
+                        throw err
+                    }
                     let err = MusicRoomAPIError.serverError(statusCode: httpResponse.statusCode)
                     logError(request, httpResponse, data, err)
                     throw err
@@ -210,13 +218,15 @@ extension MusicRoomAPIClient: DependencyKey {
                 switch httpResponse.statusCode {
                 case 200...299:
                     break
-                case 403:
-                    logError(request, httpResponse, data, MusicRoomAPIError.forbidden)
-                    throw MusicRoomAPIError.forbidden
-                case 404:
-                    logError(request, httpResponse, data, MusicRoomAPIError.notFound)
-                    throw MusicRoomAPIError.notFound
                 default:
+                    // Try to parse detailed error
+                    if httpResponse.statusCode != 401,
+                        let errorObj = try? JSONDecoder().decode(APIErrorResponse.self, from: data)
+                    {
+                        let err = MusicRoomAPIError.apiError(errorObj.error)
+                        logError(request, httpResponse, data, err)
+                        throw err
+                    }
                     let err = MusicRoomAPIError.serverError(statusCode: httpResponse.statusCode)
                     logError(request, httpResponse, data, err)
                     throw err
@@ -247,16 +257,17 @@ extension MusicRoomAPIClient: DependencyKey {
                 request.httpMethod = "GET"
                 return try await performRequest(request)
             },
-            vote: { playlistId, trackId in
+            vote: { playlistId, trackId, lat, lng in
                 let url = settings.load().backendURL
-                    .appendingPathComponent("playlists")
+                    .appendingPathComponent("events")
                     .appendingPathComponent(playlistId)
-                    .appendingPathComponent("tracks")
-                    .appendingPathComponent(trackId)
                     .appendingPathComponent("vote")
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+                let body = VoteRequest(trackId: trackId, lat: lat, lng: lng)
+                request.httpBody = try JSONEncoder().encode(body)
 
                 return try await performRequest(request)
             },
@@ -510,7 +521,7 @@ extension MusicRoomAPIClient: DependencyKey {
             fetchSampleEvents: { [] },
             listEvents: { MockDataFactory.sampleEvents() },
             getEvent: { _ in MockDataFactory.sampleEvents().first! },
-            vote: { _, _ in VoteResponse(voteCount: 5) },
+            vote: { _, _, _, _ in VoteResponse(voteCount: 5) },
             nextTrack: { _ in
                 NextTrackResponse(
                     playlistId: "1", currentTrackId: "2", playingStartedAt: Date(),
@@ -543,12 +554,12 @@ extension MusicRoomAPIClient: DependencyKey {
             },
             getPlaylist: { _ in
                 PlaylistResponse(
-                    playlist: PlaylistResponse.PlaylistMetadata(
+                    playlist: Playlist(
                         id: "1", ownerId: "user1", name: "Mock Playlist", isPublic: true,
                         editMode: "everyone"),
                     tracks: [
                         Track(
-                            id: "1", title: "Get Lucky", artist: "Daft Punk", provider: "deezer",
+                            id: "1", title: "Get Lucky", artist: "Get Lucky", provider: "deezer",
                             providerTrackId: "1", thumbnailUrl: nil)
                     ]
                 )
@@ -573,7 +584,7 @@ extension MusicRoomAPIClient: DependencyKey {
             fetchSampleEvents: { [] },
             listEvents: { [] },
             getEvent: { _ in throw MusicRoomAPIError.networkError("Test unimplemented") },
-            vote: { _, _ in VoteResponse(voteCount: 1) },
+            vote: { _, _, _, _ in VoteResponse(voteCount: 1) },
             nextTrack: { _ in
                 NextTrackResponse(
                     playlistId: "1", currentTrackId: "2", playingStartedAt: Date(),
@@ -604,6 +615,7 @@ extension MusicRoomAPIClient: DependencyKey {
 public enum MusicRoomAPIError: Error, Equatable, LocalizedError {
     case networkError(String)
     case serverError(statusCode: Int)
+    case apiError(String)
     case sessionExpired
     case forbidden
     case notFound
@@ -612,6 +624,7 @@ public enum MusicRoomAPIError: Error, Equatable, LocalizedError {
         switch self {
         case .networkError(let message): return "Network Error: \(message)"
         case .serverError(let code): return "Server Error: \(code)"
+        case .apiError(let message): return message
         case .sessionExpired: return "Session Expired"
         case .forbidden: return "Access Denied"
         case .notFound: return "Not Found"

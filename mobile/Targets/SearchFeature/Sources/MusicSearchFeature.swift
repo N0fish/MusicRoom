@@ -24,6 +24,11 @@ public struct MusicSearchFeature: Sendable {
         case search
         case searchResponse(Result<[MusicSearchItem], Error>)
         case trackTapped(MusicSearchItem)
+        case delegate(Delegate)
+
+        public enum Delegate: Equatable, Sendable {
+            case trackTapped(MusicSearchItem)
+        }
 
         public static func == (lhs: Action, rhs: Action) -> Bool {
             switch (lhs, rhs) {
@@ -38,6 +43,8 @@ public struct MusicSearchFeature: Sendable {
             case (.searchResponse(.failure(let l)), .searchResponse(.failure(let r))):
                 return l.localizedDescription == r.localizedDescription
             case (.trackTapped(let l), .trackTapped(let r)):
+                return l == r
+            case (.delegate(let l), .delegate(let r)):
                 return l == r
             default:
                 return false
@@ -94,8 +101,10 @@ public struct MusicSearchFeature: Sendable {
                 state.errorMessage = error.localizedDescription
                 return .none
 
-            case .trackTapped:
-                // Parent feature should handle this
+            case .trackTapped(let item):
+                return .send(.delegate(.trackTapped(item)))
+
+            case .delegate:
                 return .none
 
             case .binding:

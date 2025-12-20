@@ -11,16 +11,20 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-func (s *Server) handleListPublicPlaylists(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleListPlaylists(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	userID := r.Header.Get("X-User-Id")
 
+	// Query: public playlists OR playlists I own OR playlists I'm invited to
 	rows, err := s.db.Query(ctx, `
 		SELECT id, owner_id, name, description, is_public, edit_mode, created_at
 		FROM playlists
 		WHERE is_public = TRUE
+		   OR owner_id = $1
+		   OR id IN (SELECT playlist_id FROM playlist_members WHERE user_id = $1)
 		ORDER BY created_at DESC
 		LIMIT 200
-	`)
+	`, userID)
 	if err != nil {
 		log.Printf("playlist-service: list playlists: %v", err)
 		writeError(w, http.StatusInternalServerError, "database error")
@@ -28,7 +32,7 @@ func (s *Server) handleListPublicPlaylists(w http.ResponseWriter, r *http.Reques
 	}
 	defer rows.Close()
 
-	var playlists []Playlist
+	playlists := []Playlist{}
 	for rows.Next() {
 		var pl Playlist
 		if err := rows.Scan(
@@ -324,7 +328,7 @@ func (s *Server) handleGetPlaylist(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var tracks []Track
+	tracks := []Track{}
 	for rows.Next() {
 		var tr Track
 		if err := rows.Scan(

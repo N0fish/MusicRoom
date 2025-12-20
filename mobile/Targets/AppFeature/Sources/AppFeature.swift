@@ -5,6 +5,7 @@ import EventFeature
 import Foundation
 import MusicRoomAPI
 import MusicRoomDomain
+import PlaylistFeature
 import PolicyEngine
 import RealtimeMocks
 import SettingsFeature
@@ -23,6 +24,7 @@ public struct AppFeature: Sendable {
         public var eventList = EventListFeature.State()
         public var profile = ProfileFeature.State()
         public var friends = FriendsFeature.State()
+        public var playlistList = PlaylistListFeature.State()
 
         // Legacy/Stream State (To be refactored into EventDetail later)
         public var latestStreamMessage: String
@@ -60,6 +62,7 @@ public struct AppFeature: Sendable {
         case eventList(EventListFeature.Action)
         case profile(ProfileFeature.Action)
         case friends(FriendsFeature.Action)
+        case playlistList(PlaylistListFeature.Action)
         case task
         case destinationChanged(State.Destination)
         case startApp
@@ -99,6 +102,10 @@ public struct AppFeature: Sendable {
             FriendsFeature()
         }
 
+        Scope(state: \.playlistList, action: \.playlistList) {
+            PlaylistListFeature()
+        }
+
         Reduce { state, action in
             switch action {
             case .settings:
@@ -131,6 +138,9 @@ public struct AppFeature: Sendable {
                 return .send(.checkInitialLoad)
 
             case .friends:
+                return .none
+
+            case .playlistList:
                 return .none
 
             case .authentication(.authResponse(.success)):

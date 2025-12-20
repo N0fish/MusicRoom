@@ -154,6 +154,7 @@ let project = Project(
                 .target(name: "MusicRoomAPI"),
                 .target(name: "PolicyEngine"),
                 .target(name: "RealtimeMocks"),
+                .target(name: "PlaylistFeature"),
                 .target(name: "AppSupportClients"),
                 .target(name: "MusicRoomUI"),
                 .package(product: "ComposableArchitecture"),
@@ -197,6 +198,7 @@ let project = Project(
             sources: ["Targets/EventFeature/Sources/**"],
             dependencies: [
                 .target(name: "AppSupportClients"),
+                .target(name: "SearchFeature"),
                 .target(name: "MusicRoomUI"),
                 .target(name: "MusicRoomDomain"),
                 .target(name: "MusicRoomAPI"),
@@ -204,6 +206,39 @@ let project = Project(
                 .package(product: "ComposableArchitecture"),
                 .package(product: "YouTubeiOSPlayerHelper"),
                 .package(product: "Clocks"),
+            ]
+        ),
+        Target.target(
+            name: "SearchFeature",
+            destinations: .iOS,
+            product: .staticLibrary,
+            bundleId: "com.musicroom.searchfeature",
+            deploymentTargets: deploymentTargets,
+            sources: ["Targets/SearchFeature/Sources/**"],
+            dependencies: [
+                .target(name: "MusicRoomDomain"),
+                .target(name: "MusicRoomAPI"),
+                .target(name: "MusicRoomUI"),
+                .package(product: "YouTubeiOSPlayerHelper"),
+                .package(product: "ComposableArchitecture"),
+            ]
+        ),
+        Target.target(
+            name: "PlaylistFeature",
+            destinations: .iOS,
+            product: .staticLibrary,
+            bundleId: "com.musicroom.playlistfeature",
+            deploymentTargets: deploymentTargets,
+            sources: ["Targets/PlaylistFeature/Sources/**"],
+            dependencies: [
+                .target(name: "AppSupportClients"),
+                .target(name: "SearchFeature"),
+                .target(name: "MusicRoomUI"),
+                .target(name: "MusicRoomDomain"),
+                .target(name: "MusicRoomAPI"),
+                .target(name: "AppSettingsClient"),
+                .package(product: "YouTubeiOSPlayerHelper"),
+                .package(product: "ComposableArchitecture"),
             ]
         ),
         Target.target(

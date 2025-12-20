@@ -73,7 +73,7 @@ func (s *Server) handleListInvites(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var invites []PlaylistInvite
+	invites := []PlaylistInvite{}
 	for rows.Next() {
 		var inv PlaylistInvite
 		if err := rows.Scan(&inv.UserID, &inv.CreatedAt); err != nil {

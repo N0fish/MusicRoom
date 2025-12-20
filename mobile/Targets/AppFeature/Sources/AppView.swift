@@ -2,6 +2,7 @@ import AuthenticationFeature
 import ComposableArchitecture
 import EventFeature
 import MusicRoomDomain
+import PlaylistFeature
 import SettingsFeature
 import SwiftUI
 
@@ -46,6 +47,17 @@ public struct AppView: View {
             )
             .tabItem {
                 Label("Events", systemImage: "music.note.list")
+            }
+
+            // Tab 2: Playlists
+            PlaylistListView(
+                store: store.scope(
+                    state: \.playlistList,
+                    action: \.playlistList
+                )
+            )
+            .tabItem {
+                Label("Playlists", systemImage: "music.note")
             }
 
             // Tab 2: Profile

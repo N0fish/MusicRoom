@@ -17,14 +17,14 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-func TestHandleListPublicPlaylists_Success(t *testing.T) {
+func TestHandleListPlaylists_Success(t *testing.T) {
 	mockDB := &MockDB{}
 	srv := NewServer(mockDB, nil)
 	r := chi.NewRouter()
-	r.Get("/playlists/public", srv.handleListPublicPlaylists)
+	r.Get("/playlists", srv.handleListPlaylists)
 
 	mockDB.QueryFunc = func(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
-		if strings.Contains(sql, "FROM playlists") && strings.Contains(sql, "is_public = TRUE") {
+		if strings.Contains(sql, "FROM playlists") {
 			return &MockRows{
 				Data: [][]any{
 					{
@@ -37,7 +37,7 @@ func TestHandleListPublicPlaylists_Success(t *testing.T) {
 		return nil, errors.New("unexpected query: " + sql)
 	}
 
-	req := httptest.NewRequest("GET", "/playlists/public", nil)
+	req := httptest.NewRequest("GET", "/playlists", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

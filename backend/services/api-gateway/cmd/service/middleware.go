@@ -55,6 +55,41 @@ func jwtAuthMiddleware(secret []byte) func(http.Handler) http.Handler {
 	}
 }
 
+func jwtAuthOptionalMiddleware(secret []byte) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			auth := r.Header.Get("Authorization")
+			if auth == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			parts := strings.SplitN(auth, " ", 2)
+			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+				// If they provided an invalid header, we could either error or ignore.
+				// For security, if they try to authenticate and fail, let's error.
+				writeError(w, http.StatusUnauthorized, "invalid Authorization header")
+				return
+			}
+			raw := parts[1]
+
+			claims := &TokenClaims{}
+			token, err := jwt.ParseWithClaims(raw, claims, func(t *jwt.Token) (interface{}, error) {
+				return secret, nil
+			})
+			if err != nil || !token.Valid || claims.TokenType != "access" {
+				writeError(w, http.StatusUnauthorized, "invalid token")
+				return
+			}
+
+			r.Header.Set("X-User-Id", claims.UserID)
+			r.Header.Set("X-User-Email", claims.Email)
+
+			ctx := context.WithValue(r.Context(), ctxClaimsKey{}, claims)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
 func corsMiddleware(next http.Handler) http.Handler {
 	allowedOrigin := getenv("CORS_ALLOWED_ORIGIN", "*")
 

@@ -50,13 +50,96 @@ public struct CreateEventView: View {
 
                             Picker("License", selection: $store.licenseMode) {
                                 ForEach(EventLicenseMode.allCases, id: \.self) { mode in
-                                    Text(mode.label).tag(mode)
+                                    if !(store.visibility == .privateEvent && mode == .everyone) {
+                                        Text(mode.label).tag(mode)
+                                    }
                                 }
                             }
                             .pickerStyle(.menu)
                             .tint(.white)
                             .padding()
                             .background(GlassView(cornerRadius: 12))
+
+                            if store.licenseMode == .geoTime {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("Voting Restrictions")
+                                        .font(.liquidBody.bold())
+                                        .foregroundStyle(.white)
+
+                                    // Time
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Time Window")
+                                            .font(.liquidCaption)
+                                            .foregroundStyle(.gray)
+                                        DatePicker("Start", selection: $store.voteStart)
+                                            .labelsHidden()
+                                            .colorScheme(.dark)
+                                        DatePicker("End", selection: $store.voteEnd)
+                                            .labelsHidden()
+                                            .colorScheme(.dark)
+                                    }
+                                    .padding()
+                                    .background(GlassView(cornerRadius: 12))
+
+                                    // Location
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("Location")
+                                            .font(.liquidCaption)
+                                            .foregroundStyle(.gray)
+
+                                        if let lat = store.geoLat, let lng = store.geoLng {
+                                            HStack {
+                                                Image(systemName: "location.fill")
+                                                    .foregroundStyle(Color.liquidAccent)
+                                                Text(
+                                                    "\(String(format: "%.4f", lat)), \(String(format: "%.4f", lng))"
+                                                )
+                                                .font(.liquidBody)
+                                                .foregroundStyle(.white)
+                                            }
+                                        } else {
+                                            Text("No location set")
+                                                .font(.liquidCaption)
+                                                .foregroundStyle(.red.opacity(0.8))
+                                        }
+
+                                        Button(action: { store.send(.getCurrentLocation) }) {
+                                            if store.isGettingLocation {
+                                                ProgressView()
+                                                    .tint(.white)
+                                            } else {
+                                                Label(
+                                                    "Set to Current Location",
+                                                    systemImage: "location.circle"
+                                                )
+                                                .font(.liquidBody)
+                                                .foregroundStyle(.white)
+                                                .padding(8)
+                                                .background(Color.blue.opacity(0.6))
+                                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                            }
+                                        }
+                                    }
+                                    .padding()
+                                    .background(GlassView(cornerRadius: 12))
+
+                                    // Radius
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("Radius: \(store.geoRadiusM)m")
+                                            .font(.liquidCaption)
+                                            .foregroundStyle(.gray)
+
+                                        Picker("Radius", selection: $store.geoRadiusM) {
+                                            Text("50m").tag(50)
+                                            Text("100m").tag(100)
+                                            Text("500m").tag(500)
+                                            Text("1km").tag(1000)
+                                        }
+                                        .pickerStyle(.segmented)
+                                        .colorScheme(.dark)
+                                    }
+                                }
+                            }
                         }
                     }
                     .padding()

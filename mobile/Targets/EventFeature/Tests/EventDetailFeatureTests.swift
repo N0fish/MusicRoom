@@ -144,7 +144,7 @@ final class EventDetailFeatureTests: XCTestCase {
             $0.locationClient.getCurrentLocation = {
                 CLLocationCoordinate2D(latitude: 48.8966, longitude: 2.3183)
             }
-            $0.musicRoomAPI.vote = { _, _ in
+            $0.musicRoomAPI.vote = { _, _, _, _ in
                 // Verify lat/lng passed - Location not implemented in feature yet
                 return VoteResponse(voteCount: 1)
             }

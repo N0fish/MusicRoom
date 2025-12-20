@@ -2,6 +2,7 @@ package vote
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -26,6 +27,16 @@ func (s *HTTPServer) handleVote(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+
+	var lVal, gVal float64
+	if body.Lat != nil {
+		lVal = *body.Lat
+	}
+	if body.Lng != nil {
+		gVal = *body.Lng
+	}
+	log.Printf("[DEBUG] VoteRequest: UserID=%s EventID=%s TrackID=%s Lat=%f Lng=%f\n", voterID, eventID, body.TrackID, lVal, gVal)
+
 	if body.TrackID == "" {
 		writeError(w, http.StatusBadRequest, "trackId is required")
 		return
@@ -35,6 +46,19 @@ func (s *HTTPServer) handleVote(w http.ResponseWriter, r *http.Request) {
 		writeVoteError(w, err)
 		return
 	}
+
+	// Forward to playlist-service to update track order
+	// We ignore errors here to not block the response, but log them
+	go func() {
+		pURL := s.playlistServiceURL + "/playlists/" + eventID + "/tracks/" + body.TrackID + "/vote"
+		req, _ := http.NewRequest("POST", pURL, nil)
+		req.Header.Set("X-User-Id", voterID)
+		if resp, err := s.httpClient.Do(req); err != nil {
+			log.Printf("Failed to forward vote to playlist-service: %v", err)
+		} else {
+			resp.Body.Close()
+		}
+	}()
 
 	writeJSON(w, http.StatusOK, resp)
 }

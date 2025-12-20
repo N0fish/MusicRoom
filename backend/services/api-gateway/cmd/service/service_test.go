@@ -59,6 +59,7 @@ func TestProxyLogic(t *testing.T) {
 	cfg := Config{
 		AuthURL:      backend.URL,
 		UserURL:      backend.URL,
+		PlaylistURL:  backend.URL,
 		RateLimitRPS: 1000,
 		JWTSecret:    []byte("test_secret"),
 	}
@@ -105,6 +106,33 @@ func TestProxyLogic(t *testing.T) {
 
 		if w.Code != http.StatusOK {
 			t.Errorf("expected status 200, got %d", w.Code)
+		}
+	})
+
+	t.Run("Playlists_OptionalJWT", func(t *testing.T) {
+		// 1. Without token - should work and pass no user id
+		req := httptest.NewRequest(http.MethodGet, "/playlists", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("expected status 200, got %d", w.Code)
+		}
+
+		var resp map[string]string
+		json.NewDecoder(w.Body).Decode(&resp)
+		if resp["userId"] != "" {
+			t.Errorf("expected empty userId, got %s", resp["userId"])
+		}
+
+		// 2. With invalid token - should fail
+		req = httptest.NewRequest(http.MethodGet, "/playlists", nil)
+		req.Header.Set("Authorization", "Bearer invalid")
+		w = httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("expected status 401, got %d", w.Code)
 		}
 	})
 }

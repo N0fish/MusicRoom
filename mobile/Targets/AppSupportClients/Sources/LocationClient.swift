@@ -43,6 +43,7 @@ extension LocationClient: DependencyKey {
 private actor LocationManager: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     private var locationContinuation: CheckedContinuation<CLLocationCoordinate2D, Error>?
+    private var authContinuation: CheckedContinuation<Void, Never>?
 
     var authorizationStatus: CLAuthorizationStatus {
         manager.authorizationStatus
@@ -54,8 +55,15 @@ private actor LocationManager: NSObject, CLLocationManagerDelegate {
         manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
     }
 
-    func requestAuthorization() {
-        manager.requestWhenInUseAuthorization()
+    func requestAuthorization() async {
+        if manager.authorizationStatus != .notDetermined {
+            return
+        }
+
+        await withCheckedContinuation { continuation in
+            self.authContinuation = continuation
+            manager.requestWhenInUseAuthorization()
+        }
     }
 
     func requestLocation() async throws -> CLLocationCoordinate2D {
@@ -85,7 +93,16 @@ private actor LocationManager: NSObject, CLLocationManagerDelegate {
     }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        // We could expose a stream of auth status if needed
+        Task {
+            await self.handleAuthChange()
+        }
+    }
+
+    private func handleAuthChange() {
+        if let authContinuation = authContinuation {
+            authContinuation.resume()
+            self.authContinuation = nil
+        }
     }
 
     private func handleLocationUpdate(_ location: CLLocation?) {

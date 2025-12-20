@@ -143,7 +143,7 @@ func checkUserExists(ctx context.Context, client *http.Client, baseURL, userID s
 // - if both set, window must be at least 1 hour and end after start
 func validateVotingWindow(voteStart, voteEnd *time.Time, now time.Time) error {
 	const maxFuture = 365 * 24 * time.Hour
-	const minWindow = time.Hour
+	const minWindow = time.Minute
 
 	if voteStart != nil {
 		if voteStart.Before(now) {
@@ -166,7 +166,7 @@ func validateVotingWindow(voteStart, voteEnd *time.Time, now time.Time) error {
 			return &validationError{"voteEnd must be after voteStart"}
 		}
 		if voteEnd.Sub(*voteStart) < minWindow {
-			return &validationError{"voting window must be at least 1 hour"}
+			return &validationError{"voting window must be at least 1 minute"}
 		}
 	}
 	return nil

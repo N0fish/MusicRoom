@@ -1,6 +1,7 @@
 import AppSettingsClient
-import AppSupportClients  // For Friend model
+import AppSupportClients  // For Friend model & LocationClient
 import ComposableArchitecture
+import CoreLocation
 import MusicRoomAPI
 import MusicRoomDomain
 import SwiftUI  // For Binding
@@ -19,6 +20,14 @@ public struct CreateEventFeature: Sendable {
         public var friends: [Friend] = []
         public var selectedFriendIDs: Set<String> = []
 
+        // Geo + Time
+        public var voteStart: Date = Date()
+        public var voteEnd: Date = Date().addingTimeInterval(3600 * 24)  // Default 24h
+        public var geoLat: Double?
+        public var geoLng: Double?
+        public var geoRadiusM: Int = 100
+        public var isGettingLocation: Bool = false
+
         public init() {}
     }
 
@@ -29,7 +38,20 @@ public struct CreateEventFeature: Sendable {
         case toggleFriendSelection(String)
         case createButtonTapped
         case cancelButtonTapped
-        case createResponse(Result<Event, ErrorBinder>)  // Use Wrapper for Error Equatable conformance if needed, or just standard Error (TCA handles it often, but explicit Equatable is safer)
+        case createResponse(Result<Event, ErrorBinder>)
+
+        // Geo
+        case getCurrentLocation
+        case locationLoaded(Result<EquatableCoordinate, ErrorBinder>)
+    }
+
+    public struct EquatableCoordinate: Equatable, Sendable {
+        public let latitude: Double
+        public let longitude: Double
+        public init(_ coordinate: CLLocationCoordinate2D) {
+            self.latitude = coordinate.latitude
+            self.longitude = coordinate.longitude
+        }
     }
 
     // Simple Error Wrapper for Equatable
@@ -42,6 +64,7 @@ public struct CreateEventFeature: Sendable {
 
     @Dependency(\.musicRoomAPI) var musicRoomAPI
     @Dependency(\.friendsClient) var friendsClient
+    @Dependency(\.locationClient) var locationClient
     @Dependency(\.appSettings) var appSettings
     @Dependency(\.dismiss) var dismiss
 
@@ -50,10 +73,17 @@ public struct CreateEventFeature: Sendable {
     public var body: some ReducerOf<Self> {
         let friendsClient = self.friendsClient
         let musicRoomAPI = self.musicRoomAPI
+        let locationClient = self.locationClient
 
         BindingReducer()
         Reduce { state, action in
             switch action {
+            case .binding(\.visibility):
+                if state.visibility == .privateEvent && state.licenseMode == .everyone {
+                    state.licenseMode = .invitedOnly
+                }
+                return .none
+
             case .binding:
                 return .none
 
@@ -84,6 +114,29 @@ public struct CreateEventFeature: Sendable {
                 }
                 return .none
 
+            case .getCurrentLocation:
+                state.isGettingLocation = true
+                return .run { send in
+                    do {
+                        await locationClient.requestWhenInUseAuthorization()
+                        let location = try await locationClient.getCurrentLocation()
+                        await send(.locationLoaded(.success(EquatableCoordinate(location))))
+                    } catch {
+                        await send(.locationLoaded(.failure(ErrorBinder(error))))
+                    }
+                }
+
+            case .locationLoaded(.success(let coordinate)):
+                state.isGettingLocation = false
+                state.geoLat = coordinate.latitude
+                state.geoLng = coordinate.longitude
+                return .none
+
+            case .locationLoaded(.failure(let error)):
+                state.isGettingLocation = false
+                state.errorMessage = "Failed to get location: \(error.message)"
+                return .none
+
             case .createButtonTapped:
                 guard !state.name.isEmpty else {
                     state.errorMessage = "Event name cannot be empty."
@@ -96,13 +149,30 @@ public struct CreateEventFeature: Sendable {
                     [
                         name = state.name, visibility = state.visibility,
                         licenseMode = state.licenseMode,
-                        selectedFriendIDs = state.selectedFriendIDs
+                        selectedFriendIDs = state.selectedFriendIDs,
+                        voteStart = state.voteStart, voteEnd = state.voteEnd,
+                        geoLat = state.geoLat, geoLng = state.geoLng, geoRadiusM = state.geoRadiusM
                     ] send in
-                    let request = CreateEventRequest(
+
+                    var finalRequest = CreateEventRequest(
                         name: name,
                         visibility: visibility,
                         licenseMode: licenseMode
                     )
+
+                    if licenseMode == .geoTime {
+                        finalRequest = CreateEventRequest(
+                            name: name,
+                            visibility: visibility,
+                            licenseMode: licenseMode,
+                            geoLat: geoLat,
+                            geoLng: geoLng,
+                            geoRadiusM: geoRadiusM,
+                            voteStart: voteStart,
+                            voteEnd: voteEnd
+                        )
+                    }
+                    let request = finalRequest
 
                     do {
                         let event = try await musicRoomAPI.createEvent(request)
