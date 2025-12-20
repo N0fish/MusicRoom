@@ -57,7 +57,7 @@ func TestHandleCreateInvite(t *testing.T) {
 
 	t.Run("event not found", func(t *testing.T) {
 		mockStore := new(MockStore)
-		server := &HTTPServer{store: mockStore}
+		server := &HTTPServer{store: mockStore, httpClient: &http.Client{}}
 		r := chi.NewRouter()
 		r.Post("/events/{id}/invites", server.handleCreateInvite)
 
@@ -75,7 +75,7 @@ func TestHandleCreateInvite(t *testing.T) {
 
 	t.Run("forbidden not owner", func(t *testing.T) {
 		mockStore := new(MockStore)
-		server := &HTTPServer{store: mockStore}
+		server := &HTTPServer{store: mockStore, httpClient: &http.Client{}}
 		r := chi.NewRouter()
 		r.Post("/events/{id}/invites", server.handleCreateInvite)
 
@@ -198,7 +198,7 @@ func TestHandleCreateInvite(t *testing.T) {
 func TestHandleDeleteInvite(t *testing.T) {
 	t.Run("event not found", func(t *testing.T) {
 		mockStore := new(MockStore)
-		server := &HTTPServer{store: mockStore}
+		server := &HTTPServer{store: mockStore, httpClient: &http.Client{}}
 		r := chi.NewRouter()
 		r.Delete("/events/{id}/invites/{userId}", server.handleDeleteInvite)
 
@@ -214,7 +214,7 @@ func TestHandleDeleteInvite(t *testing.T) {
 
 	t.Run("forbidden not owner or self", func(t *testing.T) {
 		mockStore := new(MockStore)
-		server := &HTTPServer{store: mockStore}
+		server := &HTTPServer{store: mockStore, httpClient: &http.Client{}}
 		r := chi.NewRouter()
 		r.Delete("/events/{id}/invites/{userId}", server.handleDeleteInvite)
 
@@ -249,7 +249,7 @@ func TestHandleDeleteInvite(t *testing.T) {
 
 	t.Run("load event error", func(t *testing.T) {
 		mockStore := new(MockStore)
-		server := &HTTPServer{store: mockStore}
+		server := &HTTPServer{store: mockStore, httpClient: &http.Client{}}
 		r := chi.NewRouter()
 		r.Delete("/events/{id}/invites/{userId}", server.handleDeleteInvite)
 
@@ -265,7 +265,7 @@ func TestHandleDeleteInvite(t *testing.T) {
 
 	t.Run("delete invite store error", func(t *testing.T) {
 		mockStore := new(MockStore)
-		server := &HTTPServer{store: mockStore}
+		server := &HTTPServer{store: mockStore, httpClient: &http.Client{}}
 		r := chi.NewRouter()
 		r.Delete("/events/{id}/invites/{userId}", server.handleDeleteInvite)
 
@@ -285,7 +285,7 @@ func TestHandleDeleteInvite(t *testing.T) {
 func TestHandleListInvites(t *testing.T) {
 	t.Run("forbidden not invited", func(t *testing.T) {
 		mockStore := new(MockStore)
-		server := &HTTPServer{store: mockStore}
+		server := &HTTPServer{store: mockStore, httpClient: &http.Client{}}
 		r := chi.NewRouter()
 		r.Get("/events/{id}/invites", server.handleListInvites)
 
@@ -303,7 +303,7 @@ func TestHandleListInvites(t *testing.T) {
 
 	t.Run("success owner lists", func(t *testing.T) {
 		mockStore := new(MockStore)
-		server := &HTTPServer{store: mockStore}
+		server := &HTTPServer{store: mockStore, httpClient: &http.Client{}}
 		r := chi.NewRouter()
 		r.Get("/events/{id}/invites", server.handleListInvites)
 
@@ -325,7 +325,7 @@ func TestHandleListInvites(t *testing.T) {
 
 	t.Run("is invited error", func(t *testing.T) {
 		mockStore := new(MockStore)
-		server := &HTTPServer{store: mockStore}
+		server := &HTTPServer{store: mockStore, httpClient: &http.Client{}}
 		r := chi.NewRouter()
 		r.Get("/events/{id}/invites", server.handleListInvites)
 
@@ -343,7 +343,7 @@ func TestHandleListInvites(t *testing.T) {
 
 	t.Run("list invites error", func(t *testing.T) {
 		mockStore := new(MockStore)
-		server := &HTTPServer{store: mockStore}
+		server := &HTTPServer{store: mockStore, httpClient: &http.Client{}}
 		r := chi.NewRouter()
 		r.Get("/events/{id}/invites", server.handleListInvites)
 

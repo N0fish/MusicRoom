@@ -34,7 +34,7 @@ func NewTestClient(fn RoundTripFunc) *http.Client {
 func TestHandleGetEvent(t *testing.T) {
 	t.Run("public event success", func(t *testing.T) {
 		mockStore := new(MockStore)
-		server := &HTTPServer{store: mockStore}
+		server := &HTTPServer{store: mockStore, httpClient: &http.Client{}}
 		r := chi.NewRouter()
 		r.Get("/events/{id}", server.handleGetEvent)
 
@@ -50,7 +50,7 @@ func TestHandleGetEvent(t *testing.T) {
 
 	t.Run("private event forbidden", func(t *testing.T) {
 		mockStore := new(MockStore)
-		server := &HTTPServer{store: mockStore}
+		server := &HTTPServer{store: mockStore, httpClient: &http.Client{}}
 		r := chi.NewRouter()
 		r.Get("/events/{id}", server.handleGetEvent)
 
@@ -68,7 +68,7 @@ func TestHandleGetEvent(t *testing.T) {
 
 	t.Run("private event success invited", func(t *testing.T) {
 		mockStore := new(MockStore)
-		server := &HTTPServer{store: mockStore}
+		server := &HTTPServer{store: mockStore, httpClient: &http.Client{}}
 		r := chi.NewRouter()
 		r.Get("/events/{id}", server.handleGetEvent)
 
@@ -90,7 +90,7 @@ func TestHandleGetEvent(t *testing.T) {
 
 	t.Run("not found", func(t *testing.T) {
 		mockStore := new(MockStore)
-		server := &HTTPServer{store: mockStore}
+		server := &HTTPServer{store: mockStore, httpClient: &http.Client{}}
 		r := chi.NewRouter()
 		r.Get("/events/{id}", server.handleGetEvent)
 

@@ -1,9 +1,11 @@
 package vote
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -50,8 +52,11 @@ func (s *HTTPServer) handleVote(w http.ResponseWriter, r *http.Request) {
 	// Forward to playlist-service to update track order
 	// We ignore errors here to not block the response, but log them
 	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
 		pURL := s.playlistServiceURL + "/playlists/" + eventID + "/tracks/" + body.TrackID + "/vote"
-		req, _ := http.NewRequest("POST", pURL, nil)
+		req, _ := http.NewRequestWithContext(ctx, "POST", pURL, nil)
 		req.Header.Set("X-User-Id", voterID)
 		if resp, err := s.httpClient.Do(req); err != nil {
 			log.Printf("Failed to forward vote to playlist-service: %v", err)

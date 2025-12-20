@@ -2,6 +2,7 @@ package vote
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -23,7 +24,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, userServiceURL, playlistSe
 		pool:               pool,
 		store:              NewPostgresStore(pool),
 		rdb:                rdb,
-		httpClient:         http.DefaultClient,
+		httpClient:         &http.Client{Timeout: 15 * time.Second},
 		userServiceURL:     userServiceURL,
 		playlistServiceURL: playlistServiceURL,
 		realtimeServiceURL: realtimeServiceURL,

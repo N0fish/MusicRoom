@@ -110,12 +110,12 @@ func (s *HTTPServer) handleCreateInvite(w http.ResponseWriter, r *http.Request) 
 
 	// Propagate to playlist-service for Realtime events (kept for backward compat or other services)
 	go func() {
-		// Use a detached context or similar since request context might be cancelled
-		// For simplicity using background context with timeout
-		// (In prod, use proper queue/worker)
-		// Construct request
+		// Use a background context with timeout for propagation
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
 		plReqBody, _ := json.Marshal(map[string]string{"userId": body.UserID})
-		req, err := http.NewRequest(http.MethodPost, s.playlistServiceURL+"/playlists/"+id+"/invites", bytes.NewReader(plReqBody))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.playlistServiceURL+"/playlists/"+id+"/invites", bytes.NewReader(plReqBody))
 		if err == nil {
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("X-User-Id", userID)

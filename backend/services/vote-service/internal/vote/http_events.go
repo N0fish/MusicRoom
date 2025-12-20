@@ -115,9 +115,6 @@ func (s *HTTPServer) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 	reqPL.Header.Set("Content-Type", "application/json")
 	reqPL.Header.Set("X-User-Id", userID) // Pass through auth
 
-	// We use a default http client here since we didn't inject one, assuming s.httpClient or http.DefaultClient
-	// For now using http.DefaultClient but strictly we should add HttpClient to HTTPServer.
-	// TIMEOUT is crucial but for MVP using DefaultClient
 	respPL, err := s.httpClient.Do(reqPL)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "playlist-service unavailable: "+err.Error())
@@ -408,8 +405,11 @@ func (s *HTTPServer) handlePatchEvent(w http.ResponseWriter, r *http.Request) {
 
 		if s.httpClient != nil {
 			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+
 				plBody, _ := json.Marshal(plUpdate)
-				req, err := http.NewRequest(http.MethodPatch, s.playlistServiceURL+"/playlists/"+id, bytes.NewReader(plBody))
+				req, err := http.NewRequestWithContext(ctx, http.MethodPatch, s.playlistServiceURL+"/playlists/"+id, bytes.NewReader(plBody))
 				if err == nil {
 					req.Header.Set("Content-Type", "application/json")
 					req.Header.Set("X-User-Id", userID)

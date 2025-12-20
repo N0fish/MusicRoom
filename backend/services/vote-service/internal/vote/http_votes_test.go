@@ -19,7 +19,7 @@ func TestHandleVote(t *testing.T) {
 	// Updated success case: User must be invited/joined even for "everyone" license.
 	t.Run("success", func(t *testing.T) {
 		mockStore := new(MockStore)
-		server := &HTTPServer{store: mockStore}
+		server := &HTTPServer{store: mockStore, httpClient: &http.Client{}}
 		r := chi.NewRouter()
 		r.Post("/events/{id}/vote", server.handleVote)
 
