@@ -1,5 +1,6 @@
 import AppSettingsClient
 import ComposableArchitecture
+import MusicRoomAPI
 import XCTest
 
 @testable import AppFeature
@@ -26,11 +27,16 @@ final class ProfileFeatureTests: XCTestCase {
             ProfileFeature()
         } withDependencies: {
             $0.user.me = { profile }
+            $0.musicRoomAPI.getStats = {
+                MusicRoomAPIClient.UserStats(eventsHosted: 10, votesCast: 50)
+            }
         }
 
         await store.send(.onAppear) {
             $0.isLoading = true
         }
+
+        await store.receive(.fetchStats)
 
         await store.receive(\.profileResponse.success) {
             $0.isLoading = false
@@ -40,6 +46,10 @@ final class ProfileFeatureTests: XCTestCase {
             $0.editableEmail = "test@example.com"
             $0.editableMusicPreferences = "Rock"
             $0.hasLoaded = true
+        }
+
+        await store.receive(\.statsResponse.success) {
+            $0.userStats = MusicRoomAPIClient.UserStats(eventsHosted: 10, votesCast: 50)
         }
     }
 
@@ -77,12 +87,17 @@ final class ProfileFeatureTests: XCTestCase {
             $0.telemetry.log = { action, _ in
                 XCTAssertEqual(action, "user.profile.update.success")
             }
+            $0.musicRoomAPI.getStats = {
+                MusicRoomAPIClient.UserStats(eventsHosted: 5, votesCast: 20)
+            }
         }
 
         // Load initial
         await store.send(.onAppear) {
             $0.isLoading = true
         }
+        await store.receive(.fetchStats)
+
         await store.receive(\.profileResponse.success) {
             $0.isLoading = false
             $0.userProfile = initialProfile
@@ -91,6 +106,10 @@ final class ProfileFeatureTests: XCTestCase {
             $0.editableEmail = "old@example.com"
             $0.editableMusicPreferences = "Old"
             $0.hasLoaded = true
+        }
+
+        await store.receive(\.statsResponse.success) {
+            $0.userStats = MusicRoomAPIClient.UserStats(eventsHosted: 5, votesCast: 20)
         }
 
         // Toggle Edit
@@ -326,5 +345,36 @@ final class ProfileFeatureTests: XCTestCase {
         }
         // Manually assert the state after the action if needed, but exhaustivity off handles the mismatch.
         // Ideally we would inject a UUID generator dependency, but for now this fixes the build.
+    }
+
+    func testOnAppear_RefetchesStats_WhenAlreadyLoaded() async {
+        let profile = UserProfile(
+            id: "1", userId: "user1", username: "u", displayName: "d",
+            avatarUrl: nil, hasCustomAvatar: false, preferences: UserPreferences(),
+            linkedProviders: [], email: nil
+        )
+
+        var state = ProfileFeature.State()
+        state.userProfile = profile
+        state.hasLoaded = true  // Simulate already loaded
+        state.userStats = MusicRoomAPIClient.UserStats(eventsHosted: 1, votesCast: 1)
+
+        let store = TestStore(initialState: state) {
+            ProfileFeature()
+        } withDependencies: {
+            $0.musicRoomAPI.getStats = {
+                MusicRoomAPIClient.UserStats(eventsHosted: 5, votesCast: 10)
+            }
+        }
+
+        // Action: .onAppear
+        await store.send(.onAppear)
+        // Expect NO state change immediately (isLoading remains false)
+
+        await store.receive(.fetchStats)
+
+        await store.receive(\.statsResponse.success) {
+            $0.userStats = MusicRoomAPIClient.UserStats(eventsHosted: 5, votesCast: 10)
+        }
     }
 }

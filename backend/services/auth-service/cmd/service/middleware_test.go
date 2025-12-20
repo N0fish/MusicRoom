@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestAuthMiddleware(t *testing.T) {
@@ -77,6 +78,7 @@ func TestAuthMiddleware(t *testing.T) {
 				ExpiresAt: jwt.NewNumericDate(now.Add(1 * time.Hour)),
 			},
 		}
+		repo.On("FindUserByID", mock.Anything, "user-123").Return(AuthUser{ID: "user-123", TokenVersion: 0}, nil)
 		token, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(secret)
 
 		req := httptest.NewRequest("GET", "/", nil)

@@ -375,6 +375,7 @@ struct NowPlayingSectionView: View {
                 QueuedTracksView(store: store)
             }
         }
+        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: store.tracks)
     }
 }
 
@@ -479,6 +480,7 @@ struct QueuedTracksView: View {
             .background(Color.black.opacity(0.3))
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .padding(.horizontal)
+            .transition(.scale.combined(with: .opacity))
         }
     }
 }

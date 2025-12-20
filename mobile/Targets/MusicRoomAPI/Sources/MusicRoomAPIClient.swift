@@ -32,7 +32,17 @@ public struct MusicRoomAPIClient: Sendable {
         @Sendable (_ eventId: UUID, _ newOwnerId: String) async throws -> Void
     public var patchEvent:
         @Sendable (_ eventId: UUID, _ request: PatchEventRequest) async throws -> Event
+    public var getStats: @Sendable () async throws -> UserStats
 
+    public struct UserStats: Codable, Sendable, Equatable {
+        public let eventsHosted: Int
+        public let votesCast: Int
+
+        public init(eventsHosted: Int, votesCast: Int) {
+            self.eventsHosted = eventsHosted
+            self.votesCast = votesCast
+        }
+    }
     public struct Invite: Decodable, Sendable, Equatable {
         public let userId: String
         public let createdAt: Date
@@ -132,6 +142,15 @@ extension MusicRoomAPIClient: DependencyKey {
                             try await authentication.refreshToken()
                             // Update token in new request is handled by recursive call
                             return try await performRequest(request, retryCount: retryCount + 1)
+                        } catch let error as AuthenticationError {
+                            // Only logout if credentials are truly invalid
+                            if error == .invalidCredentials {
+                                logError(
+                                    request, httpResponse, data, MusicRoomAPIError.sessionExpired)
+                                throw MusicRoomAPIError.sessionExpired
+                            }
+                            // Otherwise propagate as network/server error to avoid logout
+                            throw MusicRoomAPIError.networkError(error.localizedDescription)
                         } catch {
                             logError(request, httpResponse, data, MusicRoomAPIError.sessionExpired)
                             throw MusicRoomAPIError.sessionExpired
@@ -205,6 +224,13 @@ extension MusicRoomAPIClient: DependencyKey {
                             try await authentication.refreshToken()
                             return try await performRequestNoContent(
                                 request, retryCount: retryCount + 1)
+                        } catch let error as AuthenticationError {
+                            if error == .invalidCredentials {
+                                logError(
+                                    request, httpResponse, data, MusicRoomAPIError.sessionExpired)
+                                throw MusicRoomAPIError.sessionExpired
+                            }
+                            throw MusicRoomAPIError.networkError(error.localizedDescription)
                         } catch {
                             logError(request, httpResponse, data, MusicRoomAPIError.sessionExpired)
                             throw MusicRoomAPIError.sessionExpired
@@ -494,6 +520,12 @@ extension MusicRoomAPIClient: DependencyKey {
 
                 request.httpBody = try JSONEncoder.iso8601.encode(requestBody)
                 return try await performRequest(request)
+            },
+            getStats: {
+                let url = settings.load().backendURL.appendingPathComponent("stats")
+                var request = URLRequest(url: url)
+                request.httpMethod = "GET"
+                return try await performRequest(request)
             }
         )
     }
@@ -575,7 +607,8 @@ extension MusicRoomAPIClient: DependencyKey {
             deleteEvent: { _ in },
             joinEvent: { _ in },
             transferOwnership: { _, _ in },
-            patchEvent: { _, _ in MockDataFactory.sampleEvents().first! }
+            patchEvent: { _, _ in MockDataFactory.sampleEvents().first! },
+            getStats: { UserStats(eventsHosted: 12, votesCast: 450) }
         )
     }
 
@@ -607,7 +640,8 @@ extension MusicRoomAPIClient: DependencyKey {
             deleteEvent: { _ in },
             joinEvent: { _ in },
             transferOwnership: { _, _ in },
-            patchEvent: { _, _ in throw MusicRoomAPIError.networkError("Test unimplemented") }
+            patchEvent: { _, _ in throw MusicRoomAPIError.networkError("Test unimplemented") },
+            getStats: { UserStats(eventsHosted: 0, votesCast: 0) }
         )
     }
 }

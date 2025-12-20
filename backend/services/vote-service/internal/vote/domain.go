@@ -44,6 +44,11 @@ type VoteResponse struct {
 	TotalVotes int    `json:"totalVotes"`
 }
 
+type UserStats struct {
+	EventsHosted int `json:"eventsHosted"`
+	VotesCast    int `json:"votesCast"`
+}
+
 type voteRequest struct {
 	TrackID string   `json:"trackId"`
 	Lat     *float64 `json:"lat,omitempty"`

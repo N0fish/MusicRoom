@@ -1,5 +1,6 @@
 import AppSupportClients
 import ComposableArchitecture
+import MusicRoomAPI
 import MusicRoomUI
 import SwiftUI
 
@@ -89,6 +90,19 @@ public struct ProfileView: View {
 
                         }
                         .padding(.top, 20)
+
+                        // Stats Grid
+                        if let stats = store.userStats {
+                            HStack(spacing: 12) {
+                                statCard(
+                                    title: "Events Hosted", value: "\(stats.eventsHosted)",
+                                    icon: "music.note.house.fill")
+                                statCard(
+                                    title: "Votes Cast", value: "\(stats.votesCast)",
+                                    icon: "arrow.up.heart.fill")
+                            }
+                            .padding(.horizontal)
+                        }
 
                         // Public Info
                         profileSection("Public Information") {
@@ -389,6 +403,30 @@ public struct ProfileView: View {
                 }
                 .mask(Rectangle())
         }
+    }
+
+    private func statCard(title: String, value: String, icon: String) -> some View {
+        VStack(spacing: 8) {
+            HStack {
+                Image(systemName: icon)
+                    .foregroundStyle(.blue)
+                Spacer()
+            }
+
+            Text(value)
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.6))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding()
+        .background(Color.black.opacity(0.3))
+        .cornerRadius(16)
     }
 }
 

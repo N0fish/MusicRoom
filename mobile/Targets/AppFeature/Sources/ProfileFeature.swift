@@ -2,6 +2,7 @@ import AppSupportClients
 import AuthenticationServices
 import ComposableArchitecture
 import Foundation
+import MusicRoomAPI
 
 @Reducer
 public struct ProfileFeature: Sendable {
@@ -11,6 +12,7 @@ public struct ProfileFeature: Sendable {
         public var isEditing: Bool = false
         public var isLoading: Bool = false
         public var isAvatarLoading: Bool = false
+        public var userStats: MusicRoomAPIClient.UserStats?
         public var errorMessage: String?
 
         // Editable fields
@@ -49,6 +51,8 @@ public struct ProfileFeature: Sendable {
         case toggleChangePasswordMode
         case generateRandomAvatarTapped
         case generateRandomAvatarResponse(TaskResult<UserProfile>)
+        case fetchStats
+        case statsResponse(TaskResult<MusicRoomAPIClient.UserStats>)
     }
 
     @Dependency(\.user) var userClient
@@ -56,6 +60,7 @@ public struct ProfileFeature: Sendable {
     @Dependency(\.webAuthenticationSession) var webAuth
     @Dependency(\.appSettings) var appSettings
     @Dependency(\.telemetry) var telemetry
+    @Dependency(\.musicRoomAPI) var api
 
     public init() {}
 
@@ -64,11 +69,19 @@ public struct ProfileFeature: Sendable {
         Reduce { state, action in
             switch action {
             case .onAppear:
-                guard !state.hasLoaded else { return .none }
-                state.isLoading = true
-                return .run { [userClient] send in
-                    await send(.profileResponse(TaskResult { try await userClient.me() }))
+                let fetchStatsEffect = Effect<Action>.send(.fetchStats)
+
+                if !state.hasLoaded {
+                    state.isLoading = true
+                    return .merge(
+                        fetchStatsEffect,
+                        .run { [userClient] send in
+                            await send(.profileResponse(TaskResult { try await userClient.me() }))
+                        }
+                    )
                 }
+
+                return fetchStatsEffect
 
             case .profileResponse(.success(let profile)):
                 state.isLoading = false
@@ -351,6 +364,19 @@ public struct ProfileFeature: Sendable {
                 return .none
 
             case .binding:
+                return .none
+
+            case .fetchStats:
+                return .run { send in
+                    await send(.statsResponse(TaskResult { try await api.getStats() }))
+                }
+
+            case .statsResponse(.success(let stats)):
+                state.userStats = stats
+                return .none
+
+            case .statsResponse(.failure):
+                // stats failure shouldn't block profile, maybe just log or ignore
                 return .none
             }
         }

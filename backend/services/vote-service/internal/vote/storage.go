@@ -30,6 +30,8 @@ type Store interface {
 	CreateInvite(ctx context.Context, eventID, userID, role string) error
 	DeleteInvite(ctx context.Context, eventID, userID string) error
 	ListInvites(ctx context.Context, eventID string) ([]Invite, error)
+	// Stats
+	GetUserStats(ctx context.Context, userID string) (*UserStats, error)
 }
 
 type PostgresStore struct {
@@ -403,5 +405,20 @@ func (s *PostgresStore) GetVoteTally(ctx context.Context, eventID, voterID strin
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
+
 	return out, nil
+}
+
+func (s *PostgresStore) GetUserStats(ctx context.Context, userID string) (*UserStats, error) {
+	var stats UserStats
+	err := s.pool.QueryRow(ctx, `
+        SELECT 
+            (SELECT COUNT(*) FROM events WHERE owner_id=$1),
+            (SELECT COUNT(*) FROM votes WHERE voter_id=$1)
+    `, userID).Scan(&stats.EventsHosted, &stats.VotesCast)
+
+	if err != nil {
+		return nil, err
+	}
+	return &stats, nil
 }

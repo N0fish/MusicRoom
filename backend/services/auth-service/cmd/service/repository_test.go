@@ -99,6 +99,10 @@ func (r *PredefinedRow) Scan(dest ...any) error {
 			if timePtr, ok := v.(*time.Time); ok {
 				*d = timePtr
 			}
+		case *int:
+			if intVal, ok := v.(int); ok {
+				*d = intVal
+			}
 		case *interface{}:
 			*d = v
 		}
@@ -123,6 +127,7 @@ func validUserRow(id, email string) []interface{} {
 		nullStr,  // reset_token
 		nullTime, // reset_sent_at
 		nullTime, // reset_expires_at
+		1,        // token_version
 		now,      // created_at
 		now,      // updated_at
 	}

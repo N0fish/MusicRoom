@@ -24,6 +24,8 @@ final class EventDetailFeatureTests: XCTestCase {
                 providerTrackId: "1", thumbnailUrl: nil, votes: 10)
         ]
 
+        let fixedDate = Date(timeIntervalSince1970: 0)
+
         let store = TestStore(initialState: EventDetailFeature.State(event: event)) {
             EventDetailFeature()
         } withDependencies: {
@@ -31,7 +33,7 @@ final class EventDetailFeatureTests: XCTestCase {
                 PlaylistResponse(
                     playlist: Playlist(
                         id: event.id.uuidString, ownerId: "u1", name: "P", isPublic: true,
-                        editMode: "open"),
+                        editMode: "open", createdAt: fixedDate),
                     tracks: tracks
                 )
             }
@@ -72,7 +74,7 @@ final class EventDetailFeatureTests: XCTestCase {
             $0.tracks = tracks
             $0.metadata = Playlist(
                 id: event.id.uuidString, ownerId: "u1", name: "P", isPublic: true,
-                editMode: "open")
+                editMode: "open", createdAt: fixedDate)
         }
 
         await store.receive(\.eventLoaded.success)

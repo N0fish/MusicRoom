@@ -93,3 +93,11 @@ func (m *MockStore) ListInvites(ctx context.Context, eventID string) ([]Invite, 
 	}
 	return args.Get(0).([]Invite), args.Error(1)
 }
+
+func (m *MockStore) GetUserStats(ctx context.Context, userID string) (*UserStats, error) {
+	args := m.Called(ctx, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*UserStats), args.Error(1)
+}

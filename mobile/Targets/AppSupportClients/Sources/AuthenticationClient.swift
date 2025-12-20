@@ -380,34 +380,41 @@ private struct KeychainHelper {
         let data = value.data(using: .utf8)!
         let query =
             [
-                kSecClass: kSecClassGenericPassword,
-                kSecAttrAccount: key,
-                kSecValueData: data,
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrAccount as String: key,
             ] as [String: Any]
 
-        // Query for DELETE - matches ANY item with this key, ignoring data
-        let queryDelete: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrAccount as String: key,
-        ]
+        let attributesToUpdate =
+            [
+                kSecValueData as String: data
+            ] as [String: Any]
 
-        // First try to delete code
-        SecItemDelete(queryDelete as CFDictionary)
+        // Try to update first
+        let status = SecItemUpdate(query as CFDictionary, attributesToUpdate as CFDictionary)
 
-        // Then add
-        let status = SecItemAdd(query as CFDictionary, nil)
-        if status != errSecSuccess {
-            print("Keychain save error for key \(key): \(status)")
+        if status == errSecItemNotFound {
+            // Item doesn't exist, so add it
+            var newItem = query
+            newItem[kSecValueData as String] = data
+            // Optional: Set accessibility attribute if needed (e.g. kSecAttrAccessibleAfterFirstUnlock)
+            // newItem[kSecAttrAccessible] = kSecAttrAccessibleAfterFirstUnlock
+
+            let addStatus = SecItemAdd(newItem as CFDictionary, nil)
+            if addStatus != errSecSuccess {
+                print("Keychain add error for key \(key): \(addStatus)")
+            }
+        } else if status != errSecSuccess {
+            print("Keychain update error for key \(key): \(status)")
         }
     }
 
     func read(_ key: String) -> String? {
         let query =
             [
-                kSecClass: kSecClassGenericPassword,
-                kSecAttrAccount: key,
-                kSecReturnData: true,
-                kSecMatchLimit: kSecMatchLimitOne,
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrAccount as String: key,
+                kSecReturnData as String: true,
+                kSecMatchLimit as String: kSecMatchLimitOne,
             ] as [String: Any]
 
         var dataTypeRef: AnyObject?
@@ -424,8 +431,8 @@ private struct KeychainHelper {
     func delete(_ key: String) {
         let query =
             [
-                kSecClass: kSecClassGenericPassword,
-                kSecAttrAccount: key,
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrAccount as String: key,
             ] as [String: Any]
 
         let status = SecItemDelete(query as CFDictionary)

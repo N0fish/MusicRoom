@@ -1375,6 +1375,27 @@ paths:
   # --------------------
   # EVENTS & VOTING
   # --------------------
+  /stats:
+    get:
+      summary: Get current user statistics
+      description: Returns counts of events hosted and votes cast by the authenticated user.
+      tags: [users]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserStats'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /events:
     get:
       summary: List events visible to current user
@@ -2126,6 +2147,17 @@ components:
           $ref: '#/components/schemas/UserVisibility'
         preferences:
           $ref: '#/components/schemas/MusicPreferences'
+
+    UserStats:
+      type: object
+      properties:
+        eventsHosted:
+          type: integer
+          description: Number of events the user has hosted
+        votesCast:
+          type: integer
+          description: Number of votes the user has cast
+      required: [eventsHosted, votesCast]
 
     # ---------- PLAYLISTS ----------
     PlaylistEditMode:

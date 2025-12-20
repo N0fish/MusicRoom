@@ -260,6 +260,8 @@ func setupRouter(cfg Config) *chi.Mux {
 		r.Method(http.MethodPost, "/events/{id}/vote", voteProxy)
 		r.Method(http.MethodDelete, "/events/{id}/vote", voteProxy)
 		r.Method(http.MethodGet, "/events/{id}/tally", voteProxy)
+		// Stats
+		r.Method(http.MethodGet, "/stats", voteProxy)
 	})
 
 	// Mock routes
