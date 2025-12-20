@@ -23,6 +23,7 @@ type AuthUser struct {
 	ResetToken     *string
 	ResetSentAt    *time.Time
 	ResetExpiresAt *time.Time
+	TokenVersion   int
 }
 
 var ErrUserNotFound = errors.New("user not found")
@@ -41,9 +42,20 @@ func autoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
           reset_token TEXT,
           reset_sent_at TIMESTAMPTZ,
           reset_expires_at TIMESTAMPTZ,
+          token_version INT NOT NULL DEFAULT 1,
           created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      )
+      );
+      
+      -- Ensure column exists if table already existed without it
+      DO $$
+      BEGIN
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                         WHERE table_name='auth_users' AND column_name='token_version') THEN
+              ALTER TABLE auth_users ADD COLUMN token_version INT NOT NULL DEFAULT 1;
+          END IF;
+      END
+      $$;
   `)
 	if err != nil {
 		log.Printf("migrate auth-service: %v", err)

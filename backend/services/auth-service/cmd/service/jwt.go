@@ -12,6 +12,7 @@ type TokenClaims struct {
 	Email         string `json:"email"`
 	EmailVerified bool   `json:"emailVerified"`
 	TokenType     string `json:"typ"`
+	Version       int    `json:"v"`
 	jwt.RegisteredClaims
 }
 
@@ -30,6 +31,7 @@ func (s *Server) issueTokens(user AuthUser) (AuthTokens, error) {
 		Email:         user.Email,
 		EmailVerified: user.EmailVerified,
 		TokenType:     "access",
+		Version:       user.TokenVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID,
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -47,6 +49,7 @@ func (s *Server) issueTokens(user AuthUser) (AuthTokens, error) {
 		Email:         user.Email,
 		EmailVerified: user.EmailVerified,
 		TokenType:     "refresh",
+		Version:       user.TokenVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID,
 			IssuedAt:  jwt.NewNumericDate(now),

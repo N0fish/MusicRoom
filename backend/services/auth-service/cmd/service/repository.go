@@ -49,6 +49,7 @@ func (r *PostgresRepository) FindUserByEmail(ctx context.Context, email string) 
         google_id, ft_id,
         verification_token, verification_sent_at,
         reset_token, reset_sent_at, reset_expires_at,
+        token_version,
         created_at, updated_at
       FROM auth_users WHERE email = $1`, email)
 	return scanAuthUser(row)
@@ -60,6 +61,7 @@ func (r *PostgresRepository) FindUserByID(ctx context.Context, id string) (AuthU
         google_id, ft_id,
         verification_token, verification_sent_at,
         reset_token, reset_sent_at, reset_expires_at,
+        token_version,
         created_at, updated_at
       FROM auth_users WHERE id = $1`, id)
 	return scanAuthUser(row)
@@ -71,6 +73,7 @@ func (r *PostgresRepository) FindUserByGoogleID(ctx context.Context, googleID st
         google_id, ft_id,
         verification_token, verification_sent_at,
         reset_token, reset_sent_at, reset_expires_at,
+        token_version,
         created_at, updated_at
       FROM auth_users WHERE google_id = $1`, googleID)
 	return scanAuthUser(row)
@@ -82,6 +85,7 @@ func (r *PostgresRepository) FindUserByFTID(ctx context.Context, ftID string) (A
         google_id, ft_id,
         verification_token, verification_sent_at,
         reset_token, reset_sent_at, reset_expires_at,
+        token_version,
         created_at, updated_at
       FROM auth_users WHERE ft_id = $1`, ftID)
 	return scanAuthUser(row)
@@ -95,6 +99,7 @@ func (r *PostgresRepository) CreateUserWithPassword(ctx context.Context, email, 
                   google_id, ft_id,
                   verification_token, verification_sent_at,
                   reset_token, reset_sent_at, reset_expires_at,
+                  token_version,
                   created_at, updated_at`,
 		email, passwordHash,
 	)
@@ -114,6 +119,7 @@ func (r *PostgresRepository) UpsertUserWithGoogle(ctx context.Context, email, go
 											google_id, ft_id,
 											verification_token, verification_sent_at,
 											reset_token, reset_sent_at, reset_expires_at,
+                                            token_version,
 											created_at, updated_at`,
 				email, user.ID,
 			)
@@ -133,6 +139,7 @@ func (r *PostgresRepository) UpsertUserWithGoogle(ctx context.Context, email, go
 										google_id, ft_id,
 										verification_token, verification_sent_at,
 										reset_token, reset_sent_at, reset_expires_at,
+                                        token_version,
 										created_at, updated_at`,
 			googleID, user.ID,
 		)
@@ -145,6 +152,7 @@ func (r *PostgresRepository) UpsertUserWithGoogle(ctx context.Context, email, go
                   google_id, ft_id,
                   verification_token, verification_sent_at,
                   reset_token, reset_sent_at, reset_expires_at,
+                  token_version,
                   created_at, updated_at`,
 		email, googleID,
 	)
@@ -162,6 +170,7 @@ func (r *PostgresRepository) UpsertUserWithFT(ctx context.Context, email, ftID s
                   google_id, ft_id,
                   verification_token, verification_sent_at,
                   reset_token, reset_sent_at, reset_expires_at,
+                  token_version,
                   created_at, updated_at`,
 		email, ftID,
 	)
@@ -187,6 +196,7 @@ func (r *PostgresRepository) VerifyEmailByToken(ctx context.Context, token strin
                   google_id, ft_id,
                   verification_token, verification_sent_at,
                   reset_token, reset_sent_at, reset_expires_at,
+                  token_version,
                   created_at, updated_at`, token)
 	return scanAuthUser(row)
 }
@@ -206,6 +216,7 @@ func (r *PostgresRepository) ResetPasswordByToken(ctx context.Context, token, ne
         SET password = $1,
             reset_token = NULL,
             reset_expires_at = NULL,
+            token_version = token_version + 1,
             updated_at = now()
         WHERE reset_token = $2
           AND (reset_expires_at IS NULL OR reset_expires_at > $3)
@@ -213,6 +224,7 @@ func (r *PostgresRepository) ResetPasswordByToken(ctx context.Context, token, ne
                   google_id, ft_id,
                   verification_token, verification_sent_at,
                   reset_token, reset_sent_at, reset_expires_at,
+                  token_version,
                   created_at, updated_at`,
 		newHash, token, now,
 	)
@@ -232,6 +244,7 @@ func (r *PostgresRepository) UpdateGoogleID(ctx context.Context, userID string, 
                   google_id, ft_id,
                   verification_token, verification_sent_at,
                   reset_token, reset_sent_at, reset_expires_at,
+                  token_version,
                   created_at, updated_at`,
 		googleID, userID,
 	)
@@ -246,6 +259,7 @@ func (r *PostgresRepository) UpdateFTID(ctx context.Context, userID string, ftID
                   google_id, ft_id,
                   verification_token, verification_sent_at,
                   reset_token, reset_sent_at, reset_expires_at,
+                  token_version,
                   created_at, updated_at`,
 		ftID, userID,
 	)
@@ -269,6 +283,7 @@ func scanAuthUser(row pgx.Row) (AuthUser, error) {
 		&resetToken,
 		&resetSentAt,
 		&resetExpiresAt,
+		&u.TokenVersion,
 		&u.CreatedAt,
 		&u.UpdatedAt,
 	)

@@ -113,6 +113,7 @@ extension AuthenticationClient {
 extension AuthenticationClient {
     static func live(urlSession: URLSession = .shared) -> Self {
         let keychain = KeychainHelper()
+        let refreshActor = RefreshActor()
 
         @Sendable func logError(
             _ request: URLRequest, _ response: HTTPURLResponse?, _ data: Data?, _ error: Error?
@@ -281,61 +282,63 @@ extension AuthenticationClient {
                 keychain.save(refreshToken, for: "refreshToken")
             },
             refreshToken: {
-                guard let currentRefreshToken = keychain.read("refreshToken") else {
-                    throw AuthenticationError.invalidCredentials
-                }
-
-                let baseUrl = BaseURL.resolve()
-                let url = URL(string: "\(baseUrl)/auth/refresh")!
-                var request = URLRequest(url: url)
-                request.httpMethod = "POST"
-                request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-
-                let body = ["refreshToken": currentRefreshToken]
-                request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-                do {
-                    let (data, response) = try await urlSession.data(for: request)
-
-                    guard let httpResponse = response as? HTTPURLResponse else {
-                        throw AuthenticationError.networkError("Invalid response")
-                    }
-
-                    if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
-                        // Refresh token invalid/expired
-                        keychain.delete("accessToken")
-                        keychain.delete("refreshToken")
-                        logError(
-                            request, httpResponse, data, AuthenticationError.invalidCredentials)
+                try await refreshActor.refresh {
+                    guard let currentRefreshToken = keychain.read("refreshToken") else {
                         throw AuthenticationError.invalidCredentials
                     }
 
-                    guard (200...299).contains(httpResponse.statusCode) else {
-                        let error = AuthenticationError.networkError(
-                            "Server error: \(httpResponse.statusCode)")
-                        logError(request, httpResponse, data, error)
-                        throw error
-                    }
+                    let baseUrl = BaseURL.resolve()
+                    let url = URL(string: "\(baseUrl)/auth/refresh")!
+                    var request = URLRequest(url: url)
+                    request.httpMethod = "POST"
+                    request.addValue("application/json", forHTTPHeaderField: "Content-Type")
 
-                    struct RefreshResponse: Decodable {
-                        let accessToken: String
-                        let refreshToken: String
-                    }
+                    let body = ["refreshToken": currentRefreshToken]
+                    request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
                     do {
-                        let refreshResponse = try JSONDecoder().decode(
-                            RefreshResponse.self, from: data)
-                        keychain.save(refreshResponse.accessToken, for: "accessToken")
-                        keychain.save(refreshResponse.refreshToken, for: "refreshToken")
+                        let (data, response) = try await urlSession.data(for: request)
+
+                        guard let httpResponse = response as? HTTPURLResponse else {
+                            throw AuthenticationError.networkError("Invalid response")
+                        }
+
+                        if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                            // Refresh token invalid/expired
+                            keychain.delete("accessToken")
+                            keychain.delete("refreshToken")
+                            logError(
+                                request, httpResponse, data, AuthenticationError.invalidCredentials)
+                            throw AuthenticationError.invalidCredentials
+                        }
+
+                        guard (200...299).contains(httpResponse.statusCode) else {
+                            let error = AuthenticationError.networkError(
+                                "Server error: \(httpResponse.statusCode)")
+                            logError(request, httpResponse, data, error)
+                            throw error
+                        }
+
+                        struct RefreshResponse: Decodable {
+                            let accessToken: String
+                            let refreshToken: String
+                        }
+
+                        do {
+                            let refreshResponse = try JSONDecoder().decode(
+                                RefreshResponse.self, from: data)
+                            keychain.save(refreshResponse.accessToken, for: "accessToken")
+                            keychain.save(refreshResponse.refreshToken, for: "refreshToken")
+                        } catch {
+                            logError(request, httpResponse, data, error)
+                            throw error
+                        }
                     } catch {
-                        logError(request, httpResponse, data, error)
+                        if !(error is AuthenticationError) {
+                            logError(request, nil, nil, error)
+                        }
                         throw error
                     }
-                } catch {
-                    if !(error is AuthenticationError) {
-                        logError(request, nil, nil, error)
-                    }
-                    throw error
                 }
             },
             forgotPassword: { email in
@@ -382,8 +385,14 @@ private struct KeychainHelper {
                 kSecValueData: data,
             ] as [String: Any]
 
+        // Query for DELETE - matches ANY item with this key, ignoring data
+        let queryDelete: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key,
+        ]
+
         // First try to delete code
-        SecItemDelete(query as CFDictionary)
+        SecItemDelete(queryDelete as CFDictionary)
 
         // Then add
         let status = SecItemAdd(query as CFDictionary, nil)
@@ -423,5 +432,22 @@ private struct KeychainHelper {
         if status != errSecSuccess && status != errSecItemNotFound {
             print("Keychain delete error for key \(key): \(status)")
         }
+    }
+}
+
+private actor RefreshActor {
+    private var refreshTask: Task<Void, Error>?
+
+    func refresh(operation: @escaping @Sendable () async throws -> Void) async throws {
+        if let task = refreshTask {
+            return try await task.value
+        }
+        let task = Task {
+            try await operation()
+        }
+        refreshTask = task
+        let result = await task.result
+        refreshTask = nil
+        try result.get()
     }
 }

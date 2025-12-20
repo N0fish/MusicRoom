@@ -152,6 +152,11 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if user.TokenVersion != claims.Version {
+		writeError(w, http.StatusUnauthorized, "token revoked")
+		return
+	}
+
 	tokens, err := s.issueTokens(user)
 	if err != nil {
 		log.Printf("refresh: issueTokens: %v", err)
@@ -337,6 +342,17 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 		})
 		if err != nil || !token.Valid || claims.TokenType != "access" {
 			writeError(w, http.StatusUnauthorized, "invalid token")
+			return
+		}
+
+		user, err := s.repo.FindUserByID(r.Context(), claims.UserID)
+		if err != nil {
+			writeError(w, http.StatusUnauthorized, "invalid token")
+			return
+		}
+
+		if user.TokenVersion != claims.Version {
+			writeError(w, http.StatusUnauthorized, "token revoked")
 			return
 		}
 

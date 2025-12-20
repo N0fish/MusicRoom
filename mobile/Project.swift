@@ -277,6 +277,8 @@ let project = Project(
                 "Targets/EventFeature/Tests/**",
                 "Targets/MusicRoomAPI/Tests/**",
                 "Targets/AuthenticationFeature/Tests/**",
+                "Targets/PlaylistFeature/Tests/**",
+                "Targets/AppSupportClients/Tests/**",
             ],
             dependencies: [
                 .target(name: "MusicRoomMobile"),
