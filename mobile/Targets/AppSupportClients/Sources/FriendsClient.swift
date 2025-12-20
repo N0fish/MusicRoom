@@ -9,15 +9,18 @@ public struct Friend: Codable, Equatable, Identifiable, Sendable {
     public let username: String
     public let displayName: String
     public let avatarUrl: String?
+    public let isPremium: Bool
 
     public init(
-        id: String, userId: String, username: String, displayName: String, avatarUrl: String?
+        id: String, userId: String, username: String, displayName: String, avatarUrl: String?,
+        isPremium: Bool
     ) {
         self.id = id
         self.userId = userId
         self.username = username
         self.displayName = displayName
         self.avatarUrl = avatarUrl
+        self.isPremium = isPremium
     }
 }
 
@@ -27,18 +30,20 @@ public struct FriendRequest: Codable, Equatable, Identifiable, Sendable {
     public let senderUsername: String
     public let senderDisplayName: String
     public let senderAvatarUrl: String?
+    public let senderIsPremium: Bool
     public let status: String
     public let sentAt: Date
 
     public init(
         id: String, senderId: String, senderUsername: String, senderDisplayName: String,
-        senderAvatarUrl: String?, status: String, sentAt: Date
+        senderAvatarUrl: String?, senderIsPremium: Bool, status: String, sentAt: Date
     ) {
         self.id = id
         self.senderId = senderId
         self.senderUsername = senderUsername
         self.senderDisplayName = senderDisplayName
         self.senderAvatarUrl = senderAvatarUrl
+        self.senderIsPremium = senderIsPremium
         self.status = status
         self.sentAt = sentAt
     }
@@ -51,6 +56,7 @@ struct UserListItem: Codable, Sendable {
     let username: String
     let displayName: String
     let avatarUrl: String?
+    let isPremium: Bool
 
     func toFriend() -> Friend {
         Friend(
@@ -58,7 +64,8 @@ struct UserListItem: Codable, Sendable {
             userId: userId,
             username: username,
             displayName: displayName,
-            avatarUrl: avatarUrl
+            avatarUrl: avatarUrl,
+            isPremium: isPremium
         )
     }
 }
@@ -72,6 +79,7 @@ struct BackendFriendItem: Codable, Sendable {
     let username: String
     let displayName: String
     let avatarUrl: String?
+    let isPremium: Bool
 }
 
 struct IncomingRequestItem: Codable, Sendable {
@@ -112,7 +120,7 @@ extension FriendsClient: DependencyKey {
         getProfile: { _ in
             PublicUserProfile(
                 userId: "test", username: "test", displayName: "test",
-                avatarUrl: nil, bio: nil, visibility: "public", preferences: nil
+                avatarUrl: nil, isPremium: false, bio: nil, visibility: "public", preferences: nil
             )
         }
     )
@@ -122,17 +130,18 @@ extension FriendsClient: DependencyKey {
             [
                 Friend(
                     id: "1", userId: "u1", username: "alice", displayName: "Alice Wonderland",
-                    avatarUrl: nil),
+                    avatarUrl: nil, isPremium: true),
                 Friend(
                     id: "2", userId: "u2", username: "bob", displayName: "Bob Builder",
-                    avatarUrl: nil),
+                    avatarUrl: nil, isPremium: false),
             ]
         },
         incomingRequests: {
             [
                 FriendRequest(
                     id: "3", senderId: "u3", senderUsername: "charlie",
-                    senderDisplayName: "Charlie C", senderAvatarUrl: nil, status: "pending",
+                    senderDisplayName: "Charlie C", senderAvatarUrl: nil, senderIsPremium: false,
+                    status: "pending",
                     sentAt: Date())
             ]
         },
@@ -144,7 +153,8 @@ extension FriendsClient: DependencyKey {
         getProfile: { _ in
             PublicUserProfile(
                 userId: "u1", username: "alice", displayName: "Alice Wonderland",
-                avatarUrl: nil, bio: "Test Bio", visibility: "public", preferences: nil
+                avatarUrl: nil, isPremium: true, bio: "Test Bio", visibility: "public",
+                preferences: nil
             )
         }
     )
@@ -249,7 +259,8 @@ extension FriendsClient {
                             userId: friend.userId,
                             username: friend.username,
                             displayName: friend.displayName,
-                            avatarUrl: baseUrl + avatarUrl
+                            avatarUrl: baseUrl + avatarUrl,
+                            isPremium: friend.isPremium
                         )
                     }
                     return friend
@@ -275,6 +286,7 @@ extension FriendsClient {
                         senderUsername: item.from.username,
                         senderDisplayName: item.from.displayName,
                         senderAvatarUrl: avatarUrl,
+                        senderIsPremium: item.from.isPremium,
                         status: "pending",
                         sentAt: date
                     )
@@ -326,7 +338,8 @@ extension FriendsClient {
                             userId: friend.userId,
                             username: friend.username,
                             displayName: friend.displayName,
-                            avatarUrl: baseUrl + avatarUrl
+                            avatarUrl: baseUrl + avatarUrl,
+                            isPremium: friend.isPremium
                         )
                     }
                     return friend
@@ -345,6 +358,7 @@ extension FriendsClient {
                         username: profile.username,
                         displayName: profile.displayName,
                         avatarUrl: baseUrl + avatarUrl,
+                        isPremium: profile.isPremium,
                         bio: profile.bio,
                         visibility: profile.visibility,
                         preferences: profile.preferences
@@ -368,6 +382,7 @@ public struct PublicUserProfile: Codable, Equatable, Sendable {
     public let username: String
     public let displayName: String
     public let avatarUrl: String?
+    public let isPremium: Bool
     public let bio: String?
     public let visibility: String
     public let preferences: PublicMusicPreferences?  // Use optional if it might be missing or define struct
@@ -377,6 +392,7 @@ public struct PublicUserProfile: Codable, Equatable, Sendable {
         username: String,
         displayName: String,
         avatarUrl: String?,
+        isPremium: Bool,
         bio: String?,
         visibility: String,
         preferences: PublicMusicPreferences?
@@ -385,6 +401,7 @@ public struct PublicUserProfile: Codable, Equatable, Sendable {
         self.username = username
         self.displayName = displayName
         self.avatarUrl = avatarUrl
+        self.isPremium = isPremium
         self.bio = bio
         self.visibility = visibility
         self.preferences = preferences

@@ -8,6 +8,9 @@ import XCTest
 
 @MainActor
 final class EventListFeatureTests: XCTestCase {
+    private struct MockError: Error, Equatable, LocalizedError {
+        var errorDescription: String? { "Mock failed" }
+    }
 
     // Moved mockEvents inside tests to avoid non-Sendable capture
 
@@ -39,19 +42,19 @@ final class EventListFeatureTests: XCTestCase {
             $0.persistence.loadEvents = { [] }
         }
 
-        await store.send(.onAppear)
+        await store.send(EventListFeature.Action.onAppear)
         // Also .loadEvents triggered by onAppear
-        await store.receive(.loadEvents) {
+        await store.receive(EventListFeature.Action.loadEvents) {
             $0.isLoading = true
         }
-        await store.receive(.fetchCurrentUser)
-        await store.receive(.startRealtimeConnection)
+        await store.receive(EventListFeature.Action.fetchCurrentUser)
+        await store.receive(EventListFeature.Action.startRealtimeConnection)
 
-        await store.receive(\.currentUserLoaded.success) {
+        await store.receive(EventListFeature.Action.currentUserLoaded(.success("user1"))) {
             $0.currentUserId = "user1"
         }
 
-        await store.receive(\.eventsLoaded.success) {
+        await store.receive(EventListFeature.Action.eventsLoaded(.success(events))) {
             $0.isLoading = false
             $0.events = events
             $0.hasLoaded = true
@@ -73,8 +76,6 @@ final class EventListFeatureTests: XCTestCase {
             )
         ]
 
-        struct MockError: Error {}
-
         var state = EventListFeature.State()
         state.isOffline = true  // Start offline
 
@@ -87,14 +88,14 @@ final class EventListFeatureTests: XCTestCase {
             $0.persistence.loadEvents = { events }
         }
 
-        await offlineStore.send(.onAppear)
+        await offlineStore.send(EventListFeature.Action.onAppear)
 
-        await offlineStore.receive(.loadEvents) {
+        await offlineStore.receive(EventListFeature.Action.loadEvents) {
             $0.isLoading = true
             $0.errorMessage = nil
         }
-        await offlineStore.receive(.fetchCurrentUser)
-        await offlineStore.receive(.startRealtimeConnection)
+        await offlineStore.receive(EventListFeature.Action.fetchCurrentUser)
+        await offlineStore.receive(EventListFeature.Action.startRealtimeConnection)
 
         // Should load from cache first due to order? Or concurrent?
         // Error log showed eventsLoadedFromCache came BEFORE currentUserLoaded
@@ -105,14 +106,15 @@ final class EventListFeatureTests: XCTestCase {
         // eventsLoadedFromCache is result of loadEvents (if offline/failed).
 
         // Assert in observed order:
-        await offlineStore.receive(\.eventsLoadedFromCache.success) {
+        await offlineStore.receive(EventListFeature.Action.eventsLoadedFromCache(.success(events)))
+        {
             $0.isLoading = false
             $0.events = events
             $0.errorMessage = nil
             $0.hasLoaded = true
         }
 
-        await offlineStore.receive(\.currentUserLoaded.success) {
+        await offlineStore.receive(EventListFeature.Action.currentUserLoaded(.success("user1"))) {
             $0.currentUserId = "user1"
         }
     }
@@ -130,10 +132,6 @@ final class EventListFeatureTests: XCTestCase {
             )
         ]
 
-        struct MockError: Error, Equatable, LocalizedError {
-            var errorDescription: String? { "Mock failed" }
-        }
-
         let store = TestStore(initialState: EventListFeature.State()) {
             EventListFeature()
         } withDependencies: {
@@ -143,22 +141,24 @@ final class EventListFeatureTests: XCTestCase {
             $0.persistence.loadEvents = { events }
         }
 
-        await store.send(.onAppear)
+        await store.send(EventListFeature.Action.onAppear)
 
-        await store.receive(.loadEvents) {
+        await store.receive(EventListFeature.Action.loadEvents) {
             $0.isLoading = true
         }
-        await store.receive(.fetchCurrentUser)
-        await store.receive(.startRealtimeConnection)
+        await store.receive(EventListFeature.Action.fetchCurrentUser)
+        await store.receive(EventListFeature.Action.startRealtimeConnection)
 
-        await store.receive(\.currentUserLoaded.success) {
+        await store.receive(EventListFeature.Action.currentUserLoaded(.success("user1"))) {
             $0.currentUserId = "user1"
         }
 
-        await store.receive(\.eventsLoaded.failure)
+        await store.receive(
+            EventListFeature.Action.eventsLoaded(
+                .failure(MockError())))
         // Does NOT update state, returns fallback effect
 
-        await store.receive(\.eventsLoadedFromCache.success) {
+        await store.receive(EventListFeature.Action.eventsLoadedFromCache(.success(events))) {
             $0.isLoading = false
             $0.events = events
             $0.errorMessage = "Loaded from cache (API Failed)"
@@ -183,7 +183,9 @@ final class EventListFeatureTests: XCTestCase {
             EventListFeature()
         } withDependencies: {
             $0.musicRoomAPI.authMe = {
-                .init(userId: userId, email: "x", emailVerified: true, linkedProviders: [])
+                .init(
+                    userId: userId, email: "x", emailVerified: true, isPremium: false,
+                    linkedProviders: [])
             }
             $0.musicRoomAPI.connectToRealtime = { stream }
             $0.musicRoomAPI.listEvents = { [event] }
@@ -193,18 +195,18 @@ final class EventListFeatureTests: XCTestCase {
             $0.persistence.loadEvents = { [] }
         }
 
-        await store.send(.onAppear)
+        await store.send(EventListFeature.Action.onAppear)
 
         // Parallel effects
-        await store.receive(.loadEvents) { $0.isLoading = true }
-        await store.receive(.fetchCurrentUser)
-        await store.receive(.startRealtimeConnection)
+        await store.receive(EventListFeature.Action.loadEvents) { $0.isLoading = true }
+        await store.receive(EventListFeature.Action.fetchCurrentUser)
+        await store.receive(EventListFeature.Action.startRealtimeConnection)
 
-        await store.receive(\.currentUserLoaded.success) {
+        await store.receive(EventListFeature.Action.currentUserLoaded(.success(userId))) {
             $0.currentUserId = userId
         }
 
-        await store.receive(\.eventsLoaded.success) {
+        await store.receive(EventListFeature.Action.eventsLoaded(.success([event]))) {
             $0.isLoading = false
             $0.events = [event]
             $0.hasLoaded = true
@@ -219,21 +221,21 @@ final class EventListFeatureTests: XCTestCase {
 
         continuation.yield(message)
 
-        await store.receive(.realtimeMessageReceived(message))
+        await store.receive(EventListFeature.Action.realtimeMessageReceived(message))
 
         // Trigger reload
-        await store.receive(.loadEvents) {
+        await store.receive(EventListFeature.Action.loadEvents) {
             $0.isLoading = true
             $0.errorMessage = nil
         }
 
-        await store.receive(\.eventsLoaded.success) {
+        await store.receive(EventListFeature.Action.eventsLoaded(.success([event]))) {
             $0.isLoading = false
             $0.hasLoaded = true
             // events didn't change in this mock test because listEvents mocked to return same
         }
 
-        await store.send(.onDisappear)
+        await store.send(EventListFeature.Action.onDisappear)
         continuation.finish()
     }
 
@@ -255,7 +257,9 @@ final class EventListFeatureTests: XCTestCase {
             EventListFeature()
         } withDependencies: {
             $0.musicRoomAPI.authMe = {
-                .init(userId: userId, email: "x", emailVerified: true, linkedProviders: [])
+                .init(
+                    userId: userId, email: "x", emailVerified: true, isPremium: false,
+                    linkedProviders: [])
             }
             $0.musicRoomAPI.connectToRealtime = { stream }
             $0.musicRoomAPI.listEvents = { [event] }
@@ -265,16 +269,16 @@ final class EventListFeatureTests: XCTestCase {
             $0.persistence.loadEvents = { [] }
         }
 
-        await store.send(.onAppear)
+        await store.send(EventListFeature.Action.onAppear)
 
-        await store.receive(.loadEvents) { $0.isLoading = true }
-        await store.receive(.fetchCurrentUser)
-        await store.receive(.startRealtimeConnection)
+        await store.receive(EventListFeature.Action.loadEvents) { $0.isLoading = true }
+        await store.receive(EventListFeature.Action.fetchCurrentUser)
+        await store.receive(EventListFeature.Action.startRealtimeConnection)
 
-        await store.receive(\.currentUserLoaded.success) {
+        await store.receive(EventListFeature.Action.currentUserLoaded(.success(userId))) {
             $0.currentUserId = userId
         }
-        await store.receive(\.eventsLoaded.success) {
+        await store.receive(EventListFeature.Action.eventsLoaded(.success([event]))) {
             $0.isLoading = false
             $0.events = [event]
             $0.hasLoaded = true
@@ -295,20 +299,20 @@ final class EventListFeatureTests: XCTestCase {
         )
 
         continuation.yield(message)
-        await store.receive(.realtimeMessageReceived(message))
+        await store.receive(EventListFeature.Action.realtimeMessageReceived(message))
 
         // Trigger reload
-        await store.receive(.loadEvents) {
+        await store.receive(EventListFeature.Action.loadEvents) {
             $0.isLoading = true
             $0.errorMessage = nil
         }
-        await store.receive(\.eventsLoaded.success) {
+        await store.receive(EventListFeature.Action.eventsLoaded(.success([event]))) {
             $0.isLoading = false
             $0.events = [event]
             $0.hasLoaded = true
         }
 
-        await store.send(.onDisappear)
+        await store.send(EventListFeature.Action.onDisappear)
         continuation.finish()
     }
 }

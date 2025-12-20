@@ -62,6 +62,7 @@ func main() {
 		// profile
 		r.Get("/users/me", srv.handleGetMe)
 		r.Patch("/users/me", srv.handlePatchMe)
+		r.Post("/users/me/premium", srv.handleBecomePremium)
 
 		// avatar
 		r.Post("/users/me/avatar/random", srv.handleGenerateRandomAvatar)

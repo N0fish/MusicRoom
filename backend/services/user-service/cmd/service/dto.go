@@ -22,6 +22,7 @@ type UserProfileResponse struct {
 	Bio             string         `json:"bio,omitempty"`
 	Visibility      string         `json:"visibility"`
 	Preferences     PreferencesDTO `json:"preferences"`
+	IsPremium       bool           `json:"isPremium"`
 	CreatedAt       time.Time      `json:"createdAt"`
 	UpdatedAt       time.Time      `json:"updatedAt"`
 }
@@ -34,6 +35,7 @@ type PublicUserProfileResponse struct {
 	Bio         string         `json:"bio,omitempty"`
 	Visibility  string         `json:"visibility"`
 	Preferences PreferencesDTO `json:"preferences"`
+	IsPremium   bool           `json:"isPremium"`
 }
 
 type UpdateUserProfileRequest struct {
@@ -84,6 +86,7 @@ type FriendItem struct {
 	Username    string `json:"username"`
 	DisplayName string `json:"displayName"`
 	AvatarURL   string `json:"avatarUrl,omitempty"`
+	IsPremium   bool   `json:"isPremium"`
 }
 
 type FriendRequestResponse struct {
@@ -128,6 +131,7 @@ func UserProfileResponseFromModel(p UserProfile) UserProfileResponse {
 			Artists: append([]string{}, p.Preferences.Artists...),
 			Moods:   append([]string{}, p.Preferences.Moods...),
 		},
+		IsPremium: p.IsPremium,
 		CreatedAt: p.CreatedAt,
 		UpdatedAt: p.UpdatedAt,
 	}
@@ -146,6 +150,7 @@ func PublicUserProfileFromModel(p UserProfile) PublicUserProfileResponse {
 			Artists: append([]string{}, p.Preferences.Artists...),
 			Moods:   append([]string{}, p.Preferences.Moods...),
 		},
+		IsPremium: p.IsPremium,
 	}
 }
 

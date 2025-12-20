@@ -52,11 +52,11 @@ func TestHandleUploadAvatar(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows([]string{
 				"id", "user_id", "display_name", "username",
 				"avatar_url", "has_custom_avatar", "bio",
-				"visibility", "preferences", "created_at", "updated_at",
+				"visibility", "preferences", "is_premium", "created_at", "updated_at",
 			}).AddRow(
 				"pid", me, "Test User", "testuser",
 				"old_url", false, "Bio",
-				"public", []byte(`{}`), time.Now(), time.Now(),
+				"public", []byte(`{}`), false, time.Now(), time.Now(),
 			))
 
 		// 2. saveProfile (Update with new avatar URL)
@@ -64,7 +64,7 @@ func TestHandleUploadAvatar(t *testing.T) {
 		mock.ExpectExec("UPDATE user_profiles").
 			WithArgs(
 				"Test User", "testuser", pgxmock.AnyArg(), true, "Bio", "public",
-				pgxmock.AnyArg(), pgxmock.AnyArg(), me,
+				pgxmock.AnyArg(), false, pgxmock.AnyArg(), me,
 			).
 			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 
@@ -196,17 +196,17 @@ func TestHandleUploadAvatar(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows([]string{
 				"id", "user_id", "display_name", "username",
 				"avatar_url", "has_custom_avatar", "bio",
-				"visibility", "preferences", "created_at", "updated_at",
+				"visibility", "preferences", "is_premium", "created_at", "updated_at",
 			}).AddRow(
 				"pid", me, "Test User", "testuser",
 				"old_url", false, "Bio",
-				"public", []byte(`{}`), time.Now(), time.Now(),
+				"public", []byte(`{}`), false, time.Now(), time.Now(),
 			))
 
 		mock.ExpectExec("UPDATE user_profiles").
 			WithArgs(
 				"Test User", "testuser", pgxmock.AnyArg(), true, "Bio", "public",
-				pgxmock.AnyArg(), pgxmock.AnyArg(), me,
+				pgxmock.AnyArg(), false, pgxmock.AnyArg(), me,
 			).
 			WillReturnError(io.ErrUnexpectedEOF)
 
@@ -248,11 +248,11 @@ func TestHandleGenerateRandomAvatar(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows([]string{
 				"id", "user_id", "display_name", "username",
 				"avatar_url", "has_custom_avatar", "bio",
-				"visibility", "preferences", "created_at", "updated_at",
+				"visibility", "preferences", "is_premium", "created_at", "updated_at",
 			}).AddRow(
 				"pid", me, "Test User", "testuser",
 				"old_url", false, "Bio",
-				"public", []byte(`{}`), time.Now(), time.Now(),
+				"public", []byte(`{}`), false, time.Now(), time.Now(),
 			))
 
 		// 2. saveProfile (Update with new random URL)
@@ -260,7 +260,7 @@ func TestHandleGenerateRandomAvatar(t *testing.T) {
 		mock.ExpectExec("UPDATE user_profiles").
 			WithArgs(
 				"Test User", "testuser", pgxmock.AnyArg(), true, "Bio", "public",
-				pgxmock.AnyArg(), pgxmock.AnyArg(), me,
+				pgxmock.AnyArg(), false, pgxmock.AnyArg(), me,
 			).
 			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 
@@ -307,17 +307,17 @@ func TestHandleGenerateRandomAvatar(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows([]string{
 				"id", "user_id", "display_name", "username",
 				"avatar_url", "has_custom_avatar", "bio",
-				"visibility", "preferences", "created_at", "updated_at",
+				"visibility", "preferences", "is_premium", "created_at", "updated_at",
 			}).AddRow(
 				"pid", me, "Test User", "testuser",
 				"old_url", false, "Bio",
-				"public", []byte(`{}`), time.Now(), time.Now(),
+				"public", []byte(`{}`), false, time.Now(), time.Now(),
 			))
 
 		mock.ExpectExec("UPDATE user_profiles").
 			WithArgs(
 				"Test User", "testuser", pgxmock.AnyArg(), true, "Bio", "public",
-				pgxmock.AnyArg(), pgxmock.AnyArg(), me,
+				pgxmock.AnyArg(), false, pgxmock.AnyArg(), me,
 			).
 			WillReturnError(io.ErrUnexpectedEOF)
 

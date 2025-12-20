@@ -37,11 +37,11 @@ func TestHandleGetMe(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows([]string{
 				"id", "user_id", "display_name", "username",
 				"avatar_url", "has_custom_avatar", "bio",
-				"visibility", "preferences", "created_at", "updated_at",
+				"visibility", "preferences", "is_premium", "created_at", "updated_at",
 			}).AddRow(
 				"profile-id", me, "Test User", "testuser",
 				"url", false, "I am a test user",
-				"public", []byte(`{}`), time.Now(), time.Now(),
+				"public", []byte(`{}`), false, time.Now(), time.Now(),
 			))
 
 		s.handleGetMe(w, req)
@@ -91,11 +91,11 @@ func TestHandlePatchMe(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows([]string{
 				"id", "user_id", "display_name", "username",
 				"avatar_url", "has_custom_avatar", "bio",
-				"visibility", "preferences", "created_at", "updated_at",
+				"visibility", "preferences", "is_premium", "created_at", "updated_at",
 			}).AddRow(
 				"pid", me, "Old Name", "testuser",
 				"url", false, "Old Bio",
-				"public", []byte(`{}`), time.Now(), time.Now(),
+				"public", []byte(`{}`), false, time.Now(), time.Now(),
 			))
 
 		// 2. saveProfile (Upsert/Update)
@@ -103,7 +103,7 @@ func TestHandlePatchMe(t *testing.T) {
 		mock.ExpectExec("UPDATE user_profiles").
 			WithArgs(
 				"New Name", "testuser", "url", false, "New Bio", "private",
-				pgxmock.AnyArg(), pgxmock.AnyArg(), me,
+				pgxmock.AnyArg(), false, pgxmock.AnyArg(), me,
 			).
 			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 
@@ -142,11 +142,11 @@ func TestHandleGetPublicProfile(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows([]string{
 				"id", "user_id", "display_name", "username",
 				"avatar_url", "has_custom_avatar", "bio",
-				"visibility", "preferences", "created_at", "updated_at",
+				"visibility", "preferences", "is_premium", "created_at", "updated_at",
 			}).AddRow(
 				"tid", target, "Target", "target",
 				"url", false, "Hidden Bio",
-				"public", []byte(`{}`), time.Now(), time.Now(),
+				"public", []byte(`{}`), false, time.Now(), time.Now(),
 			))
 
 		// 2. Check Friend Status (if not owner)
@@ -178,11 +178,11 @@ func TestHandleGetPublicProfile(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows([]string{
 				"id", "user_id", "display_name", "username",
 				"avatar_url", "has_custom_avatar", "bio",
-				"visibility", "preferences", "created_at", "updated_at",
+				"visibility", "preferences", "is_premium", "created_at", "updated_at",
 			}).AddRow(
 				"tid", target, "Target", "target",
 				"url", false, "Secret Bio",
-				"private", []byte(`{}`), time.Now(), time.Now(),
+				"private", []byte(`{}`), false, time.Now(), time.Now(),
 			))
 
 		mock.ExpectQuery("SELECT EXISTS.*user_friends").
@@ -212,11 +212,11 @@ func TestHandleGetPublicProfile(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows([]string{
 				"id", "user_id", "display_name", "username",
 				"avatar_url", "has_custom_avatar", "bio",
-				"visibility", "preferences", "created_at", "updated_at",
+				"visibility", "preferences", "is_premium", "created_at", "updated_at",
 			}).AddRow(
 				"tid", target, "Target", "target",
 				"url", false, "Friend Bio",
-				"friends", []byte(`{}`), time.Now(), time.Now(),
+				"friends", []byte(`{}`), false, time.Now(), time.Now(),
 			))
 
 		mock.ExpectQuery("SELECT EXISTS.*user_friends").
@@ -270,15 +270,15 @@ func TestHandlePatchMe_ErrorCases(t *testing.T) {
 		// 1. getOrCreateProfile success
 		mock.ExpectQuery("SELECT id, user_id").
 			WithArgs(userID).
-			WillReturnRows(pgxmock.NewRows([]string{"id", "user_id", "display_name", "username", "avatar_url", "has_custom_avatar", "bio", "visibility", "preferences", "created_at", "updated_at"}).
-				AddRow("1", userID, "Old", "old", "", false, "", "public", []byte("{}"), time.Now(), time.Now()))
+			WillReturnRows(pgxmock.NewRows([]string{"id", "user_id", "display_name", "username", "avatar_url", "has_custom_avatar", "bio", "visibility", "preferences", "is_premium", "created_at", "updated_at"}).
+				AddRow("1", userID, "Old", "old", "", false, "", "public", []byte("{}"), false, time.Now(), time.Now()))
 
 		// 2. ensureUsername inside getOrCreateProfile shouldn't run logic if scan returned "old"
 		// If returned profile has "old", ensureUsername returns "old". No DB calls.
 
 		// 3. saveProfile -> error
 		mock.ExpectExec("UPDATE user_profiles").
-			WithArgs("New Name", "old", "", false, "", "public", pgxmock.AnyArg(), pgxmock.AnyArg(), userID).
+			WithArgs("New Name", "old", "", false, "", "public", pgxmock.AnyArg(), false, pgxmock.AnyArg(), userID).
 			WillReturnError(errors.New("db boom"))
 
 		s.handlePatchMe(w, req)
@@ -302,11 +302,11 @@ func TestHandleCheckUserExists(t *testing.T) {
 		rows := pgxmock.NewRows([]string{
 			"id", "user_id", "display_name", "username",
 			"avatar_url", "has_custom_avatar", "bio",
-			"visibility", "preferences", "created_at", "updated_at",
+			"visibility", "preferences", "is_premium", "created_at", "updated_at",
 		}).AddRow(
 			"pid", target, "Name", "user",
 			"url", false, "bio",
-			"public", []byte(`{}`), time.Now(), time.Now(),
+			"public", []byte(`{}`), false, time.Now(), time.Now(),
 		)
 
 		mock.ExpectQuery("SELECT.*FROM user_profiles WHERE user_id").
@@ -336,3 +336,39 @@ func TestHandleCheckUserExists(t *testing.T) {
 }
 
 // Needed imports: "io" added above? Yes.
+func TestHandleBecomePremium(t *testing.T) {
+	s, mock := setupMockServer(t)
+	defer mock.Close()
+
+	me := "11111111-1111-1111-1111-111111111111"
+
+	t.Run("Success", func(t *testing.T) {
+		req := newRequestWithUser("POST", "/users/me/premium", me)
+		w := httptest.NewRecorder()
+
+		// 1. getOrCreateProfile
+		mock.ExpectQuery("SELECT.*FROM user_profiles WHERE user_id").
+			WithArgs(me).
+			WillReturnRows(pgxmock.NewRows([]string{
+				"id", "user_id", "display_name", "username",
+				"avatar_url", "has_custom_avatar", "bio",
+				"visibility", "preferences", "is_premium", "created_at", "updated_at",
+			}).AddRow(
+				"pid", me, "Test User", "testuser",
+				"url", false, "bio",
+				"public", []byte(`{}`), false, time.Now(), time.Now(),
+			))
+
+		// 2. saveProfile (is_premium set to true)
+		mock.ExpectExec("UPDATE user_profiles").
+			WithArgs("Test User", "testuser", "url", false, "bio", "public", pgxmock.AnyArg(), true, pgxmock.AnyArg(), me).
+			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+
+		s.handleBecomePremium(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var resp UserProfileResponse
+		json.Unmarshal(w.Body.Bytes(), &resp)
+		assert.True(t, resp.IsPremium)
+	})
+}

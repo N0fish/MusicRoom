@@ -23,7 +23,7 @@ func (s *Server) handleSearchUsers(w http.ResponseWriter, r *http.Request) {
       SELECT id, user_id, display_name, username,
              avatar_url, has_custom_avatar,
              bio,
-             visibility, preferences,
+             visibility, preferences, is_premium,
              created_at, updated_at
       FROM user_profiles
       WHERE LOWER(username) LIKE LOWER($1)

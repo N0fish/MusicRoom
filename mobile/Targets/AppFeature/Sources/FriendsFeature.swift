@@ -153,7 +153,8 @@ public struct FriendsFeature: Sendable {
                         userId: friend.userId,
                         username: friend.username,
                         displayName: friend.displayName,
-                        avatarUrl: normalizeUrl(friend.avatarUrl)
+                        avatarUrl: normalizeUrl(friend.avatarUrl),
+                        isPremium: friend.isPremium
                     )
                 }
                 state.hasLoaded = true
@@ -172,6 +173,7 @@ public struct FriendsFeature: Sendable {
                         senderUsername: req.senderUsername,
                         senderDisplayName: req.senderDisplayName,
                         senderAvatarUrl: normalizeUrl(req.senderAvatarUrl),
+                        senderIsPremium: req.senderIsPremium,
                         status: req.status,
                         sentAt: req.sentAt
                     )
@@ -202,7 +204,8 @@ public struct FriendsFeature: Sendable {
                         userId: friend.userId,
                         username: friend.username,
                         displayName: friend.displayName,
-                        avatarUrl: normalizeUrl(friend.avatarUrl)
+                        avatarUrl: normalizeUrl(friend.avatarUrl),
+                        isPremium: friend.isPremium
                     )
                 }
                 return .none
@@ -283,6 +286,7 @@ public struct FriendsFeature: Sendable {
                     username: friend.username,
                     displayName: friend.displayName,
                     avatarUrl: friend.avatarUrl,
+                    isPremium: friend.isPremium,
                     bio: nil,
                     visibility: "public",
                     preferences: nil
@@ -301,6 +305,7 @@ public struct FriendsFeature: Sendable {
                     username: user.username,
                     displayName: user.displayName,
                     avatarUrl: user.avatarUrl,
+                    isPremium: user.isPremium,
                     bio: nil,
                     visibility: "public",
                     preferences: nil

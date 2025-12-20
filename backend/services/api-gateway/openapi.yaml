@@ -503,6 +503,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  
+  /users/me/premium:
+    post:
+      summary: Become a premium user (mock implementation)
+      tags: [users]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successfully became premium
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
     patch:
       summary: Update current user's profile
@@ -2078,7 +2098,10 @@ components:
         updatedAt:
           type: string
           format: date-time
-      required: [id, userId, displayName, visibility, preferences, createdAt, updatedAt]
+        isPremium:
+          type: boolean
+          description: Whether the user has a premium subscription
+      required: [id, userId, displayName, visibility, preferences, createdAt, updatedAt, isPremium]
 
     PublicUserProfile:
       type: object
@@ -2100,7 +2123,9 @@ components:
           $ref: '#/components/schemas/UserVisibility'
         preferences:
           $ref: '#/components/schemas/MusicPreferences'
-      required: [userId, displayName, visibility]
+        isPremium:
+          type: boolean
+      required: [userId, displayName, visibility, isPremium]
     
     UserListItem:
       type: object
@@ -2115,7 +2140,9 @@ components:
         avatarUrl:
           type: string
           format: uri
-      required: [userId, displayName]
+        isPremium:
+          type: boolean
+      required: [userId, displayName, isPremium]
 
     IncomingFriendRequestItem:
       type: object

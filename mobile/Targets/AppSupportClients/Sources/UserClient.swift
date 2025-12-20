@@ -23,6 +23,7 @@ public struct UserProfile: Codable, Equatable, Sendable {
     public let bio: String?
     public let visibility: String
     public let preferences: UserPreferences
+    public let isPremium: Bool
     // Fields not returned by /users/me, but used in UI.
     // We make them optional and mutable to potentialy fill them later or locally.
     public var linkedProviders: [String] = []
@@ -30,7 +31,7 @@ public struct UserProfile: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, userId, username, displayName, avatarUrl, hasCustomAvatar, bio, visibility,
-            preferences
+            preferences, isPremium
     }
 
     public init(from decoder: Decoder) throws {
@@ -44,6 +45,7 @@ public struct UserProfile: Codable, Equatable, Sendable {
         bio = try container.decodeIfPresent(String.self, forKey: .bio)
         visibility = try container.decode(String.self, forKey: .visibility)
         preferences = try container.decode(UserPreferences.self, forKey: .preferences)
+        isPremium = try container.decode(Bool.self, forKey: .isPremium)
 
         email = nil
         linkedProviders = []
@@ -59,6 +61,7 @@ public struct UserProfile: Codable, Equatable, Sendable {
         bio: String? = nil,
         visibility: String = "public",
         preferences: UserPreferences = UserPreferences(),
+        isPremium: Bool = false,
         linkedProviders: [String] = [],
         email: String? = nil
     ) {
@@ -71,6 +74,7 @@ public struct UserProfile: Codable, Equatable, Sendable {
         self.bio = bio
         self.visibility = visibility
         self.preferences = preferences
+        self.isPremium = isPremium
         self.linkedProviders = linkedProviders
         self.email = email
     }
@@ -83,6 +87,7 @@ public struct UserClient: Sendable {
     public var unlink: @Sendable (String) async throws -> UserProfile
     public var changePassword: @Sendable (_ current: String, _ new: String) async throws -> Void
     public var generateRandomAvatar: @Sendable () async throws -> UserProfile
+    public var becomePremium: @Sendable () async throws -> UserProfile
 }
 
 public enum UserClientError: Error, Equatable {
@@ -105,6 +110,7 @@ extension UserClient: DependencyKey {
                 bio: "Music lover",
                 visibility: "public",
                 preferences: UserPreferences(genres: ["Pop", "Rock"]),
+                isPremium: false,
                 linkedProviders: ["google"],
                 email: "preview@example.com"
             )
@@ -123,6 +129,7 @@ extension UserClient: DependencyKey {
                 bio: "Music lover",
                 visibility: "public",
                 preferences: UserPreferences(genres: ["Pop", "Rock"]),
+                isPremium: true,
                 linkedProviders: ["google", "42"],
                 email: "preview@example.com"
             )
@@ -138,6 +145,7 @@ extension UserClient: DependencyKey {
                 bio: "Music lover",
                 visibility: "public",
                 preferences: UserPreferences(genres: ["Pop", "Rock"]),
+                isPremium: false,
                 linkedProviders: [],
                 email: "preview@example.com"
             )
@@ -154,6 +162,23 @@ extension UserClient: DependencyKey {
                 bio: "Music lover",
                 visibility: "public",
                 preferences: UserPreferences(genres: ["Pop", "Rock"]),
+                isPremium: false,
+                linkedProviders: ["google"],
+                email: "preview@example.com"
+            )
+        },
+        becomePremium: {
+            UserProfile(
+                id: "mock-id",
+                userId: "mock-user-id",
+                username: "Preview User",
+                displayName: "Preview Display Name",
+                avatarUrl: "",
+                hasCustomAvatar: false,
+                bio: "Music lover",
+                visibility: "public",
+                preferences: UserPreferences(genres: ["Pop", "Rock"]),
+                isPremium: true,
                 linkedProviders: ["google"],
                 email: "preview@example.com"
             )
@@ -172,6 +197,7 @@ extension UserClient: DependencyKey {
                 bio: nil,
                 visibility: "public",
                 preferences: UserPreferences(),
+                isPremium: false,
                 linkedProviders: ["google"],
                 email: "test@example.com"
             )
@@ -190,6 +216,7 @@ extension UserClient: DependencyKey {
                 bio: nil,
                 visibility: "public",
                 preferences: UserPreferences(),
+                isPremium: true,
                 linkedProviders: ["google", "42"],
                 email: "test@example.com"
             )
@@ -205,6 +232,7 @@ extension UserClient: DependencyKey {
                 bio: nil,
                 visibility: "public",
                 preferences: UserPreferences(),
+                isPremium: false,
                 linkedProviders: [],
                 email: "test@example.com"
             )
@@ -221,6 +249,23 @@ extension UserClient: DependencyKey {
                 bio: nil,
                 visibility: "public",
                 preferences: UserPreferences(),
+                isPremium: false,
+                linkedProviders: ["google"],
+                email: "test@example.com"
+            )
+        },
+        becomePremium: {
+            UserProfile(
+                id: "test-id",
+                userId: "test-user-id",
+                username: "Test User",
+                displayName: "Test Display Name",
+                avatarUrl: "",
+                hasCustomAvatar: false,
+                bio: nil,
+                visibility: "public",
+                preferences: UserPreferences(),
+                isPremium: true,
                 linkedProviders: ["google"],
                 email: "test@example.com"
             )
@@ -363,6 +408,7 @@ extension UserClient {
                         bio: profile.bio,
                         visibility: profile.visibility,
                         preferences: profile.preferences,
+                        isPremium: profile.isPremium,
                         linkedProviders: profile.linkedProviders,
                         email: profile.email
                     )
@@ -406,6 +452,7 @@ extension UserClient {
                         bio: updatedProfile.bio,
                         visibility: updatedProfile.visibility,
                         preferences: updatedProfile.preferences,
+                        isPremium: updatedProfile.isPremium,
                         linkedProviders: updatedProfile.linkedProviders,
                         email: updatedProfile.email
                     )
@@ -460,6 +507,7 @@ extension UserClient {
                         bio: profile.bio,
                         visibility: profile.visibility,
                         preferences: profile.preferences,
+                        isPremium: profile.isPremium,
                         linkedProviders: profile.linkedProviders,
                         email: profile.email
                     )
@@ -504,6 +552,7 @@ extension UserClient {
                         bio: profile.bio,
                         visibility: profile.visibility,
                         preferences: profile.preferences,
+                        isPremium: profile.isPremium,
                         linkedProviders: profile.linkedProviders,
                         email: profile.email
                     )
@@ -542,6 +591,33 @@ extension UserClient {
                         bio: updatedProfile.bio,
                         visibility: updatedProfile.visibility,
                         preferences: updatedProfile.preferences,
+                        isPremium: updatedProfile.isPremium,
+                        linkedProviders: updatedProfile.linkedProviders,
+                        email: updatedProfile.email
+                    )
+                }
+                return updatedProfile
+            },
+            becomePremium: {
+                let baseUrl = BaseURL.resolve()
+                let url = URL(string: "\(baseUrl)/users/me/premium")!
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+
+                var updatedProfile: UserProfile = try await performRequest(request)
+
+                if let avatarUrl = updatedProfile.avatarUrl, !avatarUrl.hasPrefix("http") {
+                    updatedProfile = UserProfile(
+                        id: updatedProfile.id,
+                        userId: updatedProfile.userId,
+                        username: updatedProfile.username,
+                        displayName: updatedProfile.displayName,
+                        avatarUrl: baseUrl + avatarUrl,
+                        hasCustomAvatar: updatedProfile.hasCustomAvatar,
+                        bio: updatedProfile.bio,
+                        visibility: updatedProfile.visibility,
+                        preferences: updatedProfile.preferences,
+                        isPremium: updatedProfile.isPremium,
                         linkedProviders: updatedProfile.linkedProviders,
                         email: updatedProfile.email
                     )

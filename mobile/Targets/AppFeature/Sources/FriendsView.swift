@@ -75,15 +75,11 @@ public struct FriendsView: View {
                     store.send(.friendTapped(friend))
                 }) {
                     HStack {
-                        AsyncImage(url: URL(string: friend.avatarUrl ?? "")) { image in
-                            image.resizable()
-                        } placeholder: {
-                            Image(systemName: "person.circle.fill")
-                                .resizable()
-                                .foregroundStyle(.gray)
-                        }
-                        .frame(width: 40, height: 40)
-                        .clipShape(Circle())
+                        PremiumAvatarView(
+                            url: friend.avatarUrl,
+                            isPremium: friend.isPremium,
+                            size: 40
+                        )
 
                         VStack(alignment: .leading) {
                             Text(friend.displayName)
@@ -121,20 +117,17 @@ public struct FriendsView: View {
                             userId: request.senderId,
                             username: request.senderUsername,
                             displayName: request.senderDisplayName,
-                            avatarUrl: request.senderAvatarUrl
+                            avatarUrl: request.senderAvatarUrl,
+                            isPremium: request.senderIsPremium
                         )
                         store.send(.searchUserTapped(friend))
                     }) {
                         HStack {
-                            AsyncImage(url: URL(string: request.senderAvatarUrl ?? "")) { image in
-                                image.resizable()
-                            } placeholder: {
-                                Image(systemName: "person.circle.fill")
-                                    .resizable()
-                                    .foregroundStyle(.gray)
-                            }
-                            .frame(width: 40, height: 40)
-                            .clipShape(Circle())
+                            PremiumAvatarView(
+                                url: request.senderAvatarUrl,
+                                isPremium: request.senderIsPremium,
+                                size: 40
+                            )
 
                             VStack(alignment: .leading) {
                                 Text(
@@ -247,15 +240,11 @@ private struct SearchResultRow: View {
         HStack {
             Button(action: onTapProfile) {
                 HStack {
-                    AsyncImage(url: URL(string: user.avatarUrl ?? "")) { image in
-                        image.resizable()
-                    } placeholder: {
-                        Image(systemName: "person.circle.fill")
-                            .resizable()
-                            .foregroundStyle(.gray)
-                    }
-                    .frame(width: 40, height: 40)
-                    .clipShape(Circle())
+                    PremiumAvatarView(
+                        url: user.avatarUrl,
+                        isPremium: user.isPremium,
+                        size: 40
+                    )
 
                     VStack(alignment: .leading) {
                         Text(user.displayName)

@@ -26,15 +26,15 @@ func TestHandleSearchUsers(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows([]string{
 				"id", "user_id", "display_name", "username",
 				"avatar_url", "has_custom_avatar", "bio",
-				"visibility", "preferences", "created_at", "updated_at",
+				"visibility", "preferences", "is_premium", "created_at", "updated_at",
 			}).AddRow(
 				"pid1", "id1", "Test User 1", "testuser1",
 				"url1", false, "bio1",
-				"public", []byte(`{}`), time.Now(), time.Now(),
+				"public", []byte(`{}`), false, time.Now(), time.Now(),
 			).AddRow(
 				"pid2", "id2", "Test User 2", "testuser2",
 				"url2", true, "bio2",
-				"public", []byte(`{}`), time.Now(), time.Now(),
+				"public", []byte(`{}`), false, time.Now(), time.Now(),
 			))
 
 		s.handleSearchUsers(w, req)

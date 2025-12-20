@@ -83,20 +83,20 @@ func TestGetOrCreateProfile(t *testing.T) {
 	ctx := context.Background()
 	userID := "new-user-id"
 
-	// 1. First findProfileByUserID fails with ErrProfileNotFound (via pgx.ErrNoRows)
-	mock.ExpectQuery("SELECT id, user_id, display_name").
+	// 1. findProfileByUserID fails with ErrProfileNotFound (via pgx.ErrNoRows)
+	mock.ExpectQuery("SELECT id, user_id").
 		WithArgs(userID).
 		WillReturnError(pgx.ErrNoRows)
 
 	// 2. INSERT ... RETURNING ...
 	rows := pgxmock.NewRows([]string{
 		"id", "user_id", "display_name", "username", "avatar_url",
-		"has_custom_avatar", "bio", "visibility", "preferences",
+		"has_custom_avatar", "bio", "visibility", "preferences", "is_premium",
 		"created_at", "updated_at",
 	}).AddRow(
 		"p-id", userID, "", "", "avatar.jpg",
 		false, "", "public", []byte("{}"),
-		time.Now(), time.Now(),
+		false, time.Now(), time.Now(),
 	)
 	mock.ExpectQuery("INSERT INTO user_profiles").
 		WithArgs(userID).

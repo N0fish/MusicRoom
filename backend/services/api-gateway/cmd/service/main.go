@@ -178,6 +178,8 @@ func setupRouter(cfg Config) *chi.Mux {
 		).
 			Method(http.MethodPatch, "/users/me", userProxy)
 
+		r.Method(http.MethodPost, "/users/me/premium", userProxy)
+
 		r.Method(http.MethodPost, "/users/me/avatar/random", userProxy)
 		r.With(
 			bodySizeLimitMiddleware(6*1024*1024),

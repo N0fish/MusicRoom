@@ -305,15 +305,11 @@ struct ParticipantRow: View {
 
     var body: some View {
         HStack {
-            AsyncImage(url: URL(string: profile.avatarUrl ?? "")) { image in
-                image.resizable().aspectRatio(contentMode: .fill)
-            } placeholder: {
-                Image(systemName: "person.circle.fill")
-                    .resizable()
-                    .foregroundStyle(.gray)
-            }
-            .frame(width: 40, height: 40)
-            .clipShape(Circle())
+            PremiumAvatarView(
+                url: profile.avatarUrl,
+                isPremium: profile.isPremium,
+                size: 40
+            )
 
             VStack(alignment: .leading) {
                 Text(profile.displayName.isEmpty ? profile.username : profile.displayName)

@@ -22,7 +22,8 @@ public struct FriendProfileFeature {
         }
     }
 
-    public enum Action: ViewAction, Equatable, Sendable {
+    @CasePathable
+    public enum Action: Equatable, Sendable {
         case view(View)
         case delegate(Delegate)
         case alert(PresentationAction<Alert>)
@@ -153,6 +154,7 @@ public struct FriendProfileFeature {
             username: profile.username,
             displayName: profile.displayName,
             avatarUrl: fullUrl,
+            isPremium: profile.isPremium,
             bio: profile.bio,
             visibility: profile.visibility,
             preferences: profile.preferences

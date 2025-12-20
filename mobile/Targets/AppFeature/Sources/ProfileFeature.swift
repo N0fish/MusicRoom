@@ -53,6 +53,8 @@ public struct ProfileFeature: Sendable {
         case generateRandomAvatarResponse(TaskResult<UserProfile>)
         case fetchStats
         case statsResponse(TaskResult<MusicRoomAPIClient.UserStats>)
+        case becomePremiumTapped
+        case becomePremiumResponse(TaskResult<UserProfile>)
     }
 
     @Dependency(\.user) var userClient
@@ -144,6 +146,7 @@ public struct ProfileFeature: Sendable {
                     bio: state.editableBio,
                     visibility: state.editableVisibility,
                     preferences: preferences,
+                    isPremium: currentProfile.isPremium,
                     linkedProviders: currentProfile.linkedProviders,
                     email: state.editableEmail.isEmpty ? nil : state.editableEmail
                 )
@@ -351,6 +354,7 @@ public struct ProfileFeature: Sendable {
                         bio: normalized.bio,
                         visibility: normalized.visibility,
                         preferences: normalized.preferences,
+                        isPremium: normalized.isPremium,
                         linkedProviders: normalized.linkedProviders,
                         email: normalized.email
                     )
@@ -361,6 +365,23 @@ public struct ProfileFeature: Sendable {
             case .generateRandomAvatarResponse(.failure(let error)):
                 state.isAvatarLoading = false
                 state.errorMessage = "Failed to generate avatar: \(error.localizedDescription)"
+                return .none
+
+            case .becomePremiumTapped:
+                state.isLoading = true
+                return .run { [userClient] send in
+                    await send(
+                        .becomePremiumResponse(TaskResult { try await userClient.becomePremium() }))
+                }
+
+            case .becomePremiumResponse(.success(let profile)):
+                state.isLoading = false
+                state.userProfile = normalizeAvatarUrl(profile)
+                return .none
+
+            case .becomePremiumResponse(.failure(let error)):
+                state.isLoading = false
+                state.errorMessage = "Premium activation failed: \(error.localizedDescription)"
                 return .none
 
             case .binding:
@@ -407,6 +428,7 @@ public struct ProfileFeature: Sendable {
             bio: profile.bio,
             visibility: profile.visibility,
             preferences: profile.preferences,
+            isPremium: profile.isPremium,
             linkedProviders: profile.linkedProviders,
             email: profile.email
         )

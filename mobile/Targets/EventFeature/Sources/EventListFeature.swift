@@ -21,12 +21,13 @@ public struct EventListFeature: Sendable {
         public init() {}
     }
 
+    @CasePathable
     public enum Action: Equatable, Sendable {
         case onAppear
         case onDisappear
         case loadEvents
-        case eventsLoaded(Result<[Event], Error>)
-        case eventsLoadedFromCache(Result<[Event], Error>)  // Distinct action for cache
+        case eventsLoaded(TaskResult<[Event]>)
+        case eventsLoadedFromCache(TaskResult<[Event]>)  // Distinct action for cache
         case eventTapped(Event)
         case createEventButtonTapped
         case retryButtonTapped
@@ -35,11 +36,11 @@ public struct EventListFeature: Sendable {
         case networkStatusChanged(NetworkStatus)
         case delegate(Delegate)
         case fetchCurrentUser
-        case currentUserLoaded(Result<String, Error>)
+        case currentUserLoaded(TaskResult<String>)
         case startRealtimeConnection
         case realtimeMessageReceived(RealtimeMessage)
         case deleteEvent(Event)
-        case eventDeleted(Result<String, Error>)
+        case eventDeleted(TaskResult<String>)
 
         public enum Delegate: Equatable, Sendable {
             case sessionExpired
@@ -99,15 +100,13 @@ public struct EventListFeature: Sendable {
 
                 return .run { [userId = state.currentUserId] send in
                     await telemetry.log("Fetching Events", userId.map { ["userId": $0] } ?? [:])
-                    do {
-                        let events = try await musicRoomAPI.listEvents()
-                        // Save to cache on success
-                        try? await persistence.saveEvents(events)
-                        await send(.eventsLoaded(.success(events)))
-                    } catch {
-                        // Fallback to cache on error
-                        await send(.eventsLoaded(.failure(error)))
-                    }
+                    await send(
+                        .eventsLoaded(
+                            TaskResult {
+                                let events = try await musicRoomAPI.listEvents()
+                                try? await persistence.saveEvents(events)
+                                return events
+                            }))
                 }
 
             case .eventsLoaded(.success(let events)):
@@ -127,13 +126,11 @@ public struct EventListFeature: Sendable {
                 return .run { send in
                     await telemetry.log(
                         "Fetch Events Failed, trying cache", ["Error": error.localizedDescription])
-                    do {
-                        let events = try await persistence.loadEvents()
-                        await send(.eventsLoadedFromCache(.success(events)))
-                    } catch {
-                        // Both failed
-                        await send(.eventsLoadedFromCache(.failure(error)))
-                    }
+                    await send(
+                        .eventsLoadedFromCache(
+                            TaskResult {
+                                try await persistence.loadEvents()
+                            }))
                 }
 
             case .eventsLoadedFromCache(.success(let events)):
@@ -193,12 +190,12 @@ public struct EventListFeature: Sendable {
 
             case .fetchCurrentUser:
                 return .run { send in
-                    do {
-                        let response = try await musicRoomAPI.authMe()
-                        await send(.currentUserLoaded(.success(response.userId)))
-                    } catch {
-                        await send(.currentUserLoaded(.failure(error)))
-                    }
+                    await send(
+                        .currentUserLoaded(
+                            TaskResult {
+                                let response = try await musicRoomAPI.authMe()
+                                return response.userId
+                            }))
                 }
 
             case .currentUserLoaded(.success(let userId)):
@@ -275,17 +272,16 @@ public struct EventListFeature: Sendable {
             case .deleteEvent(let event):
                 guard let currentUserId = state.currentUserId else { return .none }
                 return .run { send in
-                    do {
-                        if event.ownerId == currentUserId {
-                            try await musicRoomAPI.deleteEvent(event.id)
-                        } else {
-                            try await musicRoomAPI.leaveEvent(event.id, currentUserId)
-                        }
-                        await send(
-                            .eventDeleted(.success(event.id.uuidString)), animation: .default)
-                    } catch {
-                        await send(.eventDeleted(.failure(error)))
-                    }
+                    await send(
+                        .eventDeleted(
+                            TaskResult {
+                                if event.ownerId == currentUserId {
+                                    try await musicRoomAPI.deleteEvent(event.id)
+                                } else {
+                                    try await musicRoomAPI.leaveEvent(event.id, currentUserId)
+                                }
+                                return event.id.uuidString
+                            }), animation: .default)
                 }
 
             case .eventDeleted(.success(let eventId)):

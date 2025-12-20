@@ -335,10 +335,10 @@ func TestHandleListFriends(t *testing.T) {
 		w := httptest.NewRecorder()
 
 		rows := pgxmock.NewRows([]string{
-			"user_id", "username", "display_name", "avatar_url", "has_custom_avatar", "visibility",
+			"user_id", "username", "display_name", "avatar_url", "has_custom_avatar", "visibility", "is_premium",
 		}).
-			AddRow("2222-2222", "buddy", "Buddy", "url", false, "public").
-			AddRow("3333-3333", "chum", "Chum", "url", false, "public")
+			AddRow("2222-2222", "buddy", "Buddy", "url", false, "public", false).
+			AddRow("3333-3333", "chum", "Chum", "url", false, "public", false)
 
 		mock.ExpectQuery("SELECT p.user_id, p.username").
 			WithArgs(me).
@@ -390,9 +390,9 @@ func TestHandleListIncomingFriendRequests(t *testing.T) {
 		w := httptest.NewRecorder()
 
 		rows := pgxmock.NewRows([]string{
-			"user_id", "username", "display_name", "avatar_url", "has_custom_avatar", "visibility", "created_at",
+			"user_id", "username", "display_name", "avatar_url", "has_custom_avatar", "visibility", "is_premium", "created_at",
 		}).AddRow(
-			"sender-id", "sender", "Sender Name", "url", false, "public", time.Now(),
+			"sender-id", "sender", "Sender Name", "url", false, "public", false, time.Now(),
 		)
 
 		mock.ExpectQuery("SELECT p.user_id, p.username.*FROM friend_requests").

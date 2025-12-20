@@ -22,27 +22,11 @@ public struct FriendProfileView: View {
                     VStack(spacing: 24) {
                         // Avatar Section
                         VStack(spacing: 16) {
-                            if let avatarUrl = profile.avatarUrl, let url = URL(string: avatarUrl) {
-                                AsyncImage(url: url) { image in
-                                    image
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                } placeholder: {
-                                    Color.white.opacity(0.1)
-                                }
-                                .frame(width: 120, height: 120)
-                                .clipShape(Circle())
-                                .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 2))
-                            } else {
-                                Circle()
-                                    .fill(Color.white.opacity(0.1))
-                                    .frame(width: 120, height: 120)
-                                    .overlay(
-                                        Text(profile.displayName.prefix(1).uppercased())
-                                            .font(.system(size: 48, weight: .bold))
-                                            .foregroundStyle(.white)
-                                    )
-                            }
+                            PremiumAvatarView(
+                                url: profile.avatarUrl,
+                                isPremium: profile.isPremium,
+                                size: 120
+                            )
 
                             VStack(spacing: 4) {
                                 Text(profile.displayName)

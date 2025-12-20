@@ -52,6 +52,7 @@ public struct MusicRoomAPIClient: Sendable {
         public let userId: String
         public let email: String
         public let emailVerified: Bool
+        public let isPremium: Bool
         public let linkedProviders: [String]?
     }
 
@@ -582,6 +583,7 @@ extension MusicRoomAPIClient: DependencyKey {
             authMe: {
                 AuthMeResponse(
                     userId: "user1", email: "test@example.com", emailVerified: true,
+                    isPremium: true,
                     linkedProviders: ["google"])
             },
             getPlaylist: { _ in
@@ -632,6 +634,7 @@ extension MusicRoomAPIClient: DependencyKey {
             authMe: {
                 AuthMeResponse(
                     userId: "user1", email: "test@example.com", emailVerified: true,
+                    isPremium: false,
                     linkedProviders: [])
             }, getPlaylist: { _ in throw MusicRoomAPIError.networkError("Test unimplemented") },
             inviteUser: { _, _ in },

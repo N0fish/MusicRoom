@@ -19,6 +19,7 @@ final class ProfileFeatureTests: XCTestCase {
             avatarUrl: "http://example.com/avatar.jpg",
             hasCustomAvatar: false,
             preferences: UserPreferences(genres: ["Rock"]),
+            isPremium: false,
             linkedProviders: [],
             email: "test@example.com"
         )
@@ -32,13 +33,13 @@ final class ProfileFeatureTests: XCTestCase {
             }
         }
 
-        await store.send(.onAppear) {
+        await store.send(ProfileFeature.Action.onAppear) {
             $0.isLoading = true
         }
 
-        await store.receive(.fetchStats)
+        await store.receive(ProfileFeature.Action.fetchStats)
 
-        await store.receive(\.profileResponse.success) {
+        await store.receive(.profileResponse(.success(profile))) {
             $0.isLoading = false
             $0.userProfile = profile
             $0.editableDisplayName = "Test User"
@@ -48,7 +49,9 @@ final class ProfileFeatureTests: XCTestCase {
             $0.hasLoaded = true
         }
 
-        await store.receive(\.statsResponse.success) {
+        await store.receive(
+            .statsResponse(.success(MusicRoomAPIClient.UserStats(eventsHosted: 10, votesCast: 50)))
+        ) {
             $0.userStats = MusicRoomAPIClient.UserStats(eventsHosted: 10, votesCast: 50)
         }
     }
@@ -62,6 +65,7 @@ final class ProfileFeatureTests: XCTestCase {
             avatarUrl: "http://example.com/avatar.jpg",
             hasCustomAvatar: false,
             preferences: UserPreferences(genres: ["Old"]),
+            isPremium: false,
             linkedProviders: [],
             email: "old@example.com"
         )
@@ -75,6 +79,7 @@ final class ProfileFeatureTests: XCTestCase {
             avatarUrl: "http://example.com/avatar.jpg",
             hasCustomAvatar: false,
             preferences: UserPreferences(genres: ["New"]),
+            isPremium: false,
             linkedProviders: [],
             email: "new@example.com"
         )
@@ -93,12 +98,12 @@ final class ProfileFeatureTests: XCTestCase {
         }
 
         // Load initial
-        await store.send(.onAppear) {
+        await store.send(ProfileFeature.Action.onAppear) {
             $0.isLoading = true
         }
-        await store.receive(.fetchStats)
+        await store.receive(ProfileFeature.Action.fetchStats)
 
-        await store.receive(\.profileResponse.success) {
+        await store.receive(.profileResponse(.success(initialProfile))) {
             $0.isLoading = false
             $0.userProfile = initialProfile
             $0.editableDisplayName = "Old Name"
@@ -108,35 +113,38 @@ final class ProfileFeatureTests: XCTestCase {
             $0.hasLoaded = true
         }
 
-        await store.receive(\.statsResponse.success) {
+        await store.receive(
+            .statsResponse(.success(MusicRoomAPIClient.UserStats(eventsHosted: 5, votesCast: 20)))
+        ) {
             $0.userStats = MusicRoomAPIClient.UserStats(eventsHosted: 5, votesCast: 20)
         }
 
         // Toggle Edit
-        await store.send(.toggleEditMode) {
+        await store.send(ProfileFeature.Action.toggleEditMode) {
             $0.isEditing = true
         }
 
         // Edit fields
-        await store.send(.binding(.set(\.editableDisplayName, "New Name"))) {
+        // Edit fields
+        await store.send(ProfileFeature.Action.binding(.set(\.editableDisplayName, "New Name"))) {
             $0.editableDisplayName = "New Name"
         }
-        await store.send(.binding(.set(\.editableUsername, "new"))) {
+        await store.send(ProfileFeature.Action.binding(.set(\.editableUsername, "new"))) {
             $0.editableUsername = "new"
         }
-        await store.send(.binding(.set(\.editableEmail, "new@example.com"))) {
+        await store.send(ProfileFeature.Action.binding(.set(\.editableEmail, "new@example.com"))) {
             $0.editableEmail = "new@example.com"
         }
-        await store.send(.binding(.set(\.editableMusicPreferences, "New"))) {
+        await store.send(ProfileFeature.Action.binding(.set(\.editableMusicPreferences, "New"))) {
             $0.editableMusicPreferences = "New"
         }
 
         // Save
-        await store.send(.saveButtonTapped) {
+        await store.send(ProfileFeature.Action.saveButtonTapped) {
             $0.isLoading = true
         }
 
-        await store.receive(\.updateProfileResponse.success) {
+        await store.receive(.updateProfileResponse(.success(updatedProfile))) {
             $0.isLoading = false
             $0.isEditing = false
             $0.userProfile = updatedProfile
@@ -154,8 +162,7 @@ final class ProfileFeatureTests: XCTestCase {
             $0.authentication.logout = { logoutCalled.setValue(true) }
         }
 
-        await store.send(.logoutButtonTapped)
-
+        await store.send(ProfileFeature.Action.logoutButtonTapped)
         XCTAssertTrue(logoutCalled.value)
     }
 
@@ -163,7 +170,10 @@ final class ProfileFeatureTests: XCTestCase {
 
         let profileLinked = UserProfile(
             id: "1", userId: "user1", username: "u", displayName: "d", avatarUrl: "",
-            hasCustomAvatar: false, preferences: UserPreferences(), linkedProviders: ["google"],
+            hasCustomAvatar: false,
+            preferences: UserPreferences(),
+            isPremium: false,
+            linkedProviders: ["google"],
             email: nil
         )
         _ = profileLinked  // Suppress unused warning if closure is ignored
@@ -190,7 +200,7 @@ final class ProfileFeatureTests: XCTestCase {
             $0.isLoading = true
         }
 
-        await store.receive(\.linkAccountResponse.success) {
+        await store.receive(.linkAccountResponse(.success(profileLinked))) {
             $0.isLoading = false
             $0.userProfile = profileLinked
             $0.errorMessage = nil
@@ -216,7 +226,9 @@ final class ProfileFeatureTests: XCTestCase {
             $0.isLoading = true
         }
 
-        await store.receive(\.linkAccountResponse.failure) {
+        await store.receive(
+            .linkAccountResponse(.failure(UserClientError.serverError(statusCode: 409)))
+        ) {
             $0.isLoading = false
             $0.errorMessage =
                 "This account is already linked to another user. Please log in to that account to unlink it first."
@@ -227,7 +239,10 @@ final class ProfileFeatureTests: XCTestCase {
 
         let profileUnlinked = UserProfile(
             id: "1", userId: "user1", username: "u", displayName: "d", avatarUrl: "",
-            hasCustomAvatar: false, preferences: UserPreferences(), linkedProviders: [], email: nil
+            hasCustomAvatar: false,
+            preferences: UserPreferences(),
+            isPremium: false,
+            linkedProviders: [], email: nil
         )
 
         let store = TestStore(initialState: ProfileFeature.State()) {
@@ -246,7 +261,7 @@ final class ProfileFeatureTests: XCTestCase {
             $0.isLoading = true
         }
 
-        await store.receive(\.linkAccountResponse.success) {
+        await store.receive(.linkAccountResponse(.success(profileUnlinked))) {
             $0.isLoading = false
             $0.userProfile = profileUnlinked
             $0.errorMessage = nil
@@ -263,25 +278,25 @@ final class ProfileFeatureTests: XCTestCase {
             }
         }
 
-        await store.send(.toggleChangePasswordMode) {
+        await store.send(ProfileFeature.Action.toggleChangePasswordMode) {
             $0.isChangingPassword = true
         }
 
-        await store.send(.binding(.set(\.currentPassword, "oldPass"))) {
+        await store.send(ProfileFeature.Action.binding(.set(\.currentPassword, "oldPass"))) {
             $0.currentPassword = "oldPass"
         }
-        await store.send(.binding(.set(\.newPassword, "newPass"))) {
+        await store.send(ProfileFeature.Action.binding(.set(\.newPassword, "newPass"))) {
             $0.newPassword = "newPass"
         }
-        await store.send(.binding(.set(\.confirmNewPassword, "newPass"))) {
+        await store.send(ProfileFeature.Action.binding(.set(\.confirmNewPassword, "newPass"))) {
             $0.confirmNewPassword = "newPass"
         }
 
-        await store.send(.changePasswordButtonTapped) {
+        await store.send(ProfileFeature.Action.changePasswordButtonTapped) {
             $0.isLoading = true
         }
 
-        await store.receive(\.changePasswordResponse.success) {
+        await store.receive(.changePasswordResponse(.success(true))) {
             $0.isLoading = false
             $0.isChangingPassword = false
             $0.passwordChangeSuccessMessage = "Password changed successfully."
@@ -296,21 +311,21 @@ final class ProfileFeatureTests: XCTestCase {
             ProfileFeature()
         }
 
-        await store.send(.toggleChangePasswordMode) {
+        await store.send(ProfileFeature.Action.toggleChangePasswordMode) {
             $0.isChangingPassword = true
         }
 
-        await store.send(.binding(.set(\.currentPassword, "oldPass"))) {
+        await store.send(ProfileFeature.Action.binding(.set(\.currentPassword, "oldPass"))) {
             $0.currentPassword = "oldPass"
         }
-        await store.send(.binding(.set(\.newPassword, "new1"))) {
+        await store.send(ProfileFeature.Action.binding(.set(\.newPassword, "new1"))) {
             $0.newPassword = "new1"
         }
-        await store.send(.binding(.set(\.confirmNewPassword, "new2"))) {
+        await store.send(ProfileFeature.Action.binding(.set(\.confirmNewPassword, "new2"))) {
             $0.confirmNewPassword = "new2"
         }
 
-        await store.send(.changePasswordButtonTapped) {
+        await store.send(ProfileFeature.Action.changePasswordButtonTapped) {
             $0.errorMessage = "New passwords do not match."
         }
     }
@@ -321,7 +336,10 @@ final class ProfileFeatureTests: XCTestCase {
         let randomProfile = UserProfile(
             id: "1", userId: "u1", username: "u", displayName: "d",
             avatarUrl: "/avatars/random.svg",
-            hasCustomAvatar: false, preferences: UserPreferences(), linkedProviders: [], email: nil
+            hasCustomAvatar: false,
+            preferences: UserPreferences(),
+            isPremium: false,
+            linkedProviders: [], email: nil
         )
 
         let store = TestStore(initialState: ProfileFeature.State()) {
@@ -333,7 +351,7 @@ final class ProfileFeatureTests: XCTestCase {
 
         store.exhaustivity = .off
 
-        await store.send(.generateRandomAvatarTapped) {
+        await store.send(ProfileFeature.Action.generateRandomAvatarTapped) {
             $0.isAvatarLoading = true
         }
 
@@ -350,7 +368,9 @@ final class ProfileFeatureTests: XCTestCase {
     func testOnAppear_RefetchesStats_WhenAlreadyLoaded() async {
         let profile = UserProfile(
             id: "1", userId: "user1", username: "u", displayName: "d",
-            avatarUrl: nil, hasCustomAvatar: false, preferences: UserPreferences(),
+            avatarUrl: nil, hasCustomAvatar: false,
+            preferences: UserPreferences(),
+            isPremium: false,
             linkedProviders: [], email: nil
         )
 
@@ -368,13 +388,47 @@ final class ProfileFeatureTests: XCTestCase {
         }
 
         // Action: .onAppear
-        await store.send(.onAppear)
+        await store.send(ProfileFeature.Action.onAppear)
         // Expect NO state change immediately (isLoading remains false)
 
         await store.receive(.fetchStats)
 
-        await store.receive(\.statsResponse.success) {
+        await store.receive(
+            .statsResponse(.success(MusicRoomAPIClient.UserStats(eventsHosted: 5, votesCast: 10)))
+        ) {
             $0.userStats = MusicRoomAPIClient.UserStats(eventsHosted: 5, votesCast: 10)
+        }
+    }
+
+    func testBecomePremium_Success() async {
+        let initialProfile = UserProfile(
+            id: "1", userId: "user1", username: "test", displayName: "Test", avatarUrl: nil,
+            hasCustomAvatar: false, preferences: UserPreferences(), isPremium: false,
+            linkedProviders: [], email: nil
+        )
+
+        let premiumProfile = UserProfile(
+            id: "1", userId: "user1", username: "test", displayName: "Test", avatarUrl: nil,
+            hasCustomAvatar: false, preferences: UserPreferences(), isPremium: true,
+            linkedProviders: [], email: nil
+        )
+
+        var state = ProfileFeature.State()
+        state.userProfile = initialProfile
+
+        let store = TestStore(initialState: state) {
+            ProfileFeature()
+        } withDependencies: {
+            $0.user.becomePremium = { premiumProfile }
+        }
+
+        await store.send(ProfileFeature.Action.becomePremiumTapped) {
+            $0.isLoading = true
+        }
+
+        await store.receive(.becomePremiumResponse(.success(premiumProfile))) {
+            $0.isLoading = false
+            $0.userProfile = premiumProfile
         }
     }
 }

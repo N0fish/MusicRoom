@@ -378,20 +378,11 @@ struct InviteFriendSheet: View {
                     onSelect(friend)
                 } label: {
                     HStack(spacing: 12) {
-                        if let url = friend.avatarUrl, let uri = URL(string: url) {
-                            AsyncImage(url: uri) { image in
-                                image.resizable().aspectRatio(contentMode: .fill)
-                            } placeholder: {
-                                Color.gray.opacity(0.3)
-                            }
-                            .frame(width: 50, height: 50)
-                            .clipShape(Circle())
-                        } else {
-                            Circle()
-                                .fill(Color.gray.opacity(0.3))
-                                .frame(width: 50, height: 50)
-                                .overlay(Text(String(friend.initials)).foregroundColor(.white))
-                        }
+                        PremiumAvatarView(
+                            url: friend.avatarUrl,
+                            isPremium: friend.isPremium,
+                            size: 50
+                        )
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text(friend.displayName)

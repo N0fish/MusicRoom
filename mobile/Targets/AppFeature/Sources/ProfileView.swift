@@ -36,26 +36,17 @@ public struct ProfileView: View {
                     VStack(spacing: 24) {
                         // Header
                         VStack(spacing: 16) {
-                            ZStack {
-                                if store.isAvatarLoading {
-                                    ShimmerView()
-                                        .frame(width: 120, height: 120)
-                                        .clipShape(Circle())
-                                } else {
-                                    AsyncImage(url: URL(string: profile.avatarUrl ?? "")) { image in
-                                        image
-                                            .resizable()
-                                            .aspectRatio(contentMode: .fill)
-                                    } placeholder: {
-                                        Image(systemName: "person.circle.fill")
-                                            .resizable()
-                                            .foregroundStyle(.white.opacity(0.3))
-                                    }
+                            if store.isAvatarLoading {
+                                ShimmerView()
                                     .frame(width: 120, height: 120)
                                     .clipShape(Circle())
-                                }
+                            } else {
+                                PremiumAvatarView(
+                                    url: profile.avatarUrl,
+                                    isPremium: profile.isPremium,
+                                    size: 120
+                                )
                             }
-                            .overlay(Circle().stroke(.white.opacity(0.2), lineWidth: 2))
 
                             if store.isEditing {
                                 Button(action: { store.send(.generateRandomAvatarTapped) }) {
@@ -174,6 +165,40 @@ public struct ProfileView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
 
                                 infoRow("Visibility", value: profile.visibility.capitalized)
+                            }
+                        }
+
+                        if !profile.isPremium && !store.isEditing {
+                            profileSection("Membership") {
+                                VStack(spacing: 16) {
+                                    Text(
+                                        "Unlock exclusive features like an animated avatar halo and special badges."
+                                    )
+                                    .foregroundStyle(.white.opacity(0.8))
+                                    .font(.subheadline)
+                                    .multilineTextAlignment(.center)
+
+                                    Button {
+                                        store.send(.becomePremiumTapped)
+                                    } label: {
+                                        HStack {
+                                            Image(systemName: "star.fill")
+                                            Text("Become Premium")
+                                        }
+                                        .font(.headline)
+                                        .foregroundStyle(.black)
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
+                                        .background(
+                                            LinearGradient(
+                                                colors: [.liquidPrimary, .liquidSecondary],
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            )
+                                        )
+                                        .cornerRadius(12)
+                                    }
+                                }
                             }
                         }
 
