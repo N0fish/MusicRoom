@@ -48,6 +48,7 @@ func main() {
 	r.Get("/auth", app.page("auth.gohtml", nil))
 	r.Get("/auth/callback", app.page("auth.gohtml", nil))
 	r.Get("/playlists", app.playlistsPage())
+	r.Get("/playlists/{id}", app.playlistDetailPage())
 	r.Get("/event", app.page("event.gohtml", nil))
 	r.Get("/realtime", app.page("realtime.gohtml", nil))
 	r.Get("/me", app.page("me.gohtml", nil))
@@ -114,6 +115,29 @@ func (a *App) playlistsPage() http.HandlerFunc {
 			"Playlists": []Playlist{},
 		}
 		a.page("playlists.gohtml", data)(w, r)
+	}
+}
+
+func (a *App) playlistDetailPage() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		data := map[string]any{
+			"PlaylistID": id,
+		}
+
+		tpl, err := html_template.ParseFS(tplFS, "templates/base.gohtml", "templates/playlist-detail.gohtml")
+		if err != nil {
+			http.Error(w, "template error", 500)
+			return
+		}
+
+		data["API"] = a.API
+		data["WS"] = a.WS
+		data["Path"] = r.URL.Path
+
+		if err := tpl.ExecuteTemplate(w, "base", data); err != nil {
+			http.Error(w, err.Error(), 500)
+		}
 	}
 }
 

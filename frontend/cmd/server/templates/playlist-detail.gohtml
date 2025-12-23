@@ -1,0 +1,42 @@
+{{ define "content" }}
+<div class="mb-4">
+    <a href="/playlists" class="text-primary hover:underline">&larr; Back to Playlists</a>
+</div>
+
+<div class="mb-4">
+    <h2 class="text-2xl font-bold" id="pl-name">Loading...</h2>
+    <span id="pl-id" style="display: none;">{{ .PlaylistID }}</span>
+</div>
+
+<div class="card mt-6">
+    <div class="relative">
+      <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+        <svg class="h-5 w-5 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+      </div>
+      <input id="music-search-query" 
+             autocomplete="off"
+             onkeydown="if(event.key === 'Enter') searchMusic()"
+             class="block w-full bg-input-bg border-input-border rounded-md pl-10 pr-3 py-2 focus:outline-none focus:ring-1 focus:ring-input-ring focus:border-input-focus text-text" 
+             placeholder="Search for songs or artists..." />
+    </div>
+    <ul id="music-search-results" class="mt-4 space-y-1 text-text-muted"></ul>
+</div>
+
+<div id="current-playlist" class="card mt-6">
+    <ul id="pl-tracks" class="space-y-2">
+    </ul>
+</div>
+
+<script src="/static/playlists.js?v=9"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const id = "{{ .PlaylistID }}";
+        if (id) {
+            loadPlaylist(id);
+        }
+    });
+</script>
+{{ end }}
+{{ template "base" . }}

@@ -33,6 +33,13 @@ input:-webkit-autofill:focus,
 input:-webkit-autofill:active {
     -webkit-box-shadow: 0 0 0px 1000px var(--color-input-bg) inset !important;
     -webkit-text-fill-color: var(--color-text) !important;
+    color: var(--color-text) !important;
+    background-color: var(--color-input-bg) !important;
+    transition: background-color 5000s ease-in-out 0s;
+}
+
+input {
+    caret-color: var(--color-text);
 }
 
 @tailwind base;
