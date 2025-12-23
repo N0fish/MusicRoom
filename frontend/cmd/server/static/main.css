@@ -41,7 +41,7 @@ input:-webkit-autofill:active {
 
 @layer components {
   .btn {
-    @apply inline-block bg-primary hover:bg-primary-hover text-white font-semibold py-2 px-4 rounded-lg shadow transition-transform transform hover:scale-105;
+    @apply inline-block bg-primary hover:bg-primary-hover text-white font-semibold py-2 px-4 rounded-md shadow;
   }
 
   .card {
