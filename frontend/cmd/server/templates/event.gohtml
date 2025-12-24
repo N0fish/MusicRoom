@@ -22,10 +22,9 @@
   </div>
 </div>
 <script>
-const API = "{{ .API }}"
 async function createEvent(){
   const name = document.getElementById('ev-name').value
-  const res = await fetch(API + '/events', {
+  const res = await fetch(authService.apiUrl + '/events', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ name, visibility: 'public' })
@@ -38,7 +37,7 @@ async function castVote(){
   const track = document.getElementById('vote-track').value
   const voterId = document.getElementById('vote-user').value
   if(!id) return
-  await fetch(API + `/events/${id}/votes`, {
+  await fetch(authService.apiUrl + `/events/${id}/votes`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ track, voterId })
@@ -48,7 +47,7 @@ async function castVote(){
 async function loadTally(){
   const id = document.getElementById('ev-id').textContent
   if(!id) return
-  const res = await fetch(API + `/events/${id}/tally`)
+  const res = await fetch(authService.apiUrl + `/events/${id}/tally`)
   const list = await res.json()
   const ul = document.getElementById('tally')
   ul.innerHTML = ''

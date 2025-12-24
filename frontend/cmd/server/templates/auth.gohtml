@@ -53,6 +53,7 @@
 </div>
 
 <script>
+{
   function handleOAuthCallback() {
     const fragment = new URLSearchParams(window.location.hash.substring(1));
     const accessToken = fragment.get('accessToken');
@@ -168,6 +169,7 @@
       });
     });
   }
+}
 </script>
 {{ end }}
 

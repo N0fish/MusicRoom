@@ -10,12 +10,12 @@
 </div>
 
 <script>
+{
   const friendRequestsContainer = document.getElementById('friend-requests');
-  const API = "{{.API}}";
 
   async function getIncomingFriendRequests() {
     try {
-      const res = await authService.fetchWithAuth(`${API}/users/me/friends/requests/incoming`);
+      const res = await authService.fetchWithAuth(`${authService.apiUrl}/users/me/friends/requests/incoming`);
       if (!res.ok) {
         throw new Error('Failed to get incoming friend requests');
       }
@@ -49,9 +49,9 @@
     `).join('');
   }
 
-  async function acceptFriendRequest(userId) {
+  window.acceptFriendRequest = async function(userId) {
     try {
-      const res = await authService.fetchWithAuth(`${API}/users/me/friends/${userId}/accept`, {
+      const res = await authService.fetchWithAuth(`${authService.apiUrl}/users/me/friends/${userId}/accept`, {
         method: 'POST',
       });
       if (!res.ok) {
@@ -66,9 +66,9 @@
     }
   }
 
-  async function rejectFriendRequest(userId) {
+  window.rejectFriendRequest = async function(userId) {
     try {
-      const res = await authService.fetchWithAuth(`${API}/users/me/friends/${userId}/reject`, {
+      const res = await authService.fetchWithAuth(`${authService.apiUrl}/users/me/friends/${userId}/reject`, {
         method: 'POST',
       });
       if (!res.ok) {
@@ -84,6 +84,7 @@
   }
 
   getIncomingFriendRequests();
+}
 </script>
 {{end}}
 {{ template "base" . }}

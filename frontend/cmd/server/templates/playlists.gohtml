@@ -11,14 +11,15 @@
     
     <div id="playlists-list" class="space-y-3">
         {{range .Playlists}}
-        <div data-id="{{.ID}}" onclick="window.location.href='/playlists/{{.ID}}'" class="flex justify-between items-center p-4 bg-white/5 rounded-md cursor-pointer hover:bg-white/10 transition-colors">
-            <div class="flex-1 min-w-0 pr-4">
+        <div data-id="{{.ID}}" class="relative flex justify-between items-center p-4 bg-white/5 rounded-md hover:bg-white/10 transition-colors">
+            <a href="/playlists/{{.ID}}" hx-boost="false" class="absolute inset-0"></a>
+            <div class="flex-1 min-w-0 pr-4 pointer-events-none">
                 <div class="font-bold text-text truncate">{{.Name}}</div>
                 <div class="text-sm text-text-muted truncate">{{.Description}}</div>
             </div>
-            <div class="flex items-center gap-4">
-                <button class="btn-small" onclick="event.stopPropagation(); renamePlaylist('{{.ID}}', '{{.Name}}')">Rename</button>
-                <button class="inline-flex items-center justify-center text-primary hover:text-primary-hover transition-colors" onclick="event.stopPropagation(); deletePlaylist('{{.ID}}')" title="Delete">
+            <div class="flex items-center gap-4 relative z-10">
+                <button class="btn-small" onclick="renamePlaylist('{{.ID}}', '{{.Name}}')">Rename</button>
+                <button class="inline-flex items-center justify-center text-primary hover:text-primary-hover transition-colors" onclick="deletePlaylist('{{.ID}}')" title="Delete">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>

@@ -1,7 +1,6 @@
-const API = "{{ .API }}"
 
 async function loadPlaylist(playlistId) {
-  const res = await authService.fetchWithAuth(API + '/playlists/' + playlistId)
+  const res = await authService.fetchWithAuth(authService.apiUrl + '/playlists/' + playlistId)
   if (!res.ok) {
     window.showAlert({ title: 'Error', content: 'Failed to load playlist.' })
     return
@@ -23,7 +22,7 @@ async function loadPlaylist(playlistId) {
   if (tracksUl) {
       tracksUl.innerHTML = ''
       if (tracks && tracks.length > 0) {
-        tracks.forEach(track => {
+        tracks.forEach((track, index) => {
           const li = document.createElement('li')
           li.className = 'flex justify-between items-center py-3 px-4 bg-white/5 rounded-md hover:bg-white/10 transition-colors mb-2'
           
@@ -40,7 +39,8 @@ async function loadPlaylist(playlistId) {
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               `
-              btnPlay.onclick = () => playTrack(track.providerTrackId, track.title, track.artist)
+              // Use setQueue to enable Next/Prev functionality
+              btnPlay.onclick = () => setQueue(tracks, index, playlistId)
               infoDiv.appendChild(btnPlay)
           } else {
               // Placeholder for old tracks without ID
@@ -59,9 +59,10 @@ async function loadPlaylist(playlistId) {
           textDiv.className = 'truncate'
           
           // Clean title: remove artist prefix if present
-          let displayTitle = track.title;
-          if (track.artist && displayTitle.toLowerCase().startsWith(track.artist.toLowerCase())) {
-              displayTitle = displayTitle.substring(track.artist.length).replace(/^[\s\-\—\:]+/, '');
+          let displayTitle = decodeHTMLEntities(track.title);
+          let artist = decodeHTMLEntities(track.artist);
+          if (artist && displayTitle.toLowerCase().startsWith(artist.toLowerCase())) {
+              displayTitle = displayTitle.substring(artist.length).replace(/^[\s\-\—\:]+/, '');
           }
 
           const titleSpan = document.createElement('div')
@@ -70,7 +71,7 @@ async function loadPlaylist(playlistId) {
           
           const artistSpan = document.createElement('div')
           artistSpan.className = 'text-sm text-text-muted truncate'
-          artistSpan.textContent = track.artist
+          artistSpan.textContent = artist
           
           textDiv.appendChild(titleSpan)
           textDiv.appendChild(artistSpan)
@@ -105,7 +106,7 @@ async function deleteTrack(playlistId, trackId) {
         title: 'Remove Track',
         content: 'Are you sure you want to remove this track?',
         onConfirm: async () => {
-            const res = await authService.fetchWithAuth(API + `/playlists/${playlistId}/tracks/${trackId}`, {
+            const res = await authService.fetchWithAuth(authService.apiUrl + `/playlists/${playlistId}/tracks/${trackId}`, {
                 method: 'DELETE'
             })
 
@@ -124,7 +125,7 @@ async function searchMusic() {
   const query = document.getElementById('music-search-query').value
   if (!query) return
 
-  const res = await authService.fetchWithAuth(API + '/music/search?query=' + encodeURIComponent(query))
+  const res = await authService.fetchWithAuth(authService.apiUrl + '/music/search?query=' + encodeURIComponent(query))
   const json = await res.json()
 
   const ul = document.getElementById('music-search-results')
@@ -132,6 +133,10 @@ async function searchMusic() {
 
   if (json.items && json.items.length > 0) {
     json.items.forEach(item => {
+      // Decode entities for internal data and display
+      item.title = decodeHTMLEntities(item.title);
+      item.artist = decodeHTMLEntities(item.artist);
+
       const li = document.createElement('li')
       li.className = 'flex justify-between items-center py-2 px-3 hover:bg-white/5 rounded transition-colors'
 
@@ -180,7 +185,7 @@ async function addTrackToPlaylist(item) {
       thumbnailUrl: item.thumbnailUrl
   }
 
-  const res = await authService.fetchWithAuth(API + `/playlists/${playlistId}/tracks`, {
+  const res = await authService.fetchWithAuth(authService.apiUrl + `/playlists/${playlistId}/tracks`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body)
@@ -206,7 +211,7 @@ function createPlaylist() {
         return
       }
 
-      const res = await authService.fetchWithAuth(API + '/playlists', {
+      const res = await authService.fetchWithAuth(authService.apiUrl + '/playlists', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ name: name, isPublic: true }) // Make it public by default for now
@@ -236,7 +241,7 @@ async function refreshPlaylists() {
   const container = document.getElementById('playlists-list')
   if (!container) return // Do nothing if container is not present (e.g. detail page)
 
-  const res = await authService.fetchWithAuth(API + '/playlists')
+  const res = await authService.fetchWithAuth(authService.apiUrl + '/playlists')
   if (!res.ok) {
     console.error('Failed to fetch playlists')
     return
@@ -248,37 +253,37 @@ async function refreshPlaylists() {
   playlists.forEach(pl => {
     const item = document.createElement('div')
     item.setAttribute('data-id', pl.id)
-    item.className = 'flex justify-between items-center p-4 bg-white/5 rounded-md cursor-pointer hover:bg-white/10 transition-colors'
+    item.className = 'relative flex justify-between items-center p-4 bg-white/5 rounded-md hover:bg-white/10 transition-colors'
     
-    // Navigate to detail page on click
-    item.onclick = () => {
-        window.location.href = '/playlists/' + pl.id
-    }
+    // Create stretched link
+    const link = document.createElement('a')
+    link.href = '/playlists/' + pl.id
+    link.className = 'absolute inset-0'
+    item.appendChild(link)
 
     const info = document.createElement('div')
-    info.className = 'flex-1 min-w-0 pr-4'
+    info.className = 'flex-1 min-w-0 pr-4 pointer-events-none'
     
     const name = document.createElement('div')
     name.className = 'font-bold text-text truncate'
-    name.textContent = pl.name
+    name.textContent = decodeHTMLEntities(pl.name)
     info.appendChild(name)
 
     const desc = document.createElement('div')
     desc.className = 'text-sm text-text-muted truncate'
-    desc.textContent = pl.description || ''
+    desc.textContent = decodeHTMLEntities(pl.description || '')
     info.appendChild(desc)
     
     item.appendChild(info)
 
     const actions = document.createElement('div')
-    actions.className = 'flex items-center gap-4'
+    actions.className = 'flex items-center gap-4 relative z-10'
     
     // Rename Button
     const btnRename = document.createElement('button')
     btnRename.className = 'btn-small'
     btnRename.textContent = 'Rename'
-    btnRename.onclick = (e) => {
-        e.stopPropagation()
+    btnRename.onclick = () => {
         renamePlaylist(pl.id, pl.name)
     }
     actions.appendChild(btnRename)
@@ -292,8 +297,7 @@ async function refreshPlaylists() {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
         </svg>
     `
-    btnDelete.onclick = (e) => {
-        e.stopPropagation()
+    btnDelete.onclick = () => {
         deletePlaylist(pl.id)
     }
     actions.appendChild(btnDelete)
@@ -312,7 +316,7 @@ function renamePlaylist(id, currentName) {
         window.showAlert({ title: 'Warning', content: 'Name must be at least 3 characters long.' })
         return
       }
-      const res = await authService.fetchWithAuth(API + '/playlists/' + id, {
+      const res = await authService.fetchWithAuth(authService.apiUrl + '/playlists/' + id, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ name: newName })
@@ -374,6 +378,13 @@ function highlightPlaylist(playlistId) {
              row.style.backgroundColor = ''
         }
     })
+}
+
+function decodeHTMLEntities(text) {
+    if (!text) return '';
+    const textArea = document.createElement('textarea');
+    textArea.innerHTML = text;
+    return textArea.value;
 }
 
 // Load playlists on startup (only if table exists)

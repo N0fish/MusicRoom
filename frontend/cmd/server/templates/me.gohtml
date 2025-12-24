@@ -129,12 +129,12 @@
 </div>
 
 <script>
-  const API = "{{.API}}";
+{
   let userProfile = {};
 
   async function loadProfile() {
     try {
-      const resUsers = await authService.fetchWithAuth(API + "/users/me");
+      const resUsers = await authService.fetchWithAuth(authService.apiUrl + "/users/me");
       if (!resUsers.ok) throw new Error("Failed to load user profile");
       userProfile = await resUsers.json();
 
@@ -142,9 +142,9 @@
       const avatarPath = userProfile.avatarUrl || "/avatars/default.png";
       avatarEl.src = avatarPath.startsWith("http")
         ? avatarPath
-        : API + avatarPath;
+        : authService.apiUrl + avatarPath;
 
-      const resAuth = await authService.fetchWithAuth(API + "/auth/me");
+      const resAuth = await authService.fetchWithAuth(authService.apiUrl + "/auth/me");
       if (!resAuth.ok) throw new Error("Failed to load auth data");
       const dataAuth = await resAuth.json();
 
@@ -216,7 +216,7 @@
     const body = {};
     body[field] = value;
 
-    const res = await authService.fetchWithAuth(API + "/users/me", {
+    const res = await authService.fetchWithAuth(authService.apiUrl + "/users/me", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
@@ -248,7 +248,7 @@
     body.preferences[field] = values;
 
 
-    const res = await authService.fetchWithAuth(API + "/users/me", {
+    const res = await authService.fetchWithAuth(authService.apiUrl + "/users/me", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
@@ -295,7 +295,7 @@
 
   document.getElementById('randomize-avatar').addEventListener('click', async () => {
     try {
-      const res = await authService.fetchWithAuth(API + "/users/me/avatar/random", {
+      const res = await authService.fetchWithAuth(authService.apiUrl + "/users/me/avatar/random", {
         method: "POST",
       });
 
@@ -308,7 +308,7 @@
       const avatarPath = data.avatarUrl || "/avatars/default.png";
       avatarEl.src = avatarPath.startsWith("http")
         ? avatarPath
-        : API + avatarPath;
+        : authService.apiUrl + avatarPath;
 
       showAlert({ title: "Success", content: "New avatar selected!" });
     } catch (err) {
@@ -318,6 +318,7 @@
   });
 
   loadProfile();
+}
 </script>
 {{end}}
 {{ template "base" . }}

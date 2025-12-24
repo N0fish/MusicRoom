@@ -31,12 +31,12 @@
 
 <script src="/static/playlists.js?v=9"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const id = "{{ .PlaylistID }}";
-        if (id) {
-            loadPlaylist(id);
-        }
-    });
+{
+    const id = "{{ .PlaylistID }}";
+    if (id) {
+        loadPlaylist(id);
+    }
+}
 </script>
 {{ end }}
 {{ template "base" . }}

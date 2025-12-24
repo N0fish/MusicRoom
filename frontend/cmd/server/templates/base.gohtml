@@ -42,7 +42,7 @@
     <link href="/static/main.css" rel="stylesheet" />
   </head>
 
-  <body class="bg-background min-h-screen text-text">
+  <body class="bg-background min-h-screen text-text" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="outerHTML">
     <header class="sticky top-0 z-10 bg-card-bg/90 backdrop-blur border-b border-input-border">
       <div class="max-w-5xl mx-auto px-4">
         <div class="flex items-center justify-between h-16">
@@ -89,7 +89,7 @@
       updateHeader();
     </script>
 
-    <main class="max-w-5xl mx-auto px-4 py-6">
+    <main id="main-content" class="max-w-5xl mx-auto px-4 py-6">
       {{ template "content" . }}
     </main>
 
@@ -115,20 +115,49 @@
     </div>
 
     <!-- Player Bar -->
-    <div id="player-bar" class="fixed bottom-0 left-0 right-0 bg-card-bg border-t border-input-border p-4 transform translate-y-full transition-transform duration-300 z-30">
-        <div class="max-w-5xl mx-auto flex items-center justify-between">
-            <div class="flex items-center gap-4 flex-1">
-                <!-- Hidden YouTube Player -->
-                <div id="yt-player"></div>
-                <div class="min-w-0">
-                    <div id="player-title" class="font-bold text-text truncate"></div>
-                    <div id="player-artist" class="text-sm text-text-muted truncate"></div>
-                </div>
+    <div id="player-bar" class="fixed bottom-0 left-0 right-0 bg-card-bg border-t border-input-border transform translate-y-full transition-transform duration-300 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+        <!-- Progress Bar -->
+        <div class="relative w-full h-1 bg-white/10 cursor-pointer group">
+             <div class="h-full bg-primary relative" id="progress-fill" style="width: 0%"></div>
+             <input type="range" min="0" max="100" value="0" step="0.1" 
+                    class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
+                    id="progress-slider" 
+                    oninput="handleSeek(this.value)" 
+                    onchange="finishSeek(this.value)">
+        </div>
+
+        <div class="max-w-5xl mx-auto flex items-center justify-between px-4 py-3">
+            <!-- Left: Info -->
+            <div class="flex items-center gap-4 w-1/4 min-w-0">
+                <div id="yt-player" class="hidden"></div>
+                <a id="player-info-link" href="#" class="min-w-0 cursor-pointer hover:bg-white/5 p-2 rounded transition-colors -ml-2">
+                    <div id="player-title" class="font-bold text-text truncate text-sm sm:text-base"></div>
+                    <div id="player-artist" class="text-xs text-text-muted truncate"></div>
+                </a>
             </div>
-            <div class="flex items-center gap-4">
-                <button id="btn-play-pause" class="text-primary hover:text-primary-hover transition-colors" onclick="togglePlayPause()">
+
+            <!-- Center: Controls -->
+            <div class="flex items-center justify-center gap-4 sm:gap-6 flex-1">
+                <button class="text-text-muted hover:text-white transition-colors" onclick="playPrevious()" title="Previous">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 19l-7-7 7-7m-8 14l-7-7 7-7" />
+                    </svg>
+                </button>
+                
+                <button id="btn-play-pause" class="text-primary hover:text-primary-hover transition-colors bg-white/10 rounded-full p-2" onclick="togglePlayPause()">
                     <!-- Icons injected by JS -->
                 </button>
+                
+                <button class="text-text-muted hover:text-white transition-colors" onclick="playNext()" title="Next">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5l7 7-7 7m8-14l7 7-7 7" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Right: Time -->
+            <div class="w-1/4 flex justify-end">
+                <div id="player-time" class="text-xs text-text-muted font-mono">0:00 / 0:00</div>
             </div>
         </div>
     </div>

@@ -28,16 +28,16 @@
 </div>
 
 <script>
+{
   const searchInput = document.getElementById('search-input');
   const searchResults = document.getElementById('search-results');
   const friendsList = document.getElementById('friends-list');
   const incomingRequestsLink = document.getElementById('incoming-requests-link');
   const incomingRequestsBadge = document.getElementById('incoming-requests-badge');
-  const API = "{{.API}}";
 
   async function getFriends() {
     try {
-      const res = await authService.fetchWithAuth(`${API}/users/me/friends`);
+      const res = await authService.fetchWithAuth(`${authService.apiUrl}/users/me/friends`);
       if (!res.ok) {
         throw new Error('Failed to get friends');
       }
@@ -68,9 +68,9 @@
     `).join('');
   }
 
-  async function removeFriend(userId) {
+  window.removeFriend = async function(userId) {
     try {
-      const res = await authService.fetchWithAuth(`${API}/users/me/friends/${userId}`, {
+      const res = await authService.fetchWithAuth(`${authService.apiUrl}/users/me/friends/${userId}`, {
         method: 'DELETE',
       });
       if (!res.ok) {
@@ -92,7 +92,7 @@
     }
 
     try {
-      const res = await authService.fetchWithAuth(`${API}/users/search?query=${query}`);
+      const res = await authService.fetchWithAuth(`${authService.apiUrl}/users/search?query=${query}`);
       if (!res.ok) {
         throw new Error('Failed to search for users');
       }
@@ -123,7 +123,7 @@
     `).join('');
   }
 
-  function confirmSendFriendRequest(userId, displayName) {
+  window.confirmSendFriendRequest = function(userId, displayName) {
     showConfirm({
       title: 'Send Friend Request',
       content: `Are you sure you want to send a friend request to ${displayName}?`,
@@ -135,7 +135,7 @@
 
   async function sendFriendRequest(userId) {
     try {
-      const res = await authService.fetchWithAuth(`${API}/users/me/friends/${userId}/request`, {
+      const res = await authService.fetchWithAuth(`${authService.apiUrl}/users/me/friends/${userId}/request`, {
         method: 'POST',
       });
       if (!res.ok) {
@@ -156,7 +156,7 @@
 
   async function checkIncomingFriendRequests() {
     try {
-      const res = await authService.fetchWithAuth(`${API}/users/me/friends/requests/incoming`);
+      const res = await authService.fetchWithAuth(`${authService.apiUrl}/users/me/friends/requests/incoming`);
       if (!res.ok) {
         return; // fail silently
       }
@@ -178,6 +178,7 @@
 
   getFriends();
   checkIncomingFriendRequests();
+}
 </script>
 {{end}}
 {{ template "base" . }}
