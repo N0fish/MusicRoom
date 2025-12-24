@@ -42,56 +42,58 @@
     <link href="/static/main.css" rel="stylesheet" />
   </head>
 
-  <body class="bg-background min-h-screen text-text" hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="outerHTML">
-    <header class="sticky top-0 z-10 bg-card-bg/90 backdrop-blur border-b border-input-border">
-      <div class="max-w-5xl mx-auto px-4">
-        <div class="flex items-center justify-between h-16">
-          <a class="text-2xl font-bold text-primary" href="/">MusicRoom</a>
+  <body class="bg-background min-h-screen text-text" hx-boost="true" hx-target="#app-container" hx-select="#app-container" hx-swap="outerHTML">
+    <div id="app-container" hx-history-elt>
+      <header class="sticky top-0 z-10 bg-card-bg/90 backdrop-blur border-b border-input-border">
+        <div class="max-w-5xl mx-auto px-4">
+          <div class="flex items-center justify-between h-16">
+            <a class="text-2xl font-bold text-primary" href="/">MusicRoom</a>
 
-          <nav id="nav-links" class="hidden md:flex gap-8 text-text-muted">
-            <a class="{{if eq .Path "/" }}text-primary{{end}} hover:underline" href="/">Home</a>
-            <a id="nav-auth" class="{{if eq .Path "/auth" }}text-primary{{end}} hover:underline" href="/auth">Auth</a>
-            <a class="{{if eq .Path "/playlists" }}text-primary{{end}} hover:underline" href="/playlists">Playlists</a>
-            <a class="{{if eq .Path "/event" }}text-primary{{end}} hover:underline" href="/event">Event</a>
-            <a id="nav-me" class="{{if eq .Path "/me" }}text-primary{{end}} hover:underline" href="/me" style="display: none;">Me</a>
-            <a id="nav-friends" class="hover:underline" href="/friends" style="display: none;">Friends</a>
-            <a id="nav-logout" class="hover:underline" href="#" style="display: none;">Logout</a>
-          </nav>
+            <nav id="nav-links" class="hidden md:flex gap-8 text-text-muted">
+              <a class="{{if eq .Path "/" }}text-primary{{end}} hover:underline" href="/">Home</a>
+              <a id="nav-auth" class="{{if eq .Path "/auth" }}text-primary{{end}} hover:underline" href="/auth">Auth</a>
+              <a class="{{if eq .Path "/playlists" }}text-primary{{end}} hover:underline" href="/playlists">Playlists</a>
+              <a class="{{if eq .Path "/event" }}text-primary{{end}} hover:underline" href="/event">Event</a>
+              <a id="nav-me" class="{{if eq .Path "/me" }}text-primary{{end}} hover:underline" href="/me" style="display: none;">Me</a>
+              <a id="nav-friends" class="hover:underline" href="/friends" style="display: none;">Friends</a>
+              <a id="nav-logout" class="hover:underline" href="#" style="display: none;">Logout</a>
+            </nav>
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
 
-    <script>
-      initAuthService("{{.API}}");
+      <script>
+        initAuthService("{{.API}}");
 
-      function updateHeader() {
-        const navAuth = document.getElementById("nav-auth");
-        const navMe = document.getElementById("nav-me");
-        const navFriends = document.getElementById("nav-friends");
-        const navLogout = document.getElementById("nav-logout");
+        function updateHeader() {
+          const navAuth = document.getElementById("nav-auth");
+          const navMe = document.getElementById("nav-me");
+          const navFriends = document.getElementById("nav-friends");
+          const navLogout = document.getElementById("nav-logout");
 
-        if (authService.isLoggedIn()) {
-          navAuth.style.display = "none";
-          navMe.style.display = "block";
-          navFriends.style.display = "block";
-          navLogout.style.display = "block";
-          navLogout.addEventListener("click", authService.logout);
-          authService.scheduleTokenRefresh();
-        } else {
-          navAuth.style.display = "block";
-          navMe.style.display = "none";
-          navFriends.style.display = "none";
-          navLogout.style.display = "none";
+          if (authService.isLoggedIn()) {
+            navAuth.style.display = "none";
+            navMe.style.display = "block";
+            navFriends.style.display = "block";
+            navLogout.style.display = "block";
+            navLogout.addEventListener("click", authService.logout);
+            authService.scheduleTokenRefresh();
+          } else {
+            navAuth.style.display = "block";
+            navMe.style.display = "none";
+            navFriends.style.display = "none";
+            navLogout.style.display = "none";
+          }
         }
-      }
 
-      window.updateHeader = updateHeader;
-      updateHeader();
-    </script>
+        window.updateHeader = updateHeader;
+        updateHeader();
+      </script>
 
-    <main id="main-content" class="max-w-5xl mx-auto px-4 py-6">
-      {{ template "content" . }}
-    </main>
+      <main id="main-content" class="max-w-5xl mx-auto px-4 py-6">
+        {{ template "content" . }}
+      </main>
+    </div>
 
     <!-- Modal -->
     <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-25 backdrop-filter backdrop-blur-sm overflow-y-auto h-full w-full">
