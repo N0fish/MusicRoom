@@ -34,14 +34,14 @@
     }
 
     friendRequestsContainer.innerHTML = requests.map(request => `
-      <div class="flex items-center justify-between p-2 bg-card-bg-hover rounded-lg">
+      <div class="flex items-center justify-between p-4 bg-white/5 rounded-md hover:bg-white/10 transition-colors">
         <div class="flex items-center space-x-4">
           <div>
             <p class="font-semibold text-text">${request.from.displayName}</p>
             <p class="text-sm text-text-muted">@${request.from.username}</p>
           </div>
         </div>
-        <div>
+        <div class="space-x-4">
           <button class="btn-small btn-success" onclick="acceptFriendRequest('${request.from.userId}')">Accept</button>
           <button class="btn-small btn-danger" onclick="rejectFriendRequest('${request.from.userId}')">Reject</button>
         </div>

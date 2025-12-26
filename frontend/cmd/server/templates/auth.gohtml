@@ -2,9 +2,9 @@
 <div class="flex flex-col items-center justify-center px-6 py-8 mx-auto lg:py-0">
   <div class="w-full bg-card-bg rounded-lg shadow md:mt-0 sm:max-w-md xl:p-0">
     <div class="p-6 space-y-4 md:space-y-6 sm:p-8" id="login-form">
-      <h1 class="text-xl font-bold leading-tight tracking-tight text-text md:text-2xl">
-        Sign in to your account
-      </h1>
+          <h1 class="text-xl font-bold leading-tight tracking-tight text-text md:text-2xl text-center">
+            Log in to your account
+          </h1>
       <form class="space-y-4 md:space-y-6" action="#">
         <div>
           <label for="email" class="block mb-2 text-sm font-medium text-text-muted">Your email</label>
@@ -17,7 +17,7 @@
         <div class="flex items-center justify-end">
           <a href="#" id="forgot-password-link" class="text-sm font-medium text-primary hover:underline">Forgot password?</a>
         </div>
-        <button id="auth-btn" class="btn w-full">Sign in</button>
+        <button id="auth-btn" class="btn w-full">Log in</button>
 
         <div class="flex items-center">
           <hr class="w-full border-input-border" />
@@ -27,7 +27,7 @@
 
         <button type="button" id="google-login-btn" class="btn-social w-full flex items-center justify-center gap-2">
           <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" class="w-5 h-5" alt="Google logo" />
-          <span>Sign in with Google</span>
+          <span>Log in with Google</span>
         </button>
 
         <div id="auth-msg" class="text-sm text-center"></div>
@@ -92,7 +92,7 @@
 
   } else {
     if (verificationSuccess === 'true') {
-      msgEl.textContent = 'Email successfully verified! You can now sign in.';
+      msgEl.textContent = 'Email successfully verified! You can now log in.';
       msgEl.style.color = 'var(--color-success)';
     }
     if (authService.isLoggedIn()) {
@@ -120,10 +120,10 @@
       if (isSignUpMode) {
         formTitle.textContent = 'Sign up for an account';
         authBtn.textContent = 'Sign up';
-        secondaryActionP.innerHTML = `Already have an account? <a href="#" id="auth-secondary-action-a" class="font-medium text-primary hover:underline">Sign in</a>`;
+        secondaryActionP.innerHTML = `Already have an account? <a href="#" id="auth-secondary-action-a" class="font-medium text-primary hover:underline">Log in</a>`;
       } else {
-        formTitle.textContent = 'Sign in to your account';
-        authBtn.textContent = 'Sign in';
+        formTitle.textContent = 'Log in to your account';
+        authBtn.textContent = 'Log in';
         secondaryActionP.innerHTML = `Don’t have an account yet? <a href="#" id="auth-secondary-action-a" class="font-medium text-primary hover:underline">Sign up</a>`;
       }
       document.getElementById('auth-secondary-action-a').addEventListener('click', toggleMode);
@@ -144,7 +144,16 @@
       let res;
       if (isSignUpMode) {
         res = await authService.signup(email, password);
-        showAlert({ title: 'Sign Up', content: res.message || JSON.stringify(res) });
+        if (res.error) {
+            let errorMsg = res.error;
+            if (typeof errorMsg === 'string' && (errorMsg.includes('duplicate') || errorMsg.includes('already exists'))) {
+                errorMsg = 'An account with this email already exists. Please log in.';
+            }
+            showAlert({ title: 'Sign Up Failed', content: errorMsg });
+        } else {
+             showAlert({ title: 'Sign Up Successful', content: 'Account created successfully! Please check your email to verify your account.' });
+             toggleMode(e);
+        }
       } else {
         res = await authService.login(email, password);
         if (res && res.error) {
