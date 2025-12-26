@@ -39,6 +39,9 @@ func jwtAuthMiddleware(secret []byte) func(http.Handler) http.Handler {
 
 			claims := &TokenClaims{}
 			token, err := jwt.ParseWithClaims(raw, claims, func(t *jwt.Token) (interface{}, error) {
+				if t.Method != jwt.SigningMethodHS256 {
+					return nil, jwt.ErrTokenSignatureInvalid
+				}
 				return secret, nil
 			})
 			if err != nil || !token.Valid || claims.TokenType != "access" {
@@ -65,8 +68,6 @@ func jwtAuthOptionalMiddleware(secret []byte) func(http.Handler) http.Handler {
 			}
 			parts := strings.SplitN(auth, " ", 2)
 			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-				// If they provided an invalid header, we could either error or ignore.
-				// For security, if they try to authenticate and fail, let's error.
 				writeError(w, http.StatusUnauthorized, "invalid Authorization header")
 				return
 			}
@@ -74,6 +75,9 @@ func jwtAuthOptionalMiddleware(secret []byte) func(http.Handler) http.Handler {
 
 			claims := &TokenClaims{}
 			token, err := jwt.ParseWithClaims(raw, claims, func(t *jwt.Token) (interface{}, error) {
+				if t.Method != jwt.SigningMethodHS256 {
+					return nil, jwt.ErrTokenSignatureInvalid
+				}
 				return secret, nil
 			})
 			if err != nil || !token.Valid || claims.TokenType != "access" {
