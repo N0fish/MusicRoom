@@ -17,6 +17,42 @@ document.addEventListener('DOMContentLoaded', () => {
         modal.classList.add('hidden');
     }
 
+    window.closeModal = hideModal;
+
+    window.showModal = ({ title, content, buttons }) => {
+        modalTitle.textContent = title;
+        modalContent.innerHTML = content; // Allow HTML content
+        modalInput.classList.add('hidden');
+        modalActions.innerHTML = '';
+
+        if (buttons && buttons.length > 0) {
+            buttons.forEach(btn => {
+                const buttonEl = document.createElement('button');
+                buttonEl.textContent = btn.text;
+                buttonEl.className = btn.class || 'btn';
+                if (btn.onclick) {
+                    buttonEl.addEventListener('click', btn.onclick);
+                } else {
+                    buttonEl.addEventListener('click', hideModal);
+                }
+                // Add some spacing if not first
+                if (modalActions.children.length > 0) {
+                    buttonEl.classList.add('ml-2'); 
+                }
+                modalActions.appendChild(buttonEl);
+            });
+        } else {
+            // Default close button
+            const cancelButton = document.createElement('button');
+            cancelButton.textContent = 'Close';
+            cancelButton.className = 'btn-modal mt-2';
+            cancelButton.addEventListener('click', hideModal);
+            modalActions.appendChild(cancelButton);
+        }
+
+        showModal();
+    }
+
     window.showAlert = ({ title, content }) => {
         toastTitle.textContent = title;
         toastContent.textContent = content;

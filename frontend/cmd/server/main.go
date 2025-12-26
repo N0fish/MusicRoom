@@ -49,7 +49,8 @@ func main() {
 	r.Get("/auth/callback", app.page("auth.gohtml", nil))
 	r.Get("/playlists", app.playlistsPage())
 	r.Get("/playlists/{id}", app.playlistDetailPage())
-	r.Get("/event", app.page("event.gohtml", nil))
+	r.Get("/events", app.page("events.gohtml", nil))
+	r.Get("/events/{id}", app.eventDetailPage())
 	r.Get("/realtime", app.page("realtime.gohtml", nil))
 	r.Get("/me", app.page("me.gohtml", nil))
 	r.Get("/friends", app.page("friends.gohtml", nil))
@@ -71,10 +72,26 @@ func main() {
 		}
 	})
 
+	r.Get("/static/events.js", func(w http.ResponseWriter, r *http.Request) {
+		tpl, err := text_template.ParseFS(staticFS, "static/events.js")
+		if err != nil {
+			http.Error(w, "template error", 500)
+			return
+		}
+		w.Header().Set("content-type", "application/javascript")
+		data := map[string]any{
+			"API": app.API,
+			"WS":  app.WS,
+		}
+		if err := tpl.Execute(w, data); err != nil {
+			http.Error(w, err.Error(), 500)
+		}
+	})
+
 	// static assets (из embed FS)
 	r.Get("/static/*", func(w http.ResponseWriter, r *http.Request) {
 		p := strings.TrimPrefix(r.URL.Path, "/static/")
-		if p == "playlists.js" { // handled separately
+		if p == "playlists.js" || p == "events.js" { // handled separately
 			http.NotFound(w, r)
 			return
 		}
@@ -126,6 +143,29 @@ func (a *App) playlistDetailPage() http.HandlerFunc {
 		}
 
 		tpl, err := html_template.ParseFS(tplFS, "templates/base.gohtml", "templates/playlist-detail.gohtml")
+		if err != nil {
+			http.Error(w, "template error", 500)
+			return
+		}
+
+		data["API"] = a.API
+		data["WS"] = a.WS
+		data["Path"] = r.URL.Path
+
+		if err := tpl.ExecuteTemplate(w, "base", data); err != nil {
+			http.Error(w, err.Error(), 500)
+		}
+	}
+}
+
+func (a *App) eventDetailPage() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		data := map[string]any{
+			"EventID": id,
+		}
+
+		tpl, err := html_template.ParseFS(tplFS, "templates/base.gohtml", "templates/event-detail.gohtml")
 		if err != nil {
 			http.Error(w, "template error", 500)
 			return
