@@ -104,7 +104,14 @@ test-gateway:
 
 test-go:
 	@echo "Running Go tests (web/backend)..."
-	for s in $(SERVICES); do (cd $$s && go test -cover ./...); done
+	@set -e; \
+	for s in $(SERVICES); do \
+		if [ -d "$$s" ]; then \
+			( cd "$$s" && go test -cover ./... ); \
+		else \
+			echo "Skipping missing dir: $$s"; \
+		fi; \
+	done
 
 test-mobile:
 	@echo "Running mobile tests..."
