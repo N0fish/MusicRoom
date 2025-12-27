@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
@@ -34,14 +33,10 @@ func registerVote(ctx context.Context, pool *pgxpool.Pool, rdb *redis.Client, ev
 	_, err = pool.Exec(ctx, `
         INSERT INTO votes(event_id, track, voter_id)
         VALUES($1,$2,$3)
+        ON CONFLICT (event_id, voter_id) 
+        DO UPDATE SET track = EXCLUDED.track, created_at = now()
     `, eventID, trackID, voterID)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
-			if pgErr.Code == "23505" {
-				return nil, &voteError{status: http.StatusConflict, msg: "duplicate vote"}
-			}
-		}
 		return nil, err
 	}
 

@@ -47,6 +47,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, userServiceURL string) htt
 	// voting
 	r.Post("/events/{id}/vote", s.handleVote)
 	r.Get("/events/{id}/tally", s.handleTally)
+	r.Delete("/events/{id}/votes", s.handleClearVotes)
 
 	return r
 }

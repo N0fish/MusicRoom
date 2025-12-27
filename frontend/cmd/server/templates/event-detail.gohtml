@@ -12,6 +12,15 @@
     <button id="ev-settings-btn" class="hidden btn-small-secondary" onclick="openEventSettings()">Settings</button>
 </div>
 
+<!-- Round Timer Controls (Owner only, visible via JS check usually, or simple toggle) -->
+<div class="mb-4">
+    <button id="btn-start-round" class="btn-primary" onclick="startVotingRound()">Start 1-Minute Voting Round</button>
+    <div id="round-timer-display" class="hidden p-4 bg-primary/20 rounded-md border border-primary text-center">
+        <span class="text-xl font-bold">Voting Ends In: </span>
+        <span id="timer-val" class="text-3xl font-mono font-bold text-primary">60s</span>
+    </div>
+</div>
+
 <div class="grid md:grid-cols-2 gap-6">
     <!-- Voting Section -->
     <div class="space-y-6">
@@ -38,7 +47,6 @@
         <div class="card">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-xl font-semibold">Current Tally</h3>
-                <button class="text-primary hover:underline text-sm" onclick="loadTally()">Refresh</button>
             </div>
             <div id="tally-list" class="space-y-3">
                 <p class="text-text-muted py-4 text-center">No votes yet.</p>
@@ -83,10 +91,12 @@ async function searchAndVote() {
       const votePayload = JSON.stringify({
           id: item.providerTrackId || item.title,
           title: item.title,
-          artist: item.artist
+          artist: item.artist,
+          provider: item.provider,
+          thumbnailUrl: item.thumbnailUrl
       });
 
-      button.onclick = () => castVote(votePayload);
+      button.onclick = () => window.castVote(votePayload);
 
       li.appendChild(span);
       li.appendChild(button);
@@ -98,45 +108,6 @@ async function searchAndVote() {
     li.textContent = 'No results found.'
     ul.appendChild(li)
   }
-}
-
-async function castVote(trackId) {
-    const eventId = document.getElementById('ev-id').textContent;
-    let payload = { trackId };
-
-    if (currentEventLicenseMode === 'geo_time') {
-        if (!navigator.geolocation) {
-             window.showAlert({ title: 'Error', content: 'Geolocation is not supported by your browser.' });
-             return;
-        }
-        
-        try {
-            const position = await new Promise((resolve, reject) => {
-                navigator.geolocation.getCurrentPosition(resolve, reject);
-            });
-            payload.lat = position.coords.latitude;
-            payload.lng = position.coords.longitude;
-        } catch (e) {
-             window.showAlert({ title: 'Error', content: 'Location access is required to vote in this event. Please allow location access.' });
-             return;
-        }
-    }
-
-    const res = await authService.fetchWithAuth(authService.apiUrl + `/events/${eventId}/vote`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(payload)
-    });
-
-    if (res.ok) {
-        window.showAlert({ title: 'Success', content: 'Vote cast!' });
-        loadTally(eventId);
-    } else if (res.status === 409) {
-        window.showAlert({ title: 'Vote Recorded', content: 'You have already voted for a track in this event.' });
-    } else {
-        const err = await res.json().catch(() => ({}));
-        window.showAlert({ title: 'Error', content: 'Failed to vote: ' + (err.error || 'Unknown error') });
-    }
 }
 </script>
 {{ end }}

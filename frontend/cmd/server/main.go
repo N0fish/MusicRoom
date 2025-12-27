@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	text_template "text/template" // Alias text/template
 	"github.com/go-chi/chi/v5"
+	text_template "text/template" // Alias text/template
 )
 
 //go:embed templates/*.gohtml

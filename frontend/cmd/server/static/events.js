@@ -97,6 +97,10 @@ async function refreshEvents() {
 
     container.appendChild(item)
   })
+
+  if (window.htmx) {
+      window.htmx.process(container);
+  }
 }
 
 async function loadEvent(id) {
@@ -127,6 +131,8 @@ async function loadEvent(id) {
             if (btn) btn.classList.remove('hidden');
         }
     }
+    
+    checkActiveRound();
 }
 
 window.openEventSettings = async function() {
@@ -352,21 +358,53 @@ async function loadTally(id) {
     const eventId = id || document.getElementById('ev-id').textContent;
     if (!eventId) return;
 
-    const res = await authService.fetchWithAuth(API + `/events/${eventId}/tally`)
-    if (!res.ok) {
-        return
+    // Fetch Tally and Event Name (if needed for playlist lookup)
+    const [tallyRes, eventRes] = await Promise.all([
+        authService.fetchWithAuth(API + `/events/${eventId}/tally`),
+        authService.fetchWithAuth(API + `/events/${eventId}`)
+    ]);
+
+    if (!tallyRes.ok) return;
+    const tally = await tallyRes.json();
+    
+    // Fetch Playlist Tracks to Filter
+    let excludedIds = new Set();
+    if (eventRes.ok) {
+        const ev = await eventRes.json();
+        const playlistId = await getOrCreateEventPlaylist(eventId, ev.name);
+        if (playlistId) {
+             const plRes = await authService.fetchWithAuth(API + `/playlists/${playlistId}`);
+             if (plRes.ok) {
+                 const plData = await plRes.json();
+                 if (plData.tracks) {
+                     plData.tracks.forEach(t => {
+                         if (t.providerTrackId) excludedIds.add(t.providerTrackId);
+                     });
+                 }
+             }
+        }
     }
-    const tally = await res.json()
+
     const container = document.getElementById('tally-list')
     if (!container) return
 
     container.innerHTML = ''
-    if (!tally || tally.length === 0) {
-        container.innerHTML = '<p class="text-text-muted py-4 text-center">No votes yet.</p>'
+    
+    // Filter tally
+    const filteredTally = tally.filter(row => {
+        try {
+            const t = row.track.startsWith('{') ? JSON.parse(row.track) : { title: row.track };
+            const pid = t.id || t.providerTrackId;
+            return pid && !excludedIds.has(pid);
+        } catch (e) { return true; }
+    });
+
+    if (!filteredTally || filteredTally.length === 0) {
+        container.innerHTML = '<p class="text-text-muted py-4 text-center">No votes yet (or all voted tracks are in playlist).</p>'
         return
     }
 
-    tally.forEach((row, index) => {
+    filteredTally.forEach((row, index) => {
         const item = document.createElement('div')
         item.className = 'flex items-center p-3 bg-white/5 rounded-md gap-3'
         
@@ -412,6 +450,375 @@ async function loadTally(id) {
     })
 }
 
+// ... existing imports ...
+
+async function getOrCreateEventPlaylist(eventId, eventName) {
+    const res = await authService.fetchWithAuth(API + '/playlists');
+    if (!res.ok) return null;
+    const playlists = await res.json();
+
+    // Naming convention for event playlists
+    const expectedName = `Event: ${eventName} (${eventId})`; 
+    const existing = playlists.find(p => p.name === expectedName);
+    
+    if (existing) return existing.id;
+
+    // Create if not exists
+    const createRes = await authService.fetchWithAuth(API + '/playlists', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: expectedName, isPublic: true, editMode: 'everyone' })
+    });
+
+    if (createRes.ok) {
+        const newPl = await createRes.json();
+        return newPl.id;
+    }
+    return null;
+}
+
+async function syncEventPlaylist(eventId, eventName) {
+    const playlistId = await getOrCreateEventPlaylist(eventId, eventName);
+    if (!playlistId) return;
+
+    // Get Tally (sorted by votes)
+    const tallyRes = await authService.fetchWithAuth(API + `/events/${eventId}/tally`);
+    if (!tallyRes.ok) return;
+    const tally = await tallyRes.json();
+
+    // Get Playlist Tracks
+    const plRes = await authService.fetchWithAuth(API + `/playlists/${playlistId}`);
+    if (!plRes.ok) return;
+    const plData = await plRes.json();
+    // Refresh local track list as we modify it
+    let currentTracks = plData.tracks || [];
+
+    // Sync
+    for (let i = 0; i < tally.length; i++) {
+        const voteItem = tally[i];
+        let voteTrack = {};
+        try {
+             if (voteItem.track.startsWith('{')) {
+                voteTrack = JSON.parse(voteItem.track);
+             } else {
+                voteTrack = { title: voteItem.track };
+             }
+        } catch (e) { continue; }
+        
+        // We need an ID (provider ID) to add it.
+        // If the vote was just a raw string (legacy), we might skip or search it? 
+        // For now, assume new system with JSON payload.
+        const providerId = voteTrack.id || voteTrack.providerTrackId;
+        if (!providerId) continue; 
+
+        // Check if in playlist
+        const existingTrack = currentTracks.find(t => 
+            (t.providerTrackId && t.providerTrackId === providerId)
+        );
+
+        if (!existingTrack) {
+            // Add it
+             await authService.fetchWithAuth(API + `/playlists/${playlistId}/tracks`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({
+                    title: voteTrack.title,
+                    artist: voteTrack.artist,
+                    provider: voteTrack.provider || 'youtube',
+                    providerTrackId: providerId,
+                    thumbnailUrl: voteTrack.thumbnailUrl
+                })
+            });
+            // Don't re-fetch immediately for performance, just assume added at end? 
+            // Actually, we need to know its ID to move it later if needed.
+            // So we should re-fetch playlist tracks or response.
+            const updatedPlRes = await authService.fetchWithAuth(API + `/playlists/${playlistId}`);
+            if (updatedPlRes.ok) {
+                const updatedData = await updatedPlRes.json();
+                currentTracks = updatedData.tracks || [];
+            }
+        } else {
+            // Check position (index i)
+            const currentIdx = currentTracks.indexOf(existingTrack);
+            if (currentIdx !== i) {
+                // Move
+                 await authService.fetchWithAuth(API + `/playlists/${playlistId}/tracks/${existingTrack.id}`, {
+                    method: 'PATCH',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ newPosition: i })
+                });
+                // Update local list to avoid confusion? 
+                // A move changes other indices. Re-fetching is safest.
+                const updatedPlRes = await authService.fetchWithAuth(API + `/playlists/${playlistId}`);
+                if (updatedPlRes.ok) {
+                    const updatedData = await updatedPlRes.json();
+                    currentTracks = updatedData.tracks || [];
+                }
+            }
+        }
+    }
+}
+
+window.castVote = async function(trackIdPayload) {
+    const eventId = document.getElementById('ev-id').textContent;
+    const eventName = document.getElementById('ev-name').textContent;
+    let payload = { trackId: trackIdPayload };
+
+    if (currentEventLicenseMode === 'geo_time') {
+        if (!navigator.geolocation) {
+             window.showAlert({ title: 'Error', content: 'Geolocation is not supported by your browser.' });
+             return;
+        }
+        
+        try {
+            const position = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject);
+            });
+            payload.lat = position.coords.latitude;
+            payload.lng = position.coords.longitude;
+        } catch (e) {
+             window.showAlert({ title: 'Error', content: 'Location access is required to vote in this event. Please allow location access.' });
+             return;
+        }
+    }
+
+    const res = await authService.fetchWithAuth(API + `/events/${eventId}/vote`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+        window.showAlert({ title: 'Success', content: 'Vote cast!' });
+        await loadTally(eventId);
+        // Sync playlist removed (wait for round end)
+        // syncEventPlaylist(eventId, eventName);
+    } else if (res.status === 409) {
+        window.showAlert({ title: 'Vote Recorded', content: 'You have already voted for a track in this event.' });
+    } else {
+        const err = await res.json().catch(() => ({}));
+        window.showAlert({ title: 'Error', content: 'Failed to vote: ' + (err.error || 'Unknown error') });
+    }
+}
+
+// --- Voting Round Timer ---
+
+// We store the interval ID in the global mrState to persist across HTMX swaps/re-executions
+window.mrState = window.mrState || {};
+
+window.startVotingRound = function(passedEventId) {
+    // Get current event ID (from arg or DOM)
+    const eventId = passedEventId || document.getElementById('ev-id')?.textContent;
+    if (!eventId) return;
+
+    // 1 minute default
+    const durationSec = 60;
+    const now = Date.now();
+    const endTime = now + (durationSec * 1000);
+
+    // Persist to LocalStorage
+    localStorage.setItem('mr_round_end_' + eventId, endTime);
+    
+    startTimerInterval(eventId, endTime);
+    
+    // Only toast if on page
+    if (document.getElementById('ev-id')?.textContent === eventId) {
+        window.showToast('Voting round started! 1 minute remaining.');
+    }
+}
+
+function startTimerInterval(eventId, endTime) {
+    // Clear any existing interval for this event or generally
+    if (window.mrState['roundInterval_' + eventId]) {
+        clearInterval(window.mrState['roundInterval_' + eventId]);
+    }
+
+    // Update UI immediately
+    updateTimerUI(true, eventId);
+
+    const intervalId = setInterval(() => {
+        const now = Date.now();
+        const remaining = Math.ceil((endTime - now) / 1000);
+
+        const timerVal = document.getElementById('timer-val');
+        // Only update UI if we are on the correct event page
+        const currentPageId = document.getElementById('ev-id')?.textContent;
+        
+        if (currentPageId === eventId && timerVal) {
+            timerVal.textContent = remaining > 0 ? remaining + 's' : '0s';
+        }
+
+        if (remaining <= 0) {
+            endVotingRound(eventId);
+        }
+    }, 1000);
+
+    window.mrState['roundInterval_' + eventId] = intervalId;
+    
+    // Initial UI update for text
+    const timerVal = document.getElementById('timer-val');
+    if (timerVal) {
+        const remaining = Math.ceil((endTime - Date.now()) / 1000);
+        timerVal.textContent = remaining > 0 ? remaining + 's' : '0s';
+    }
+}
+
+function updateTimerUI(isActive, eventId) {
+    const currentPageId = document.getElementById('ev-id')?.textContent;
+    if (currentPageId !== eventId) return;
+
+    const timerDisplay = document.getElementById('round-timer-display');
+    const startBtn = document.getElementById('btn-start-round');
+    
+    if (isActive) {
+        if (startBtn) startBtn.style.display = 'none';
+        if (timerDisplay) timerDisplay.style.display = 'block';
+    } else {
+        if (timerDisplay) timerDisplay.style.display = 'none';
+        if (startBtn) startBtn.style.display = 'inline-block';
+    }
+}
+
+async function endVotingRound(eventId) {
+    // Cleanup
+    if (window.mrState['roundInterval_' + eventId]) {
+        clearInterval(window.mrState['roundInterval_' + eventId]);
+        delete window.mrState['roundInterval_' + eventId];
+    }
+    localStorage.removeItem('mr_round_end_' + eventId);
+    
+    updateTimerUI(false, eventId);
+
+    const onPage = (document.getElementById('ev-id')?.textContent === eventId);
+    if (onPage) window.showToast('Round ended! Processing winner...');
+
+    // 1. Get Event Name (needed for playlist lookup)
+    let eventName = document.getElementById('ev-name')?.textContent;
+    if (!eventName && onPage === false) {
+        // If we are off-page, we might need to fetch event name or rely on cache?
+        // For simplicity, let's try to fetch the event details if name is missing
+        const evRes = await authService.fetchWithAuth(API + '/events/' + eventId);
+        if (evRes.ok) {
+            const ev = await evRes.json();
+            eventName = ev.name;
+        } else {
+            eventName = 'Event'; // Fallback
+        }
+    }
+
+    // 2. Get Playlist & Tracks (to filter out winners)
+    const playlistId = await getOrCreateEventPlaylist(eventId, eventName);
+    let existingTrackIds = new Set();
+    
+    if (playlistId) {
+        const plRes = await authService.fetchWithAuth(API + '/playlists/' + playlistId);
+        if (plRes.ok) {
+             const plData = await plRes.json();
+             if (plData.tracks) {
+                 plData.tracks.forEach(t => {
+                     if (t.providerTrackId) existingTrackIds.add(t.providerTrackId);
+                 });
+             }
+        }
+    }
+
+    // 3. Get Tally
+    const tallyRes = await authService.fetchWithAuth(API + `/events/${eventId}/tally`);
+    if (!tallyRes.ok) {
+        if(onPage) window.showAlert({ title: 'Error', content: 'Failed to fetch tally.' });
+        // Restart anyway?
+        setTimeout(() => startVotingRound(eventId), 2000); 
+        return;
+    }
+    const tally = await tallyRes.json();
+    
+    // 4. Filter Tally
+    const candidates = tally.filter(row => {
+        let trackObj = {};
+        try {
+            trackObj = row.track.startsWith('{') ? JSON.parse(row.track) : { title: row.track };
+        } catch (e) { return false; }
+        
+        const pid = trackObj.id || trackObj.providerTrackId;
+        return pid && !existingTrackIds.has(pid);
+    });
+
+    if (candidates.length === 0) {
+        if(onPage) window.showToast('No new votes (or all candidates already in playlist). Round skipped.');
+        // Auto-restart
+        setTimeout(() => startVotingRound(eventId), 2000);
+        return;
+    }
+
+    // 5. Identify Winner
+    const winner = candidates[0]; // Already sorted by count DESC, time ASC
+    let winnerTrack = JSON.parse(winner.track);
+    const providerId = winnerTrack.id || winnerTrack.providerTrackId;
+
+    // 6. Add to Playlist
+    if (playlistId && providerId) {
+         const addRes = await authService.fetchWithAuth(API + `/playlists/${playlistId}/tracks`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                title: winnerTrack.title,
+                artist: winnerTrack.artist,
+                provider: winnerTrack.provider || 'youtube',
+                providerTrackId: providerId,
+                thumbnailUrl: winnerTrack.thumbnailUrl
+            })
+        });
+        
+        if (addRes.ok) {
+             if(onPage) window.showToast(`Added "${winnerTrack.title}" to playlist.`);
+             else console.log(`Added "${winnerTrack.title}" to playlist.`);
+             
+             // Refresh Tally UI if on page to show it "disappear"
+             if (onPage) loadTally(eventId);
+        } else {
+             console.error('Failed to add to playlist');
+        }
+    }
+    
+    // 7. Clear Votes for Winner Only (Carry-over logic)
+    // We pass the providerId (which is stored in 'track' column in DB)
+    const delRes = await authService.fetchWithAuth(API + `/events/${eventId}/votes?track=` + encodeURIComponent(providerId), {
+        method: 'DELETE'
+    });
+    
+    if (delRes.ok) {
+        if(onPage) loadTally(eventId);
+    } else {
+        console.warn('Failed to clear votes for next round');
+    }
+
+    if(onPage) window.showToast('Round ended. Winner added, their votes cleared.');
+    
+    // Auto-restart next round
+    setTimeout(() => startVotingRound(eventId), 2000);
+}
+
+// Check for active round on load
+function checkActiveRound() {
+    const eventId = document.getElementById('ev-id')?.textContent;
+    if (!eventId) return;
+
+    const storedEnd = localStorage.getItem('mr_round_end_' + eventId);
+    if (storedEnd) {
+        const endTime = parseInt(storedEnd, 10);
+        const now = Date.now();
+        if (endTime > now) {
+            // Resume
+            console.log('Resuming active round timer for event', eventId);
+            startTimerInterval(eventId, endTime);
+        } else {
+            // Expired while away? Trigger end logic immediately
+            console.log('Round expired while away, ending now.');
+            endVotingRound(eventId);
+        }
+    }
+}
+
 window.openCreateEventModal = function() {
   window.showPrompt({
     title: 'Create a new event',
@@ -429,6 +836,13 @@ window.openCreateEventModal = function() {
       })
 
       if (res.ok) {
+        const newEvent = await res.json().catch(() => null);
+        
+        // Auto-create playlist
+        if (newEvent && newEvent.id) {
+            getOrCreateEventPlaylist(newEvent.id, newEvent.name);
+        }
+
         window.showAlert({ title: 'Success', content: 'Event created successfully!' })
         refreshEvents();
       } else {
@@ -438,6 +852,7 @@ window.openCreateEventModal = function() {
     }
   })
 }
+
 
 function renameEvent(id, currentName) {
   window.showPrompt({

@@ -174,6 +174,7 @@ func main() {
 		// Voting
 		r.Method(http.MethodPost, "/events/{id}/vote", voteProxy)
 		r.Method(http.MethodGet, "/events/{id}/tally", voteProxy)
+		r.Method(http.MethodDelete, "/events/{id}/votes", voteProxy)
 	})
 
 	// Mock routes

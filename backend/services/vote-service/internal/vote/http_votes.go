@@ -69,3 +69,23 @@ func (s *HTTPServer) handleTally(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, out)
 }
+
+func (s *HTTPServer) handleClearVotes(w http.ResponseWriter, r *http.Request) {
+	eventID := chi.URLParam(r, "id")
+	trackID := r.URL.Query().Get("track")
+	// userID := r.Header.Get("X-User-Id") // Potential owner check here
+
+	var err error
+	if trackID != "" {
+		_, err = s.pool.Exec(r.Context(), "DELETE FROM votes WHERE event_id=$1 AND track=$2", eventID, trackID)
+	} else {
+		_, err = s.pool.Exec(r.Context(), "DELETE FROM votes WHERE event_id=$1", eventID)
+	}
+
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "cleared"})
+}
