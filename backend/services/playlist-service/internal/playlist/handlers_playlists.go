@@ -366,3 +366,66 @@ func (s *Server) handleGetPlaylist(w http.ResponseWriter, r *http.Request) {
 		"canEdit":  canEdit,
 	})
 }
+
+// handleDeletePlaylist deletes a playlist. Only the owner can delete.
+func (s *Server) handleDeletePlaylist(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := r.Header.Get("X-User-Id")
+	if userID == "" {
+		writeError(w, http.StatusUnauthorized, "missing user context")
+		return
+	}
+
+	playlistID := chi.URLParam(r, "id")
+	if playlistID == "" {
+		writeError(w, http.StatusBadRequest, "missing playlist id")
+		return
+	}
+
+	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		log.Printf("playlist-service: delete playlist begin tx: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	var ownerID string
+	err = tx.QueryRow(ctx, "SELECT owner_id FROM playlists WHERE id = $1", playlistID).Scan(&ownerID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "playlist not found")
+		return
+	}
+	if err != nil {
+		log.Printf("playlist-service: delete playlist fetch: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+
+	if ownerID != userID {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	_, err = tx.Exec(ctx, "DELETE FROM playlists WHERE id = $1", playlistID)
+	if err != nil {
+		log.Printf("playlist-service: delete playlist exec: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		log.Printf("playlist-service: delete playlist commit: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+
+	// Notify realtime
+	event := map[string]any{
+		"type":    "playlist.deleted",
+		"payload": map[string]any{"playlistId": playlistID},
+	}
+	s.publishEvent(ctx, event)
+
+	w.WriteHeader(http.StatusNoContent)
+}

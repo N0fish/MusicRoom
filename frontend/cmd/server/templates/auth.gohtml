@@ -157,7 +157,7 @@
       } else {
         res = await authService.login(email, password);
         if (res && res.error) {
-          msgEl.textContent = res.error;
+          window.showAlert({ title: 'Authentication Failed', content: res.error });
         }
       }
     });

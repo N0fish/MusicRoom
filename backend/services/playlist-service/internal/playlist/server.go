@@ -34,6 +34,7 @@ func (s *Server) Router(middlewares ...func(http.Handler) http.Handler) chi.Rout
 	r.Group(func(r chi.Router) {
 		r.Post("/playlists", s.handleCreatePlaylist)
 		r.Patch("/playlists/{id}", s.handlePatchPlaylist)
+		r.Delete("/playlists/{id}", s.handleDeletePlaylist)
 		r.Get("/playlists/{id}", s.handleGetPlaylist)
 
 		r.Post("/playlists/{id}/tracks", s.handleAddTrack)

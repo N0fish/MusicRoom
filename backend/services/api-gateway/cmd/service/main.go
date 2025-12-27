@@ -146,6 +146,7 @@ func main() {
 			Method(http.MethodPost, "/playlists", playlistProxy)
 		r.Method(http.MethodPatch, "/playlists/{id}", playlistProxy)
 		r.Method(http.MethodGet, "/playlists/{id}", playlistProxy)
+		r.Method(http.MethodDelete, "/playlists/{id}", playlistProxy)
 
 		r.Method(http.MethodPost, "/playlists/{id}/tracks", playlistProxy)
 		r.Method(http.MethodPatch, "/playlists/{id}/tracks/{trackId}", playlistProxy) // move track
