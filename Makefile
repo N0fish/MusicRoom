@@ -7,7 +7,7 @@ SERVICES := backend/services/api-gateway \
 						backend/services/vote-service \
 						backend/services/mock-service \
 						backend/services/music-provider-service \
-						frontend
+						frontend/cmd/service
 
 
 .PHONY: help

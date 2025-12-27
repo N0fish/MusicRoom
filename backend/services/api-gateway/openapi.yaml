@@ -198,7 +198,17 @@ paths:
           schema:
             type: string
             enum: [google, 42]
-          description: The OAuth provider to link
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  description: JWT of the account that currently owns this provider link
       responses:
         '200':
           description: Provider successfully linked
@@ -210,6 +220,8 @@ paths:
           description: Provider already linked or auth failed
         '401':
           description: Unauthorized
+        '409':
+          description: Provider already linked to another account
 
     delete:
       summary: Unlink a third-party account from the current user
