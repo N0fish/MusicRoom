@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 )
 
 const (
@@ -86,8 +85,9 @@ func (s *Server) handleFTCallback(w http.ResponseWriter, r *http.Request) {
 	form.Set("code", code)
 	form.Set("redirect_uri", s.ftCfg.RedirectURL)
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.PostForm(ftTokenURL, form)
+	form.Set("grant_type", "authorization_code")
+
+	resp, err := s.httpClient.PostForm(ftTokenURL, form)
 	if err != nil {
 		log.Printf("42 callback: token exchange error: %v", err)
 		writeError(w, http.StatusBadGateway, "42 token exchange failed")
@@ -113,7 +113,7 @@ func (s *Server) handleFTCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Header.Set("Authorization", "Bearer "+tr.AccessToken)
 
-	uResp, err := client.Do(req)
+	uResp, err := s.httpClient.Do(req)
 	if err != nil {
 		log.Printf("42 callback: me error: %v", err)
 		writeError(w, http.StatusBadGateway, "42 userinfo failed")
@@ -139,7 +139,7 @@ func (s *Server) handleFTCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ftID := formatFTID(ui.ID)
-	user, err := s.upsertUserWithFT(r.Context(), email, ftID)
+	user, err := s.repo.UpsertUserWithFT(r.Context(), email, ftID)
 	if err != nil {
 		log.Printf("42 callback: upsertUserWithFT: %v", err)
 		writeError(w, http.StatusInternalServerError, "internal error")

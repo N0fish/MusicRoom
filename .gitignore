@@ -13,6 +13,7 @@ dist/
 **/vendor/
 Derived/
 DerivedData/
+backend/services/auth-service/cmd/service/service
 
 # Certificates / Security
 certs/

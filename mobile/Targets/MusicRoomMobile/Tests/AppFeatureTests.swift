@@ -1,58 +1,43 @@
-import XCTest
 import ComposableArchitecture
+import XCTest
+
 @testable import AppFeature
+@testable import AppSupportClients
+@testable import EventFeature
 @testable import MusicRoomDomain
 
 @MainActor
 final class AppFeatureTests: XCTestCase {
-    func testBootstrapsSampleDataAndStream() async {
-        let events = [
-            Event(
-                name: "Test Event",
-                location: "Remote",
-                visibility: .publicEvent,
-                licenseTier: .everyone,
-                startTime: Date(),
-                playlist: [Track(title: "One", artist: "Artist", votes: 1)]
-            )
-        ]
-        let update = PlaylistUpdate(eventID: events[0].id, updatedTrack: events[0].playlist[0], message: "Track update")
-        let decision = PolicyDecision(isAllowed: true, reason: "All good")
+    func testSessionExpired_TriggersLogout() async {
+        let logoutCalled = LockIsolated(false)
 
         let store = TestStore(initialState: AppFeature.State()) {
             AppFeature()
         } withDependencies: {
-            $0.musicRoomAPI.fetchSampleEvents = { events }
-            $0.policyEngine.evaluate = { _ in decision }
-            $0.playlistStream.startPreview = { _ in
-                AsyncStream { continuation in
-                    continuation.yield(update)
-                    continuation.finish()
-                }
+            $0.authentication.logout = { logoutCalled.setValue(true) }
+            $0.authentication.isAuthenticated = { true }
+            $0.telemetry.log = { action, _ in
+                XCTAssertEqual(action, "user.logout")
             }
         }
 
-        await store.send(.task) {
-            $0.hasBootstrapped = true
-            $0.isSampleDataLoading = true
-            $0.sampleDataError = nil
+        // Set initial state to logged in (app)
+        await store.send(.destinationChanged(.app)) {
+            $0.destination = .app
         }
 
-        await store.receive(.sampleEventsLoaded(events)) {
-            $0.isSampleDataLoading = false
-            $0.sampleEvents = events
-        }
+        // Simulate event list delegate action
+        await store.send(.eventList(.delegate(.sessionExpired)))
 
-        await store.receive(.policyEvaluated(decision)) {
-            $0.policySummary = "Allowed – All good"
-        }
+        // Verifying it triggers logout button tapped logic
+        await store.receive(\.logoutButtonTapped)
 
-        await store.receive(.playlistUpdate(update)) {
-            $0.latestStreamMessage = "Track update"
-        }
+        // Should trigger logout side effect
+        XCTAssertTrue(logoutCalled.value)
 
-        await store.receive(.playlistStreamCompleted) {
-            $0.latestStreamMessage = "Stream completed"
+        // And navigate to login
+        await store.receive(\.destinationChanged) {
+            $0.destination = .login
         }
     }
 }

@@ -19,7 +19,7 @@ func (s *Server) handleListFriends(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := s.db.Query(r.Context(), `
       SELECT p.user_id, p.username, p.display_name,
-             p.avatar_url, p.has_custom_avatar, p.visibility
+             p.avatar_url, p.has_custom_avatar, p.visibility, p.is_premium
       FROM user_friends f
       JOIN user_profiles p
         ON p.user_id = CASE
@@ -46,6 +46,7 @@ func (s *Server) handleListFriends(w http.ResponseWriter, r *http.Request) {
 			&p.AvatarURL,
 			&p.HasCustomAvatar,
 			&p.Visibility,
+			&p.IsPremium,
 		); err != nil {
 			log.Printf("user-service: scan friend: %v", err)
 			continue
@@ -55,6 +56,7 @@ func (s *Server) handleListFriends(w http.ResponseWriter, r *http.Request) {
 			Username:    p.Username,
 			DisplayName: p.DisplayName,
 			AvatarURL:   resolveAvatarForViewer(p, true, false),
+			IsPremium:   p.IsPremium,
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -271,7 +273,7 @@ func (s *Server) handleListIncomingFriendRequests(w http.ResponseWriter, r *http
 
 	rows, err := s.db.Query(r.Context(), `
       SELECT p.user_id, p.username, p.display_name,
-             p.avatar_url, p.has_custom_avatar, p.visibility,
+             p.avatar_url, p.has_custom_avatar, p.visibility, p.is_premium,
              fr.created_at
       FROM friend_requests fr
       JOIN user_profiles p ON p.user_id = fr.from_user_id
@@ -297,6 +299,7 @@ func (s *Server) handleListIncomingFriendRequests(w http.ResponseWriter, r *http
 			&p.AvatarURL,
 			&p.HasCustomAvatar,
 			&p.Visibility,
+			&p.IsPremium,
 			&createdAt,
 		); err != nil {
 			log.Printf("user-service: scan incoming friend request: %v", err)
@@ -309,6 +312,7 @@ func (s *Server) handleListIncomingFriendRequests(w http.ResponseWriter, r *http
 				Username:    p.Username,
 				DisplayName: p.DisplayName,
 				AvatarURL:   resolveAvatarForViewer(p, false, false),
+				IsPremium:   p.IsPremium,
 			},
 			CreatedAt: createdAt,
 		})

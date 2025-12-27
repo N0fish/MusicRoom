@@ -1,5 +1,5 @@
-import Foundation
 import Dependencies
+import Foundation
 import MusicRoomDomain
 
 public struct PlaylistStreamClient: Sendable {
@@ -13,7 +13,20 @@ public struct PlaylistStreamClient: Sendable {
 extension PlaylistStreamClient: DependencyKey {
     public static let liveValue = PlaylistStreamClient { event in
         AsyncStream { continuation in
-            let updates = event.playlist.enumerated().map { index, track in
+            // Synthesize a playlist for the mock since Event doesn't have one
+            let synthesizedPlaylist = [
+                Track(
+                    title: "Song 1", artist: "Artist 1", provider: "mock", providerTrackId: "1",
+                    votes: 5),
+                Track(
+                    title: "Song 2", artist: "Artist 2", provider: "mock", providerTrackId: "2",
+                    votes: 3),
+                Track(
+                    title: "Song 3", artist: "Artist 3", provider: "mock", providerTrackId: "3",
+                    votes: 1),
+            ]
+
+            let updates = synthesizedPlaylist.enumerated().map { index, track in
                 PlaylistUpdate(
                     eventID: event.id,
                     updatedTrack: track,
@@ -33,9 +46,12 @@ extension PlaylistStreamClient: DependencyKey {
 
     public static let previewValue = PlaylistStreamClient { event in
         AsyncStream { continuation in
-            let track = event.playlist.first ?? Track(title: "Preview", artist: "", votes: 0)
+            let track = Track(
+                title: "Preview", artist: "Unknown", provider: "mock", providerTrackId: "0",
+                votes: 0)
             continuation.yield(
-                PlaylistUpdate(eventID: event.id, updatedTrack: track, message: "Preview event fired")
+                PlaylistUpdate(
+                    eventID: event.id, updatedTrack: track, message: "Preview event fired")
             )
             continuation.finish()
         }

@@ -7,7 +7,6 @@ import (
 )
 
 func (s *Server) buildVerificationURL(token string) string {
-	// Если задан EMAIL_VERIFICATION_URL
 	base := strings.TrimSpace(s.verificationURLBase)
 	if base != "" {
 		sep := "?"

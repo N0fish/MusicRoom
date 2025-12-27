@@ -1,8 +1,22 @@
 services:
+  auth-service:
+    build:
+      context: ./backend/services/auth-service
+    env_file:
+      - ./backend/services/auth-service/.env.test
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 2s
+      retries: 20
+
   api-gateway-tests:
     build:
       context: ./backend/services/api-gateway
       dockerfile: Dockerfile.test
     env_file:
       - ./backend/services/api-gateway/.env.test
+    depends_on:
+      auth-service:
+        condition: service_healthy
     command: ["go", "test", "./..."]

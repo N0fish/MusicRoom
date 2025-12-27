@@ -51,7 +51,7 @@ func (s *Server) HandleSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	items, err := s.yt.SearchTracks(ctx, q, limit)
+	items, err := s.provider.SearchTracks(ctx, q, limit)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "failed to query provider")
 		return

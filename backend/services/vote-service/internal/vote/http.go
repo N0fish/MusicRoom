@@ -2,6 +2,7 @@ package vote
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -9,16 +10,24 @@ import (
 )
 
 type HTTPServer struct {
-	pool           *pgxpool.Pool
-	rdb            *redis.Client
-	userServiceURL string
+	pool               *pgxpool.Pool
+	store              Store
+	rdb                *redis.Client
+	httpClient         *http.Client
+	userServiceURL     string
+	playlistServiceURL string
+	realtimeServiceURL string
 }
 
-func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, userServiceURL string) http.Handler {
+func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, userServiceURL, playlistServiceURL, realtimeServiceURL string) http.Handler {
 	s := &HTTPServer{
-		pool:           pool,
-		rdb:            rdb,
-		userServiceURL: userServiceURL,
+		pool:               pool,
+		store:              NewPostgresStore(pool),
+		rdb:                rdb,
+		httpClient:         &http.Client{Timeout: 15 * time.Second},
+		userServiceURL:     userServiceURL,
+		playlistServiceURL: playlistServiceURL,
+		realtimeServiceURL: realtimeServiceURL,
 	}
 
 	r := chi.NewRouter()
@@ -38,6 +47,7 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, userServiceURL string) htt
 	r.Get("/events/{id}", s.handleGetEvent)
 	r.Delete("/events/{id}", s.handleDeleteEvent)
 	r.Patch("/events/{id}", s.handlePatchEvent)
+	r.Post("/events/{id}/transfer-ownership", s.handleTransferOwnership)
 
 	// invites
 	r.Post("/events/{id}/invites", s.handleCreateInvite)
@@ -46,8 +56,12 @@ func NewRouter(pool *pgxpool.Pool, rdb *redis.Client, userServiceURL string) htt
 
 	// voting
 	r.Post("/events/{id}/vote", s.handleVote)
+	r.Delete("/events/{id}/vote", s.handleRemoveVote)
 	r.Get("/events/{id}/tally", s.handleTally)
 	r.Delete("/events/{id}/votes", s.handleClearVotes)
+
+	// stats
+	r.Get("/stats", s.handleGetStats)
 
 	return r
 }

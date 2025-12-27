@@ -1,6 +1,13 @@
 package vote
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var (
+	ErrVoteConflict = errors.New("vote conflict")
+)
 
 const (
 	visibilityPublic  = "public"
@@ -9,6 +16,9 @@ const (
 	licenseEveryone = "everyone"
 	licenseInvited  = "invited_only"
 	licenseGeoTime  = "geo_time"
+
+	RoleGuest       = "guest"
+	RoleContributor = "contributor"
 )
 
 type Event struct {
@@ -24,12 +34,19 @@ type Event struct {
 	VoteEnd     *time.Time `json:"voteEnd,omitempty"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	UpdatedAt   time.Time  `json:"updatedAt"`
+	IsJoined    bool       `json:"isJoined"`
+	CanVote     bool       `json:"canVote"`
 }
 
 type VoteResponse struct {
 	Status     string `json:"status"`
 	TrackID    string `json:"trackId"`
 	TotalVotes int    `json:"totalVotes"`
+}
+
+type UserStats struct {
+	EventsHosted int `json:"eventsHosted"`
+	VotesCast    int `json:"votesCast"`
 }
 
 type voteRequest struct {

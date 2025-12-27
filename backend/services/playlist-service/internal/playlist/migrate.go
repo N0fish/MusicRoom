@@ -40,6 +40,25 @@ func AutoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
 		return err
 	}
 
+	// --- Migrations for Playback Logic ---
+
+	// 1. Add columns to tracks
+	if _, err := pool.Exec(ctx, `
+		ALTER TABLE tracks ADD COLUMN IF NOT EXISTS duration_ms INT NOT NULL DEFAULT 0;
+		ALTER TABLE tracks ADD COLUMN IF NOT EXISTS vote_count INT NOT NULL DEFAULT 0;
+		ALTER TABLE tracks ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'queued';
+	`); err != nil {
+		return err
+	}
+
+	// 2. Add columns to playlists (circular reference handled by ALTER)
+	if _, err := pool.Exec(ctx, `
+		ALTER TABLE playlists ADD COLUMN IF NOT EXISTS current_track_id uuid REFERENCES tracks(id) ON DELETE SET NULL;
+		ALTER TABLE playlists ADD COLUMN IF NOT EXISTS playing_started_at TIMESTAMPTZ;
+	`); err != nil {
+		return err
+	}
+
 	if _, err := pool.Exec(ctx, `
       CREATE UNIQUE INDEX IF NOT EXISTS idx_tracks_playlist_position
       ON tracks(playlist_id, position)
@@ -55,6 +74,17 @@ func AutoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
           PRIMARY KEY (playlist_id, user_id)
       )
     `); err != nil {
+		return err
+	}
+
+	if _, err := pool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS track_votes (
+			track_id uuid NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+			user_id  TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			PRIMARY KEY (track_id, user_id)
+		)
+	`); err != nil {
 		return err
 	}
 

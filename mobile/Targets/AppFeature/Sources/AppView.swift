@@ -1,7 +1,10 @@
-import SwiftUI
+import AuthenticationFeature
 import ComposableArchitecture
-import SettingsFeature
+import EventFeature
 import MusicRoomDomain
+import PlaylistFeature
+import SettingsFeature
+import SwiftUI
 
 public struct AppView: View {
     private let store: StoreOf<AppFeature>
@@ -11,60 +14,87 @@ public struct AppView: View {
     }
 
     public var body: some View {
-        NavigationStack {
-            WithViewStore(store, observe: { $0 }) { viewStore in
-                List {
-                    Section("Environment") {
-                        NavigationLink {
-                            SettingsView(
-                                store: store.scope(
-                                    state: \.settings,
-                                    action: \.settings
-                                )
-                            )
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Label("Backend Settings", systemImage: "antenna.radiowaves.left.and.right")
-                                Text(viewStore.settings.backendURLSummary)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                        }
-                    }
-
-                    Section("Sample Data Preview") {
-                        if viewStore.isSampleDataLoading {
-                            ProgressView("Loading mock events…")
-                        } else if let error = viewStore.sampleDataError {
-                            Text("Error: \(error)")
-                                .foregroundStyle(.red)
-                        } else {
-                            ForEach(viewStore.sampleEvents) { event in
-                                VStack(alignment: .leading) {
-                                    Text(event.name)
-                                        .font(.headline)
-                                    Text("\(event.licenseTier.label) · \(event.visibility.label)")
-                                        .font(.footnote)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Label(viewStore.policySummary, systemImage: "checkmark.shield")
-                                .font(.subheadline)
-                            Label(viewStore.latestStreamMessage, systemImage: "dot.radiowaves.left.and.right")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .navigationTitle("Music Room")
-                .task {
-                    await viewStore.send(.task).finish()
+        WithViewStore(store, observe: { $0.destination }) { viewStore in
+            Group {
+                switch viewStore.state {
+                case .login:
+                    AuthenticationView(
+                        store: store.scope(
+                            state: \.authentication,
+                            action: \.authentication
+                        )
+                    )
+                case .app:
+                    appContent
+                case .splash:
+                    SplashView()
                 }
             }
+            .task {
+                await viewStore.send(.task).finish()
+            }
         }
+    }
+
+    private var appContent: some View {
+        TabView {
+            // Tab 1: Events
+            EventListView(
+                store: store.scope(
+                    state: \.eventList,
+                    action: \.eventList
+                )
+            )
+            .tabItem {
+                Label("Events", systemImage: "music.note.list")
+            }
+
+            // Tab 2: Playlists
+            PlaylistListView(
+                store: store.scope(
+                    state: \.playlistList,
+                    action: \.playlistList
+                )
+            )
+            .tabItem {
+                Label("Playlists", systemImage: "music.note")
+            }
+
+            // Tab 2: Profile
+            NavigationStack {
+                ProfileView(
+                    store: store.scope(
+                        state: \.profile,
+                        action: \.profile
+                    )
+                )
+            }
+            .tabItem {
+                Label("Profile", systemImage: "person.crop.circle")
+            }
+
+            // Tab 3: Friends
+            FriendsView(
+                store: store.scope(state: \.friends, action: \.friends)
+            )
+            .tabItem {
+                Label("Friends", systemImage: "person.2.fill")
+            }
+
+            // Tab 3: Settings
+            NavigationStack {
+                SettingsView(
+                    store: store.scope(
+                        state: \.settings,
+                        action: \.settings
+                    )
+                )
+            }
+            .tabItem {
+                Label("Settings", systemImage: "gear")
+            }
+        }
+        // Assuming .liquidAccent is defined or available globally, otherwise it would need to be defined.
+        .tint(.liquidAccent)  // Consistent styling
     }
 }

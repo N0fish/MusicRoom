@@ -1,6 +1,7 @@
 package vote
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -61,4 +62,23 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func (s *HTTPServer) publishEvent(ctx context.Context, eventType string, payload any) {
+	if s.rdb == nil {
+		return
+	}
+
+	body := map[string]any{
+		"type":    eventType,
+		"payload": payload,
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return
+	}
+
+	if err := s.rdb.Publish(ctx, "broadcast", string(data)).Err(); err != nil {
+		// Log error preferably
+	}
 }

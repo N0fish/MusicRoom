@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"os"
 
+	vote "vote-service/internal/vote"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
-
-	vote "vote-service/internal/vote"
 )
 
 func main() {
@@ -17,6 +17,8 @@ func main() {
 	dsn := getenv("DATABASE_URL", "postgres://musicroom:musicroom@postgres:5432/musicroom?sslmode=disable")
 	redisURL := getenv("REDIS_URL", "redis://redis:6379")
 	userServiceURL := getenv("USER_SERVICE_URL", "http://user-service:3005")
+	playlistServiceURL := getenv("PLAYLIST_SERVICE_URL", "http://playlist-service:3002")
+	realtimeServiceURL := getenv("REALTIME_SERVICE_URL", "http://realtime-service:3004")
 
 	ctx := context.Background()
 
@@ -37,7 +39,7 @@ func main() {
 	rdb := redis.NewClient(opt)
 	defer rdb.Close()
 
-	router := vote.NewRouter(pool, rdb, userServiceURL)
+	router := vote.NewRouter(pool, rdb, userServiceURL, playlistServiceURL, realtimeServiceURL)
 
 	log.Printf("vote-service listening on :%s", port)
 	if err := http.ListenAndServe(":"+port, router); err != nil {

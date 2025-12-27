@@ -11,10 +11,11 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-func (s *Server) handleListPublicPlaylists(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleListPlaylists(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := r.Header.Get("X-User-Id")
 
+	// Query: public playlists OR playlists I own OR playlists I'm invited to
 	rows, err := s.db.Query(ctx, `
 		SELECT p.id, p.owner_id, p.name, p.description, p.is_public, p.edit_mode, p.created_at
 		FROM playlists p
@@ -32,7 +33,7 @@ func (s *Server) handleListPublicPlaylists(w http.ResponseWriter, r *http.Reques
 	}
 	defer rows.Close()
 
-	var playlists []Playlist
+	playlists := []Playlist{}
 	for rows.Next() {
 		var pl Playlist
 		if err := rows.Scan(
@@ -272,7 +273,7 @@ func (s *Server) handleGetPlaylist(w http.ResponseWriter, r *http.Request) {
 
 	var pl Playlist
 	err := s.db.QueryRow(ctx, `
-		SELECT id, owner_id, name, description, is_public, edit_mode, created_at
+		SELECT id, owner_id, name, description, is_public, edit_mode, created_at, current_track_id, playing_started_at
 		FROM playlists
 		WHERE id = $1
 	`, playlistID).Scan(
@@ -283,6 +284,8 @@ func (s *Server) handleGetPlaylist(w http.ResponseWriter, r *http.Request) {
 		&pl.IsPublic,
 		&pl.EditMode,
 		&pl.CreatedAt,
+		&pl.CurrentTrackID,
+		&pl.PlayingStartedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "playlist not found")
@@ -311,12 +314,14 @@ func (s *Server) handleGetPlaylist(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := s.db.Query(ctx, `
-    SELECT id, playlist_id, title, artist, position, created_at,
-           provider, provider_track_id, thumbnail_url
-    FROM tracks
-    WHERE playlist_id = $1
-    ORDER BY position ASC
-  `, playlistID)
+    SELECT t.id, t.playlist_id, t.title, t.artist, t.position, t.created_at,
+           t.provider, t.provider_track_id, t.thumbnail_url, t.duration_ms, t.vote_count, t.status,
+           (tv.user_id IS NOT NULL) as is_voted
+    FROM tracks t
+    LEFT JOIN track_votes tv ON t.id = tv.track_id AND tv.user_id = $2
+    WHERE t.playlist_id = $1
+    ORDER BY t.position ASC
+  `, playlistID, userID)
 	if err != nil {
 		log.Printf("playlist-service: list tracks: %v", err)
 		writeError(w, http.StatusInternalServerError, "database error")
@@ -324,7 +329,7 @@ func (s *Server) handleGetPlaylist(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var tracks []Track
+	tracks := []Track{}
 	for rows.Next() {
 		var tr Track
 		if err := rows.Scan(
@@ -337,6 +342,10 @@ func (s *Server) handleGetPlaylist(w http.ResponseWriter, r *http.Request) {
 			&tr.Provider,
 			&tr.ProviderTrackID,
 			&tr.ThumbnailURL,
+			&tr.DurationMs,
+			&tr.VoteCount,
+			&tr.Status,
+			&tr.IsVoted,
 		); err != nil {
 			log.Printf("playlist-service: list tracks scan: %v", err)
 			writeError(w, http.StatusInternalServerError, "database error")

@@ -23,6 +23,7 @@ type UserProfile struct {
 	Bio             string
 	Visibility      string
 	Preferences     Preferences
+	IsPremium       bool
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }
@@ -47,6 +48,7 @@ func autoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
 					bio TEXT NOT NULL DEFAULT '',
           visibility TEXT NOT NULL DEFAULT 'public',
           preferences JSONB NOT NULL DEFAULT '{}'::jsonb,
+          is_premium BOOLEAN NOT NULL DEFAULT FALSE,
           created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
       )
@@ -75,6 +77,14 @@ func autoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
 		log.Printf("migrate drop old bio columns: %v", err)
 	}
 	// TODO: до сюда
+
+	_, err = pool.Exec(ctx, `
+      ALTER TABLE user_profiles
+          ADD COLUMN IF NOT EXISTS is_premium BOOLEAN NOT NULL DEFAULT FALSE;
+  `)
+	if err != nil {
+		log.Printf("migrate add is_premium: %v", err)
+	}
 
 	_, _ = pool.Exec(ctx, `
       CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profiles_username
@@ -125,7 +135,7 @@ func (s *Server) findProfileByUserID(ctx context.Context, userID string) (UserPr
       SELECT id, user_id, display_name, username,
              avatar_url, has_custom_avatar,
              bio,
-             visibility, preferences,
+             visibility, preferences, is_premium,
              created_at, updated_at
       FROM user_profiles
       WHERE user_id = $1
@@ -149,7 +159,7 @@ func (s *Server) getOrCreateProfile(ctx context.Context, userID string) (UserPro
       RETURNING id, user_id, display_name, username,
                 avatar_url, has_custom_avatar,
                 bio,
-                visibility, preferences,
+                visibility, preferences, is_premium,
                 created_at, updated_at
   `, userID)
 
@@ -178,8 +188,9 @@ func (s *Server) saveProfile(ctx context.Context, prof UserProfile) error {
             bio = $5,
             visibility = $6,
             preferences = $7,
-            updated_at = $8
-        WHERE user_id = $9
+            is_premium = $8,
+            updated_at = $9
+        WHERE user_id = $10
   `,
 		prof.DisplayName,
 		prof.Username,
@@ -188,6 +199,7 @@ func (s *Server) saveProfile(ctx context.Context, prof UserProfile) error {
 		prof.Bio,
 		prof.Visibility,
 		prefJSON,
+		prof.IsPremium,
 		prof.UpdatedAt,
 		prof.UserID,
 	)
@@ -210,6 +222,7 @@ func scanUserProfile(row pgx.Row) (UserProfile, error) {
 		&p.Bio,
 		&p.Visibility,
 		&prefBytes,
+		&p.IsPremium,
 		&p.CreatedAt,
 		&p.UpdatedAt,
 	)

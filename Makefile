@@ -1,11 +1,12 @@
 SHELL := /bin/bash
-SERVICES := backend/services/api-gateway/cmd/service \
-						backend/services/auth-service/cmd/service \
-						backend/services/user-service/cmd/service \
-						backend/services/playlist-service/cmd/service \
-						backend/services/realtime-service/cmd/service \
-						backend/services/vote-service/cmd/service \
-						backend/services/mock-service/cmd/service \
+SERVICES := backend/services/api-gateway \
+						backend/services/auth-service \
+						backend/services/user-service \
+						backend/services/playlist-service \
+						backend/services/realtime-service \
+						backend/services/vote-service \
+						backend/services/mock-service \
+						backend/services/music-provider-service \
 						frontend/cmd/service
 
 
@@ -98,3 +99,22 @@ start:
 test-gateway:
 	docker compose -f docker-compose.gateway-test.yaml up --build --abort-on-container-exit
 	docker compose -f docker-compose.gateway-test.yaml down --remove-orphans
+
+.PHONY: test-go test-mobile test
+
+test-go:
+	@echo "Running Go tests (web/backend)..."
+	@set -e; \
+	for s in $(SERVICES); do \
+		if [ -d "$$s" ]; then \
+			( cd "$$s" && go test -cover ./... ); \
+		else \
+			echo "Skipping missing dir: $$s"; \
+		fi; \
+	done
+
+test-mobile:
+	@echo "Running mobile tests..."
+	$(MAKE) -C mobile test
+
+test: test-go test-mobile

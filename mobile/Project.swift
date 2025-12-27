@@ -21,6 +21,12 @@ let project = Project(
         .remote(
             url: "https://github.com/pointfreeco/swift-concurrency-extras",
             requirement: .upToNextMajor(from: "1.3.2")),
+        .remote(
+            url: "https://github.com/pointfreeco/swift-clocks",
+            requirement: .upToNextMajor(from: "1.0.0")),
+        .remote(
+            url: "https://github.com/youtube/youtube-ios-player-helper",
+            requirement: .upToNextMajor(from: "1.0.4")),
     ],
     settings: .settings(base: [
         "SWIFT_VERSION": "6.0",
@@ -28,6 +34,18 @@ let project = Project(
         "SWIFT_TREAT_WARNINGS_AS_ERRORS": "YES",
     ]),
     targets: [
+        Target.target(
+            name: "MusicRoomUI",
+            destinations: .iOS,
+            product: .staticLibrary,
+            bundleId: "com.musicroom.ui",
+            deploymentTargets: deploymentTargets,
+            sources: ["Targets/MusicRoomUI/Sources/**"],
+            resources: ["Targets/MusicRoomUI/Resources/**"],
+            dependencies: [
+                .package(product: "YouTubeiOSPlayerHelper")
+            ]
+        ),
         Target.target(
             name: "MusicRoomDomain",
             destinations: .iOS,
@@ -46,6 +64,20 @@ let project = Project(
             sources: ["Targets/MusicRoomAPI/Sources/**"],
             dependencies: [
                 .target(name: "MusicRoomDomain"),
+                .target(name: "AppSettingsClient"),
+                .target(name: "AppSupportClients"),
+                .package(product: "Dependencies"),
+            ]
+        ),
+        Target.target(
+            name: "AppSupportClientsTests",
+            destinations: .iOS,
+            product: .unitTests,
+            bundleId: "io.tuist.AppSupportClientsTests",
+            infoPlist: .default,
+            sources: ["Targets/AppSupportClients/Tests/**"],
+            dependencies: [
+                .target(name: "AppSupportClients"),
                 .package(product: "Dependencies"),
             ]
         ),
@@ -80,16 +112,30 @@ let project = Project(
             bundleId: "com.musicroom.mobile",
             deploymentTargets: deploymentTargets,
             infoPlist: .extendingDefault(with: [
-                "UILaunchScreen": [:]
+                "UILaunchScreen": [:],
+                "NSLocationWhenInUseUsageDescription":
+                    "Music Room needs your location to verify your eligibility to vote on geo-restricted events.",
+                "CFBundleURLTypes": [
+                    [
+                        "CFBundleTypeRole": "Editor",
+                        "CFBundleURLName": "com.musicroom.mobile",
+                        "CFBundleURLSchemes": ["musicroom"],
+                    ]
+                ],
+                "NSAppTransportSecurity": [
+                    "NSAllowsArbitraryLoads": true
+                ],
             ]),
             sources: ["Targets/MusicRoomMobile/Sources/**"],
             resources: ["Targets/MusicRoomMobile/Resources/**"],
             dependencies: [
                 .target(name: "AppFeature"),
+                .target(name: "EventFeature"),
                 .package(product: "ComposableArchitecture"),
                 .package(product: "Dependencies"),
                 .package(product: "CasePaths"),
                 .package(product: "SwiftNavigation"),
+                .package(product: "Clocks"),
             ]
         ),
         Target.target(
@@ -101,13 +147,18 @@ let project = Project(
             sources: ["Targets/AppFeature/Sources/**"],
             dependencies: [
                 .target(name: "SettingsFeature"),
+                .target(name: "AuthenticationFeature"),
+                .target(name: "EventFeature"),
                 .target(name: "AppSettingsClient"),
                 .target(name: "MusicRoomDomain"),
                 .target(name: "MusicRoomAPI"),
                 .target(name: "PolicyEngine"),
                 .target(name: "RealtimeMocks"),
+                .target(name: "PlaylistFeature"),
                 .target(name: "AppSupportClients"),
+                .target(name: "MusicRoomUI"),
                 .package(product: "ComposableArchitecture"),
+                .package(product: "YouTubeiOSPlayerHelper"),
             ]
         ),
         Target.target(
@@ -124,6 +175,73 @@ let project = Project(
             ]
         ),
         Target.target(
+            name: "AuthenticationFeature",
+            destinations: .iOS,
+            product: .staticLibrary,
+            bundleId: "com.musicroom.authenticationfeature",
+            deploymentTargets: deploymentTargets,
+            sources: ["Targets/AuthenticationFeature/Sources/**"],
+            dependencies: [
+                .target(name: "AppSupportClients"),
+                .target(name: "AppSettingsClient"),
+                .target(name: "MusicRoomUI"),
+                .package(product: "ComposableArchitecture"),
+                .package(product: "YouTubeiOSPlayerHelper"),
+            ]
+        ),
+        Target.target(
+            name: "EventFeature",
+            destinations: .iOS,
+            product: .staticLibrary,
+            bundleId: "com.musicroom.eventfeature",
+            deploymentTargets: deploymentTargets,
+            sources: ["Targets/EventFeature/Sources/**"],
+            dependencies: [
+                .target(name: "AppSupportClients"),
+                .target(name: "SearchFeature"),
+                .target(name: "MusicRoomUI"),
+                .target(name: "MusicRoomDomain"),
+                .target(name: "MusicRoomAPI"),
+                .target(name: "AppSettingsClient"),
+                .package(product: "ComposableArchitecture"),
+                .package(product: "YouTubeiOSPlayerHelper"),
+                .package(product: "Clocks"),
+            ]
+        ),
+        Target.target(
+            name: "SearchFeature",
+            destinations: .iOS,
+            product: .staticLibrary,
+            bundleId: "com.musicroom.searchfeature",
+            deploymentTargets: deploymentTargets,
+            sources: ["Targets/SearchFeature/Sources/**"],
+            dependencies: [
+                .target(name: "MusicRoomDomain"),
+                .target(name: "MusicRoomAPI"),
+                .target(name: "MusicRoomUI"),
+                .package(product: "YouTubeiOSPlayerHelper"),
+                .package(product: "ComposableArchitecture"),
+            ]
+        ),
+        Target.target(
+            name: "PlaylistFeature",
+            destinations: .iOS,
+            product: .staticLibrary,
+            bundleId: "com.musicroom.playlistfeature",
+            deploymentTargets: deploymentTargets,
+            sources: ["Targets/PlaylistFeature/Sources/**"],
+            dependencies: [
+                .target(name: "AppSupportClients"),
+                .target(name: "SearchFeature"),
+                .target(name: "MusicRoomUI"),
+                .target(name: "MusicRoomDomain"),
+                .target(name: "MusicRoomAPI"),
+                .target(name: "AppSettingsClient"),
+                .package(product: "YouTubeiOSPlayerHelper"),
+                .package(product: "ComposableArchitecture"),
+            ]
+        ),
+        Target.target(
             name: "AppSupportClients",
             destinations: .iOS,
             product: .staticLibrary,
@@ -131,7 +249,9 @@ let project = Project(
             deploymentTargets: deploymentTargets,
             sources: ["Targets/AppSupportClients/Sources/**"],
             dependencies: [
-                .package(product: "Dependencies")
+                .package(product: "Dependencies"),
+                .target(name: "MusicRoomDomain"),
+                .target(name: "AppSettingsClient"),
             ]
         ),
         Target.target(
@@ -152,16 +272,24 @@ let project = Project(
             bundleId: "com.musicroom.mobileTests",
             deploymentTargets: deploymentTargets,
             infoPlist: .default,
-            sources: ["Targets/MusicRoomMobile/Tests/**"],
+            sources: [
+                "Targets/MusicRoomMobile/Tests/**",
+                "Targets/EventFeature/Tests/**",
+                "Targets/MusicRoomAPI/Tests/**",
+                "Targets/AuthenticationFeature/Tests/**",
+                "Targets/PlaylistFeature/Tests/**",
+                "Targets/AppSupportClients/Tests/**",
+            ],
             dependencies: [
                 .target(name: "MusicRoomMobile"),
-                .target(name: "AppFeature"),
-                .target(name: "SettingsFeature"),
-                .target(name: "AppSettingsClient"),
                 .package(product: "ComposableArchitecture"),
                 .package(product: "SwiftNavigation"),
                 .package(product: "CasePaths"),
                 .package(product: "ConcurrencyExtras"),
+                .package(product: "Dependencies"),
+                .package(product: "Clocks"),
+                .target(name: "AppSettingsClient"),
+                .target(name: "AppSupportClients"),
             ]
         ),
     ]

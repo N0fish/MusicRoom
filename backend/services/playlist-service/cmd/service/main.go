@@ -40,6 +40,9 @@ func main() {
 
 	s := playlist.NewServer(pool, rdb)
 
+	// Start background ticker for auto-advancing tracks
+	s.StartTicker(ctx)
+
 	r := s.Router(
 		middleware.RequestID,
 		middleware.RealIP,
