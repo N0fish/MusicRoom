@@ -63,7 +63,7 @@ final class AuthenticationClientTests: XCTestCase {
         let client = withDependencies {
             $0.appSettings.load = { baseSettings }
         } operation: {
-            AuthenticationClient.live(urlSession: session)
+            AuthenticationClient.live(urlSession: session, keychain: InMemoryKeychain())
         }
 
         // Pre-save a refresh token so the client attempts to refresh
@@ -123,7 +123,7 @@ final class AuthenticationClientTests: XCTestCase {
         let client = withDependencies {
             $0.appSettings.load = { baseSettings }
         } operation: {
-            AuthenticationClient.live(urlSession: session)
+            AuthenticationClient.live(urlSession: session, keychain: InMemoryKeychain())
         }
 
         // Seed initial tokens
@@ -187,4 +187,28 @@ class AuthMockURLProtocol: URLProtocol {
     }
 
     override func stopLoading() {}
+}
+
+final class InMemoryKeychain: KeychainStoring, @unchecked Sendable {
+    private var storage: [String: String] = [:]
+    private let lock = NSLock()
+
+    func save(_ value: String, for key: String) {
+        lock.lock()
+        storage[key] = value
+        lock.unlock()
+    }
+
+    func read(_ key: String) -> String? {
+        lock.lock()
+        let value = storage[key]
+        lock.unlock()
+        return value
+    }
+
+    func delete(_ key: String) {
+        lock.lock()
+        storage.removeValue(forKey: key)
+        lock.unlock()
+    }
 }

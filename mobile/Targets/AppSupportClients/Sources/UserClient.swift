@@ -317,8 +317,10 @@ extension DependencyValues {
 extension UserClient {
     // in UserClient.swift
 
-    static func live() -> Self {
+    static func live(urlSession: URLSession = .shared) -> Self {
         @Dependency(\.appSettings) var appSettings
+        @Dependency(\.authentication) var authentication
+        let executor = AuthenticatedRequestExecutor(urlSession: urlSession, authentication: authentication)
 
         @Sendable func logError(
             _ request: URLRequest, _ response: HTTPURLResponse?, _ data: Data?, _ error: Error?
@@ -345,17 +347,8 @@ extension UserClient {
         @Sendable func performRequest<T: Decodable & Sendable>(
             _ request: URLRequest
         ) async throws -> T {
-            var request = request
-            if let token = KeychainHelper().read("accessToken") {
-                request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            }
-
             do {
-                let (data, response) = try await URLSession.shared.data(for: request)
-
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    throw URLError(.badServerResponse)
-                }
+                let (data, httpResponse) = try await executor.data(for: request)
 
                 if !(200...299).contains(httpResponse.statusCode) {
                     // Try to decode error response if possible, or just log
@@ -384,17 +377,8 @@ extension UserClient {
         }
 
         @Sendable func performRequestNoReturn(_ request: URLRequest) async throws {
-            var request = request
-            if let token = KeychainHelper().read("accessToken") {
-                request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            }
-
             do {
-                let (data, response) = try await URLSession.shared.data(for: request)
-
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    throw URLError(.badServerResponse)
-                }
+                let (data, httpResponse) = try await executor.data(for: request)
 
                 if !(200...299).contains(httpResponse.statusCode) {
                     let error = URLError(.badServerResponse)
@@ -704,27 +688,5 @@ extension UserClient {
                 return updatedProfile
             }
         )
-    }
-}
-
-// Duplicate KeychainHelper for now to avoid public exposure or creating a separate module just for this.
-// In a real app, this would be in a Core/Utils module.
-private struct KeychainHelper {
-    func read(_ key: String) -> String? {
-        let query =
-            [
-                kSecClass: kSecClassGenericPassword,
-                kSecAttrAccount: key,
-                kSecReturnData: true,
-                kSecMatchLimit: kSecMatchLimitOne,
-            ] as [String: Any]
-
-        var dataTypeRef: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &dataTypeRef)
-
-        if status == errSecSuccess, let data = dataTypeRef as? Data {
-            return String(data: data, encoding: .utf8)
-        }
-        return nil
     }
 }

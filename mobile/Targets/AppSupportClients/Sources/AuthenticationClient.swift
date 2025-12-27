@@ -112,8 +112,11 @@ extension AuthenticationClient {
 // MARK: - Live Implementation
 
 extension AuthenticationClient {
-    static func live(urlSession: URLSession = .shared) -> Self {
-        let keychain = KeychainHelper()
+    static func live(
+        urlSession: URLSession = .shared,
+        keychain: KeychainStoring = KeychainHelper()
+    ) -> Self {
+        let keychain = keychain
         let refreshActor = RefreshActor()
         @Dependency(\.appSettings) var appSettings
 
@@ -381,7 +384,13 @@ extension AuthenticationClient {
 
 // MARK: - Keychain Helper
 
-private struct KeychainHelper {
+protocol KeychainStoring: Sendable {
+    func save(_ value: String, for key: String)
+    func read(_ key: String) -> String?
+    func delete(_ key: String)
+}
+
+private struct KeychainHelper: KeychainStoring {
     func save(_ value: String, for key: String) {
         let data = value.data(using: .utf8)!
         let query =

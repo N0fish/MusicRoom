@@ -171,8 +171,10 @@ extension DependencyValues {
 // MARK: - Live Implementation
 
 extension FriendsClient {
-    static func live() -> Self {
+    static func live(urlSession: URLSession = .shared) -> Self {
         @Dependency(\.appSettings) var appSettings
+        @Dependency(\.authentication) var authentication
+        let executor = AuthenticatedRequestExecutor(urlSession: urlSession, authentication: authentication)
 
         @Sendable func logError(
             _ request: URLRequest, _ response: HTTPURLResponse?, _ data: Data?, _ error: Error?
@@ -199,15 +201,8 @@ extension FriendsClient {
         @Sendable func performRequest<T: Decodable & Sendable>(
             _ request: URLRequest
         ) async throws -> T {
-            var request = request
-            attachAuth(to: &request)
-
             do {
-                let (data, response) = try await URLSession.shared.data(for: request)
-
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    throw URLError(.badServerResponse)
-                }
+                let (data, httpResponse) = try await executor.data(for: request)
 
                 if !(200...299).contains(httpResponse.statusCode) {
                     let error = URLError(.badServerResponse)  // Or custom error
@@ -229,15 +224,8 @@ extension FriendsClient {
         }
 
         @Sendable func performRequestNoContent(_ request: URLRequest) async throws {
-            var request = request
-            attachAuth(to: &request)
-
             do {
-                let (data, response) = try await URLSession.shared.data(for: request)
-
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    throw URLError(.badServerResponse)
-                }
+                let (data, httpResponse) = try await executor.data(for: request)
 
                 if !(200...299).contains(httpResponse.statusCode) {
                     let error = URLError(.badServerResponse)
@@ -376,11 +364,6 @@ extension FriendsClient {
         )
     }
 
-    private static func attachAuth(to request: inout URLRequest) {
-        if let token = KeychainHelper().read("accessToken") {
-            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-    }
 }
 
 // MARK: - Public Profile Model
@@ -424,26 +407,5 @@ public struct PublicMusicPreferences: Codable, Equatable, Sendable {
         self.genres = genres
         self.artists = artists
         self.moods = moods
-    }
-}
-
-// Private KeychainHelper helper.
-private struct KeychainHelper {
-    func read(_ key: String) -> String? {
-        let query =
-            [
-                kSecClass: kSecClassGenericPassword,
-                kSecAttrAccount: key,
-                kSecReturnData: true,
-                kSecMatchLimit: kSecMatchLimitOne,
-            ] as [String: Any]
-
-        var dataTypeRef: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &dataTypeRef)
-
-        if status == errSecSuccess, let data = dataTypeRef as? Data {
-            return String(data: data, encoding: .utf8)
-        }
-        return nil
     }
 }
