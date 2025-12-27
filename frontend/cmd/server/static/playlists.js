@@ -9,10 +9,17 @@ async function loadPlaylist(playlistId) {
   const data = await res.json() // The response is PlaylistWithTracks
   const playlist = data.playlist;
   const tracks = data.tracks;
+  const canEdit = data.canEdit;
 
   const currentPlaylistDiv = document.getElementById('current-playlist')
   if (currentPlaylistDiv) currentPlaylistDiv.style.display = 'block'
   
+  // Show/Hide Search section based on canEdit
+  const searchSection = document.getElementById('music-search-query')?.closest('.card');
+  if (searchSection) {
+      searchSection.style.display = canEdit ? 'block' : 'none';
+  }
+
   const plName = document.getElementById('pl-name')
   if (plName) plName.textContent = decodeHTMLEntities(playlist.name)
   
@@ -44,8 +51,8 @@ async function loadPlaylist(playlistId) {
           const li = document.createElement('li')
           li.className = 'flex justify-between items-center py-3 px-4 bg-white/5 rounded-md hover:bg-white/10 transition-colors mb-2'
           
-          // Drag and Drop
-          if (track.id) {
+          // Drag and Drop (Only if canEdit is true)
+          if (track.id && canEdit) {
               li.setAttribute('draggable', 'true')
               li.dataset.index = index
               li.dataset.trackId = track.id
@@ -60,8 +67,8 @@ async function loadPlaylist(playlistId) {
           
           const infoDiv = document.createElement('div')
           infoDiv.className = 'flex items-center gap-4 flex-1 min-w-0'
-
-          // Play Button
+          
+          // ... (Rest of play button logic)
           if (track.providerTrackId) {
               const btnPlay = document.createElement('button')
               btnPlay.className = 'text-primary hover:text-primary-hover transition-colors flex-shrink-0'
@@ -111,16 +118,19 @@ async function loadPlaylist(playlistId) {
           
           li.appendChild(infoDiv)
 
-          const btnDelete = document.createElement('button')
-          btnDelete.className = 'inline-flex items-center justify-center text-primary hover:text-primary-hover transition-colors p-2'
-          btnDelete.title = 'Remove Track'
-          btnDelete.innerHTML = `
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          `
-          btnDelete.onclick = () => deleteTrack(playlistId, track.id)
-          li.appendChild(btnDelete)
+          // Only show delete button if canEdit is true
+          if (canEdit) {
+              const btnDelete = document.createElement('button')
+              btnDelete.className = 'inline-flex items-center justify-center text-primary hover:text-primary-hover transition-colors p-2'
+              btnDelete.title = 'Remove Track'
+              btnDelete.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              `
+              btnDelete.onclick = () => deleteTrack(playlistId, track.id)
+              li.appendChild(btnDelete)
+          }
 
           tracksUl.appendChild(li)
         })

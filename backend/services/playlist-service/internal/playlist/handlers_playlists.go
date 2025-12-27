@@ -350,8 +350,19 @@ func (s *Server) handleGetPlaylist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	canEdit := (userID != "" && userID == pl.OwnerID)
+	if !canEdit && userID != "" {
+		if pl.EditMode == editModeEveryone {
+			canEdit = true
+		} else {
+			invited, _ := s.userIsInvited(ctx, playlistID, userID)
+			canEdit = invited
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"playlist": pl,
 		"tracks":   tracks,
+		"canEdit":  canEdit,
 	})
 }
