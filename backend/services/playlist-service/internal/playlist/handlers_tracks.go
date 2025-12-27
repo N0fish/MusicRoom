@@ -273,6 +273,18 @@ func (s *Server) handleMoveTrack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Move to temporary position to avoid unique constraint violation
+	_, err = tx.Exec(ctx, `
+		UPDATE tracks
+		SET position = -1
+		WHERE id = $2 AND playlist_id = $1
+	`, playlistID, trackID)
+	if err != nil {
+		log.Printf("playlist-service: move track temp: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+
 	if newPos > currentPos {
 		_, err = tx.Exec(ctx, `
 			UPDATE tracks

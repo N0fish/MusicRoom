@@ -63,6 +63,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 3000);
     }
 
+    window.showToast = (content) => {
+        window.showAlert({ title: 'Notification', content: content });
+    }
+
     window.showPrompt = ({ title, content, onConfirm }) => {
         modalTitle.textContent = title;
         modalContent.textContent = content;

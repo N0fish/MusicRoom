@@ -3,9 +3,15 @@
     <a href="/playlists" class="text-primary hover:underline">&larr; Back to Playlists</a>
 </div>
 
-<div class="mb-4">
-    <h2 class="text-2xl font-bold" id="pl-name">Loading...</h2>
-    <span id="pl-id" style="display: none;">{{ .PlaylistID }}</span>
+<div class="flex justify-between items-start mb-4">
+    <div>
+        <h2 class="text-2xl font-bold" id="pl-name">Loading...</h2>
+        <div id="pl-meta" class="text-sm text-text-muted mt-1"></div>
+    </div>
+    <div class="flex gap-2">
+        <button id="pl-settings-btn" class="hidden btn-small" onclick="openPlaylistSettings()">Settings</button>
+        <span id="pl-id" style="display: none;">{{ .PlaylistID }}</span>
+    </div>
 </div>
 
 <div class="card mt-6">
