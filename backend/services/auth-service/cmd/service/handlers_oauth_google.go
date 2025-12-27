@@ -78,7 +78,6 @@ func (s *Server) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// exchange code for token
 	form := url.Values{}
 	form.Set("code", code)
 	form.Set("client_id", s.googleCfg.ClientID)
@@ -154,13 +153,11 @@ func (s *Server) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return tokens as JSON if requested explicitly
 	if r.URL.Query().Get("mode") == "json" {
 		writeJSON(w, http.StatusOK, tokens)
 		return
 	}
 
-	// Default: redirect back to frontend with tokens in URL fragment
 	redirectURL, err := url.Parse(redirect)
 	if err != nil {
 		redirectURL, _ = url.Parse(s.frontendURL)

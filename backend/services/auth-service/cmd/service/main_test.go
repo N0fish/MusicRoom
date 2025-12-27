@@ -9,11 +9,9 @@ import (
 )
 
 func TestMustParseDuration(t *testing.T) {
-	// Test default value
 	d := mustParseDuration("NON_EXISTENT_KEY", "1h")
 	assert.Equal(t, time.Hour, d)
 
-	// Test environment override
 	os.Setenv("MOCK_TTL", "2h")
 	defer os.Unsetenv("MOCK_TTL")
 	d = mustParseDuration("MOCK_TTL", "1h")

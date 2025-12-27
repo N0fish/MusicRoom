@@ -62,7 +62,6 @@ func TestHandleGoogleLogin(t *testing.T) {
 	q := loc.Query()
 	assert.Equal(t, "test-client-id", q.Get("client_id"))
 	assert.Equal(t, "http://localhost:3000/callback", q.Get("redirect_uri"))
-	// redirect param is state encoded
 	assert.Equal(t, url.QueryEscape("http://custom-redirect"), q.Get("state"))
 }
 
@@ -73,7 +72,7 @@ func TestHandleGoogleCallback(t *testing.T) {
 		queryParams    string
 		mockSetup      func(*MockHTTPClient, *MockRepository)
 		expectedStatus int
-		expectedLoc    string // partial match
+		expectedLoc    string
 	}{
 		{
 			name:        "Happy Path",

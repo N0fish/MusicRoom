@@ -12,16 +12,11 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// --- Mocks ---
-
 type MockDBOps struct {
 	mock.Mock
 }
 
 func (m *MockDBOps) Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error) {
-	// Pass arguments as variadic to Called to make matching easier or pass slice?
-	// mocking libraries usually handle variadic by passing them as slice if signature is variadic
-	// But let's pass explicitly
 	args := m.Called(ctx, sql, arguments)
 	return args.Get(0).(pgconn.CommandTag), args.Error(1)
 }
@@ -42,7 +37,6 @@ func (m *MockDBOps) QueryRow(ctx context.Context, sql string, args ...any) pgx.R
 	return &RepoMockRow{err: errors.New("unexpected call to QueryRow")}
 }
 
-// Renamed to RepoMockRow to avoid collision with mocks_test.go
 type RepoMockRow struct {
 	mock.Mock
 	err    error
@@ -133,8 +127,6 @@ func validUserRow(id, email string) []interface{} {
 	}
 }
 
-// --- Tests ---
-
 func TestFindUserByID(t *testing.T) {
 	mockDB := new(MockDBOps)
 	repo := &PostgresRepository{db: mockDB}
@@ -151,7 +143,6 @@ func TestFindUserByID(t *testing.T) {
 
 	t.Run("Not Found", func(t *testing.T) {
 		row := &PredefinedRow{err: pgx.ErrNoRows}
-		// Reset expected call to match
 		mockDB.ExpectedCalls = nil
 		mockDB.On("QueryRow", ctx, mock.Anything, mock.Anything).Return(row)
 
@@ -166,7 +157,6 @@ func TestSetVerificationToken(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("Success", func(t *testing.T) {
-		// Expect Exec with ANY args
 		mockDB.On("Exec", mock.Anything, mock.Anything, mock.Anything).
 			Return(pgconn.CommandTag{}, nil)
 
@@ -191,24 +181,12 @@ func TestUpsertUserWithGoogle(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("Link Existing User by Email", func(t *testing.T) {
-		// Mock FindUserByGoogleID -> NotFound
 		rowNotFound := &PredefinedRow{err: pgx.ErrNoRows}
 
-		// Mock FindUserByEmail -> Success
 		rowUser := &PredefinedRow{values: validUserRow("u1", "test@gmail.com")}
 
-		// Mock Update -> Success
 		rowUpdate := &PredefinedRow{values: validUserRow("u1", "test@gmail.com")}
 
-		// Sequence of QueryRow calls:
-		// 1. FindUserByGoogleID
-		// 2. FindUserByEmail
-		// 3. Update
-		// Since we can't easily sequence same method calls with simple On,
-		// we use mock.MatchedBy to differentiate SQL or just assume order if we return different mocks?
-		// But QueryRow returns a Row which has Scan called immediately.
-
-		// We can match SQL loosely
 		mockDB.On("QueryRow", ctx, mock.MatchedBy(func(sql string) bool {
 			return contains(sql, "WHERE google_id = $1")
 		}), mock.Anything).Return(rowNotFound).Once()
@@ -230,13 +208,10 @@ func TestUpsertUserWithGoogle(t *testing.T) {
 		mockDB.ExpectedCalls = nil
 		rowUser := &PredefinedRow{values: validUserRow("u1", "test@gmail.com")}
 
-		// 1. FindGoogle -> Found
 		mockDB.On("QueryRow", ctx, mock.MatchedBy(func(sql string) bool {
 			return contains(sql, "WHERE google_id = $1")
 		}), mock.Anything).Return(rowUser).Once()
 
-		// If email matches, it just returns. If email differs, it updates.
-		// Let's test email match first (simplest path)
 		user, err := repo.UpsertUserWithGoogle(ctx, "test@gmail.com", "g1")
 		assert.NoError(t, err)
 		assert.Equal(t, "u1", user.ID)
@@ -247,17 +222,17 @@ func TestUpsertUserWithGoogle(t *testing.T) {
 		rowNotFound := &PredefinedRow{err: pgx.ErrNoRows}
 		rowNew := &PredefinedRow{values: validUserRow("new-u", "new@gmail.com")}
 
-		// 1. FindGoogle -> 404
+		// FindGoogle -> 404
 		mockDB.On("QueryRow", ctx, mock.MatchedBy(func(sql string) bool {
 			return contains(sql, "WHERE google_id = $1")
 		}), mock.Anything).Return(rowNotFound).Once()
 
-		// 2. FindEmail -> 404
+		// FindEmail -> 404
 		mockDB.On("QueryRow", ctx, mock.MatchedBy(func(sql string) bool {
 			return contains(sql, "WHERE email = $1")
 		}), mock.Anything).Return(rowNotFound).Once()
 
-		// 3. Insert
+		// Insert
 		mockDB.On("QueryRow", ctx, mock.MatchedBy(func(sql string) bool {
 			return contains(sql, "INSERT INTO auth_users")
 		}), mock.Anything).Return(rowNew).Once()
@@ -399,7 +374,6 @@ func TestUpdateFTID(t *testing.T) {
 }
 
 func contains(s, substr string) bool {
-	// inefficient but enough for tests
 	for i := 0; i < len(s)-len(substr)+1; i++ {
 		if s[i:i+len(substr)] == substr {
 			return true

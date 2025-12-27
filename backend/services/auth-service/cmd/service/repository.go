@@ -27,8 +27,6 @@ type Repository interface {
 	UpdateFTID(ctx context.Context, userID string, ftID *string) (AuthUser, error)
 }
 
-// DBOps defines the subset of pgxpool.Pool methods we use.
-// This allows us to inject a mock for testing.
 type DBOps interface {
 	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
@@ -36,11 +34,29 @@ type DBOps interface {
 }
 
 type PostgresRepository struct {
-	db DBOps
+	pool *pgxpool.Pool
+	db   DBOps
 }
 
 func NewPostgresRepository(db *pgxpool.Pool) *PostgresRepository {
-	return &PostgresRepository{db: db}
+	return &PostgresRepository{pool: db, db: db}
+}
+
+func (r *PostgresRepository) WithTx(ctx context.Context, fn func(txRepo Repository) error) error {
+	if r.pool == nil {
+		return fn(r)
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	txRepo := &PostgresRepository{pool: nil, db: tx}
+	if err := fn(txRepo); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *PostgresRepository) FindUserByEmail(ctx context.Context, email string) (AuthUser, error) {

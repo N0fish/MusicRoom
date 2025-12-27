@@ -31,7 +31,6 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 func randomToken(n int) string {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
-		// fallback to insecure but should never really happen
 		return hex.EncodeToString(b)
 	}
 	return hex.EncodeToString(b)

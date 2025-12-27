@@ -626,6 +626,13 @@ func TestHandleUnlinkProvider(t *testing.T) {
 			name:     "Unlink Google - Success",
 			provider: "google",
 			mockSetup: func(m *MockRepository) {
+				m.On("FindUserByID", mock.Anything, "u1").
+					Return(AuthUser{
+						ID:           "u1",
+						PasswordHash: "hash", // не пустой, чтобы не сработал conflict
+						GoogleID:     strPtr("g1"),
+						FTID:         nil,
+					}, nil)
 				m.On("UpdateGoogleID", mock.Anything, "u1", (*string)(nil)).Return(AuthUser{}, nil)
 			},
 			expectedStatus: http.StatusOK,
@@ -634,6 +641,13 @@ func TestHandleUnlinkProvider(t *testing.T) {
 			name:     "Unlink 42 - Success",
 			provider: "42",
 			mockSetup: func(m *MockRepository) {
+				m.On("FindUserByID", mock.Anything, "u1").
+					Return(AuthUser{
+						ID:           "u1",
+						PasswordHash: "hash",
+						GoogleID:     nil,
+						FTID:         strPtr("ft1"),
+					}, nil)
 				m.On("UpdateFTID", mock.Anything, "u1", (*string)(nil)).Return(AuthUser{}, nil)
 			},
 			expectedStatus: http.StatusOK,
@@ -649,6 +663,12 @@ func TestHandleUnlinkProvider(t *testing.T) {
 			name:     "DB Error",
 			provider: "google",
 			mockSetup: func(m *MockRepository) {
+				m.On("FindUserByID", mock.Anything, "u1").
+					Return(AuthUser{
+						ID:           "u1",
+						PasswordHash: "hash",
+						GoogleID:     strPtr("g1"),
+					}, nil)
 				m.On("UpdateGoogleID", mock.Anything, "u1", (*string)(nil)).Return(AuthUser{}, errors.New("db error"))
 			},
 			expectedStatus: http.StatusInternalServerError,

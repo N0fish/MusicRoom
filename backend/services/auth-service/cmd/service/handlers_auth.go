@@ -61,13 +61,10 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// РАСКОМЕНТИРОВАТЬ БЛОГ КОГДА ЗАКОНЧИТСЯ ДЕВ РАЗРАБОТКА - ЭТО АВТОМАТИЧЕСКАЯ ОТПРАВКА ЕМЕЙЛА ПРИ РЕГИСТРАЦИИ
 	token := randomToken(32)
 	if err := s.repo.SetVerificationToken(r.Context(), user.ID, token); err != nil {
 		log.Printf("register: setVerificationToken: %v", err)
 	} else {
-		// 	log.Printf("[auth-service] email verification for %s: %s", user.Email, verificationURL)
-		// 	verificationURL := s.frontendURL + "?mode=verify-email&token=" + token
 		s.sendVerificationEmail(user, token)
 	}
 
@@ -221,8 +218,6 @@ func (s *Server) handleRequestEmailVerification(w http.ResponseWriter, r *http.R
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	// verificationURL := s.frontendURL + "?mode=verify-email&token=" + token
-	// log.Printf("[auth-service] email verification for %s: %s", user.Email, verificationURL)
 	s.sendVerificationEmail(user, token)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "verification sent"})
 }
@@ -261,7 +256,6 @@ func (s *Server) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 
 	user, err := s.repo.FindUserByEmail(r.Context(), email)
 	if err != nil {
-		// Do not reveal whether user exists
 		writeJSON(w, http.StatusOK, map[string]string{"status": "reset link sent"})
 		return
 	}
@@ -274,8 +268,6 @@ func (s *Server) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// resetURL := s.frontendURL + "?mode=reset-password&token=" + token
-	// log.Printf("[auth-service] password reset for %s: %s", user.Email, resetURL)
 	s.sendResetPasswordEmail(user, token)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "reset link sent"})
 }
@@ -381,20 +373,21 @@ func (s *Server) handleLinkProvider(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
+	if strings.TrimSpace(body.Token) == "" {
+		writeError(w, http.StatusBadRequest, "token is required")
+		return
+	}
 
-	// Parse valid token (User B)
 	targetClaims := &TokenClaims{}
 	token, err := jwt.ParseWithClaims(body.Token, targetClaims, func(t *jwt.Token) (interface{}, error) {
 		return s.jwtSecret, nil
 	})
-	if err != nil || !token.Valid {
+	if err != nil || !token.Valid || targetClaims.TokenType != "access" {
 		writeError(w, http.StatusBadRequest, "invalid target token")
 		return
 	}
 
 	if claims.UserID == targetClaims.UserID {
-		// Already logged in as same user, nothing to link
-		// Just return current profile
 		writeJSON(w, http.StatusOK, map[string]string{"status": "already linked"})
 		return
 	}
@@ -405,6 +398,10 @@ func (s *Server) handleLinkProvider(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "target user not found")
 		return
 	}
+	if targetUser.TokenVersion != targetClaims.Version {
+		writeError(w, http.StatusBadRequest, "invalid target token")
+		return
+	}
 
 	// Find current user (User A)
 	currentUser, err := s.repo.FindUserByID(r.Context(), claims.UserID)
@@ -413,64 +410,70 @@ func (s *Server) handleLinkProvider(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if target user is an existing "real" user or just a temp shell
-	// Heuristic: if created > 5 minutes ago, it's likely a real user.
 	if time.Since(targetUser.CreatedAt) > 5*time.Minute {
 		writeError(w, http.StatusConflict, "account associated with another user")
 		return
 	}
 
-	if provider == "google" {
-		if targetUser.GoogleID == nil {
-			writeError(w, http.StatusBadRequest, "target account has no google link")
-			return
+	// IMPORTANT: make the move atomic when possible to avoid leaving the system
+	// in an inconsistent state (e.g. provider unlinked from B but not linked to A).
+	//
+	// In unit tests we use a MockRepository without transaction support; in that
+	// case we just run the same logic without a transaction.
+	var runInTx = func(ctx context.Context, fn func(repo Repository) error) error {
+		if txCapable, ok := s.repo.(interface {
+			WithTx(context.Context, func(Repository) error) error
+		}); ok {
+			return txCapable.WithTx(ctx, fn)
 		}
-		if currentUser.GoogleID != nil {
-			writeError(w, http.StatusConflict, "current user already linked to google")
-			return
-		}
-		// Move GoogleID from B to A
-		// First: Unlink from B to avoid unique constraint violation
-		if _, err := s.repo.UpdateGoogleID(r.Context(), targetUser.ID, nil); err != nil {
-			log.Printf("link google: unlink target: %v", err)
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-		// Second: Link to A
-		if _, err := s.repo.UpdateGoogleID(r.Context(), currentUser.ID, targetUser.GoogleID); err != nil {
-			log.Printf("link google: link current: %v", err)
-			// Attempt to restore? For now just fail. User B is now unlinked but distinct.
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-	} else if provider == "42" {
-		if targetUser.FTID == nil {
-			writeError(w, http.StatusBadRequest, "target account has no 42 link")
-			return
-		}
-		if currentUser.FTID != nil {
-			writeError(w, http.StatusConflict, "current user already linked to 42")
-			return
-		}
-		// Move FTID from B to A
-		// First: Unlink from B to avoid unique constraint violation
-		if _, err := s.repo.UpdateFTID(r.Context(), targetUser.ID, nil); err != nil {
-			log.Printf("link 42: unlink target: %v", err)
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-		// Second: Link to A
-		if _, err := s.repo.UpdateFTID(r.Context(), currentUser.ID, targetUser.FTID); err != nil {
-			log.Printf("link 42: link current: %v", err)
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
+		return fn(s.repo)
 	}
 
-	// Delete target user (User B)
-	if err := s.repo.DeleteUser(r.Context(), targetUser.ID); err != nil {
-		// Log but don't fail, since link succeeded
-		log.Printf("link provider: failed to delete temp user %s: %v", targetUser.ID, err)
+	if err := runInTx(r.Context(), func(txRepo Repository) error {
+		if provider == "google" {
+			if targetUser.GoogleID == nil {
+				return errors.New("target account has no google link")
+			}
+			if currentUser.GoogleID != nil {
+				return errors.New("current user already linked to google")
+			}
+			if _, err := txRepo.UpdateGoogleID(r.Context(), targetUser.ID, nil); err != nil {
+				return err
+			}
+			if _, err := txRepo.UpdateGoogleID(r.Context(), currentUser.ID, targetUser.GoogleID); err != nil {
+				return err
+			}
+		} else {
+			if targetUser.FTID == nil {
+				return errors.New("target account has no 42 link")
+			}
+			if currentUser.FTID != nil {
+				return errors.New("current user already linked to 42")
+			}
+			if _, err := txRepo.UpdateFTID(r.Context(), targetUser.ID, nil); err != nil {
+				return err
+			}
+			if _, err := txRepo.UpdateFTID(r.Context(), currentUser.ID, targetUser.FTID); err != nil {
+				return err
+			}
+		}
+		// Delete target user (User B)
+		return txRepo.DeleteUser(r.Context(), targetUser.ID)
+	}); err != nil {
+		// Map expected conflicts to HTTP codes; everything else is a 500.
+		msg := strings.ToLower(err.Error())
+		switch {
+		case strings.Contains(msg, "no google") || strings.Contains(msg, "no 42"):
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		case strings.Contains(msg, "already linked"):
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		default:
+			log.Printf("link provider: %v", err)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "linked"})
@@ -489,13 +492,36 @@ func (s *Server) handleUnlinkProvider(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user, err := s.repo.FindUserByID(r.Context(), claims.UserID)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "user not found")
+		return
+	}
+
+	if user.PasswordHash == "" {
+		remainingGoogle := user.GoogleID != nil
+		remaining42 := user.FTID != nil
+
+		if provider == "google" {
+			remainingGoogle = false
+		} else {
+			remaining42 = false
+		}
+
+		if !remainingGoogle && !remaining42 {
+			writeError(w, http.StatusConflict, "cannot unlink last login method")
+			return
+		}
+	}
+
+	// Собственно unlink
 	if provider == "google" {
 		if _, err := s.repo.UpdateGoogleID(r.Context(), claims.UserID, nil); err != nil {
 			log.Printf("unlink google: %v", err)
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
-	} else if provider == "42" {
+	} else {
 		if _, err := s.repo.UpdateFTID(r.Context(), claims.UserID, nil); err != nil {
 			log.Printf("unlink 42: %v", err)
 			writeError(w, http.StatusInternalServerError, "internal error")
