@@ -1,3 +1,4 @@
+import AppSettingsClient
 import Dependencies
 import Foundation
 import MusicRoomDomain
@@ -39,6 +40,11 @@ extension DependencyValues {
 extension PlaylistClient {
     static func live(urlSession: URLSession = .shared) -> Self {
         let keychain = KeychainHelper()
+        @Dependency(\.appSettings) var appSettings
+
+        @Sendable func baseURLString() -> String {
+            appSettings.load().backendURLString
+        }
 
         @Sendable func performRequest<T: Decodable & Sendable>(_ request: URLRequest) async throws
             -> T
@@ -82,13 +88,13 @@ extension PlaylistClient {
 
         return Self(
             list: {
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 guard let url = URL(string: "\(baseUrl)/playlists") else { throw URLError(.badURL) }
                 let response: [Playlist]? = try await performRequest(URLRequest(url: url))
                 return response ?? []
             },
             create: { payload in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 guard let url = URL(string: "\(baseUrl)/playlists") else { throw URLError(.badURL) }
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
@@ -97,14 +103,14 @@ extension PlaylistClient {
                 return try await performRequest(request)
             },
             get: { id in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 guard let url = URL(string: "\(baseUrl)/playlists/\(id)") else {
                     throw URLError(.badURL)
                 }
                 return try await performRequest(URLRequest(url: url))
             },
             update: { id, payload in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 guard let url = URL(string: "\(baseUrl)/playlists/\(id)") else {
                     throw URLError(.badURL)
                 }
@@ -115,7 +121,7 @@ extension PlaylistClient {
                 return try await performRequest(request)
             },
             addTrack: { id, payload in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 guard let url = URL(string: "\(baseUrl)/playlists/\(id)/tracks") else {
                     throw URLError(.badURL)
                 }
@@ -126,7 +132,7 @@ extension PlaylistClient {
                 return try await performRequest(request)
             },
             deleteTrack: { playlistId, trackId in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 guard let url = URL(string: "\(baseUrl)/playlists/\(playlistId)/tracks/\(trackId)")
                 else { throw URLError(.badURL) }
                 var request = URLRequest(url: url)
@@ -134,7 +140,7 @@ extension PlaylistClient {
                 try await performRequestNoContent(request)
             },
             moveTrack: { playlistId, trackId, newPosition in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 guard let url = URL(string: "\(baseUrl)/playlists/\(playlistId)/tracks/\(trackId)")
                 else { throw URLError(.badURL) }
                 var request = URLRequest(url: url)
@@ -145,7 +151,7 @@ extension PlaylistClient {
                 try await performRequestNoContent(request)
             },
             addInvite: { playlistId, userId in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 guard let url = URL(string: "\(baseUrl)/playlists/\(playlistId)/invites") else {
                     throw URLError(.badURL)
                 }

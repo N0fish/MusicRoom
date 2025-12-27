@@ -1,3 +1,4 @@
+import AppSettingsClient
 import AppSupportClients
 import AuthenticationFeature
 import ComposableArchitecture
@@ -32,12 +33,15 @@ public struct AppFeature: Sendable {
         public var isOffline: Bool = false
 
         public init() {
+            let defaultSettings = AppSettings.default
             self.settings = SettingsFeature.State(
-                backendURLText: "http://localhost:8080",
-                savedBackendURL: URL(string: "http://localhost:8080"),
-                selectedPreset: .local,
+                backendURLText: defaultSettings.backendURL.absoluteString,
+                savedBackendURL: defaultSettings.backendURL,
+                selectedPreset: defaultSettings.selectedPreset,
+                lastLocalURLText: defaultSettings.localURL.absoluteString,
+                lastHostedURLText: defaultSettings.hostedURL.absoluteString,
                 diagnosticsSummary: DiagnosticsSummary(
-                    testedURL: URL(string: "http://localhost:8080")!,
+                    testedURL: defaultSettings.backendURL,
                     status: .reachable,
                     latencyMs: 0,
                     wsStatus: .reachable,

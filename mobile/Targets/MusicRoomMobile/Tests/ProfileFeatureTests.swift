@@ -346,7 +346,13 @@ final class ProfileFeatureTests: XCTestCase {
             ProfileFeature()
         } withDependencies: {
             $0.user.generateRandomAvatar = { randomProfile }
-            $0.appSettings.load = { AppSettings(backendURL: backendURL) }
+            $0.appSettings.load = {
+                AppSettings(
+                    selectedPreset: .hosted,
+                    localURL: BackendEnvironmentPreset.local.defaultURL,
+                    hostedURL: backendURL
+                )
+            }
         }
 
         store.exhaustivity = .off

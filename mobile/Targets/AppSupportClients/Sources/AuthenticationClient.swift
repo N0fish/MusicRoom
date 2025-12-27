@@ -1,3 +1,4 @@
+import AppSettingsClient
 import Dependencies
 import Foundation
 import Security
@@ -114,6 +115,7 @@ extension AuthenticationClient {
     static func live(urlSession: URLSession = .shared) -> Self {
         let keychain = KeychainHelper()
         let refreshActor = RefreshActor()
+        @Dependency(\.appSettings) var appSettings
 
         @Sendable func logError(
             _ request: URLRequest, _ response: HTTPURLResponse?, _ data: Data?, _ error: Error?
@@ -133,9 +135,13 @@ extension AuthenticationClient {
             print("--------------------------------------------------\n")
         }
 
+        @Sendable func baseURLString() -> String {
+            appSettings.load().backendURLString
+        }
+
         return Self(
             login: { email, password in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/auth/login")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
@@ -204,7 +210,7 @@ extension AuthenticationClient {
                 }
             },
             register: { email, password in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/auth/register")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
@@ -287,7 +293,7 @@ extension AuthenticationClient {
                         throw AuthenticationError.invalidCredentials
                     }
 
-                    let baseUrl = BaseURL.resolve()
+                    let baseUrl = baseURLString()
                     let url = URL(string: "\(baseUrl)/auth/refresh")!
                     var request = URLRequest(url: url)
                     request.httpMethod = "POST"
@@ -342,7 +348,7 @@ extension AuthenticationClient {
                 }
             },
             forgotPassword: { email in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/auth/forgot-password")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"

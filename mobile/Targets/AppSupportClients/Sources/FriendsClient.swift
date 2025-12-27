@@ -1,3 +1,4 @@
+import AppSettingsClient
 import Dependencies
 import Foundation
 
@@ -171,6 +172,8 @@ extension DependencyValues {
 
 extension FriendsClient {
     static func live() -> Self {
+        @Dependency(\.appSettings) var appSettings
+
         @Sendable func logError(
             _ request: URLRequest, _ response: HTTPURLResponse?, _ data: Data?, _ error: Error?
         ) {
@@ -187,6 +190,10 @@ extension FriendsClient {
                 print("   Error: \(error.localizedDescription)")
             }
             print("--------------------------------------------------\n")
+        }
+
+        @Sendable func baseURLString() -> String {
+            appSettings.load().backendURLString
         }
 
         @Sendable func performRequest<T: Decodable & Sendable>(
@@ -245,7 +252,7 @@ extension FriendsClient {
 
         return Self(
             listFriends: {
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/users/me/friends")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "GET"
@@ -267,7 +274,7 @@ extension FriendsClient {
                 }
             },
             incomingRequests: {
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/users/me/friends/requests/incoming")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "GET"
@@ -293,28 +300,28 @@ extension FriendsClient {
                 }
             },
             sendRequest: { userId in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/users/me/friends/\(userId)/request")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 try await performRequestNoContent(request)
             },
             acceptRequest: { senderId in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/users/me/friends/\(senderId)/accept")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 try await performRequestNoContent(request)
             },
             rejectRequest: { senderId in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/users/me/friends/\(senderId)/reject")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 try await performRequestNoContent(request)
             },
             removeFriend: { friendId in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/users/me/friends/\(friendId)")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "DELETE"
@@ -322,7 +329,7 @@ extension FriendsClient {
             },
             searchUsers: { query in
                 guard !query.isEmpty else { return [] }
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 var components = URLComponents(string: "\(baseUrl)/users/search")!
                 components.queryItems = [URLQueryItem(name: "query", value: query)]
 
@@ -346,7 +353,7 @@ extension FriendsClient {
                 }
             },
             getProfile: { userId in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/users/\(userId)")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "GET"
@@ -420,7 +427,7 @@ public struct PublicMusicPreferences: Codable, Equatable, Sendable {
     }
 }
 
-// Private KeychainHelper helper to avoid dependency on AppSettings if circular
+// Private KeychainHelper helper.
 private struct KeychainHelper {
     func read(_ key: String) -> String? {
         let query =

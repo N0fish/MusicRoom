@@ -1,5 +1,7 @@
+import Dependencies
 import XCTest
 
+@testable import AppSettingsClient
 @testable import AppSupportClients
 
 final class AuthenticationClientTests: XCTestCase {
@@ -51,8 +53,18 @@ final class AuthenticationClientTests: XCTestCase {
         config.protocolClasses = [AuthMockURLProtocol.self]
         let session = URLSession(configuration: config)
 
+        let baseSettings = AppSettings(
+            selectedPreset: .local,
+            localURL: BackendEnvironmentPreset.local.defaultURL,
+            hostedURL: BackendEnvironmentPreset.hosted.defaultURL
+        )
+
         // Inject session
-        let client = AuthenticationClient.live(urlSession: session)
+        let client = withDependencies {
+            $0.appSettings.load = { baseSettings }
+        } operation: {
+            AuthenticationClient.live(urlSession: session)
+        }
 
         // Pre-save a refresh token so the client attempts to refresh
         await client.saveTokens("old_access", "old_refresh")
@@ -103,7 +115,16 @@ final class AuthenticationClientTests: XCTestCase {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [AuthMockURLProtocol.self]
         let session = URLSession(configuration: config)
-        let client = AuthenticationClient.live(urlSession: session)
+        let baseSettings = AppSettings(
+            selectedPreset: .local,
+            localURL: BackendEnvironmentPreset.local.defaultURL,
+            hostedURL: BackendEnvironmentPreset.hosted.defaultURL
+        )
+        let client = withDependencies {
+            $0.appSettings.load = { baseSettings }
+        } operation: {
+            AuthenticationClient.live(urlSession: session)
+        }
 
         // Seed initial tokens
         await client.saveTokens("initial_access", "initial_refresh")

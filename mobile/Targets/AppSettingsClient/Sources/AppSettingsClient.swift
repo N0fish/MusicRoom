@@ -2,23 +2,56 @@ import Dependencies
 import Foundation
 
 public struct AppSettings: Codable, Equatable, Sendable {
-    public var backendURL: URL
     public var selectedPreset: BackendEnvironmentPreset
-    public var lastCustomURL: URL?
+    public var localURL: URL
+    public var hostedURL: URL
 
     public init(
-        backendURL: URL,
-        selectedPreset: BackendEnvironmentPreset = .hosted,
-        lastCustomURL: URL? = nil
+        selectedPreset: BackendEnvironmentPreset = .local,
+        localURL: URL = BackendEnvironmentPreset.local.defaultURL,
+        hostedURL: URL = BackendEnvironmentPreset.hosted.defaultURL
     ) {
-        self.backendURL = backendURL
         self.selectedPreset = selectedPreset
-        self.lastCustomURL = lastCustomURL
+        self.localURL = localURL
+        self.hostedURL = hostedURL
     }
 
-    public var canEditBackendURL: Bool { selectedPreset == .hosted }
+    public var backendURL: URL {
+        get { selectedPreset == .local ? localURL : hostedURL }
+        set {
+            switch selectedPreset {
+            case .local:
+                localURL = newValue
+            case .hosted:
+                hostedURL = newValue
+            }
+        }
+    }
+
+    public func url(for preset: BackendEnvironmentPreset) -> URL {
+        preset == .local ? localURL : hostedURL
+    }
+
+    public mutating func setURL(_ url: URL, for preset: BackendEnvironmentPreset) {
+        switch preset {
+        case .local:
+            localURL = url
+        case .hosted:
+            hostedURL = url
+        }
+    }
+
+    public var canEditBackendURL: Bool { true }
 
     public var backendURLSummary: String { backendURL.absoluteString }
+
+    public var backendURLString: String {
+        var string = backendURL.absoluteString
+        while string.hasSuffix("/") {
+            string.removeLast()
+        }
+        return string
+    }
 }
 
 public enum BackendEnvironmentPreset: String, CaseIterable, Codable, Sendable {
@@ -35,9 +68,9 @@ public enum BackendEnvironmentPreset: String, CaseIterable, Codable, Sendable {
     public var note: String {
         switch self {
         case .local:
-            return "Uses localhost with default dev port."
+            return "Local dev server (localhost or LAN IP)."
         case .hosted:
-            return "Connect to an existing Musicroom server."
+            return "Hosted Musicroom server (production or staging)."
         }
     }
 
@@ -78,9 +111,9 @@ extension AppSettingsClient {
 
 extension AppSettings {
     public static let `default` = AppSettings(
-        backendURL: BackendEnvironmentPreset.local.defaultURL,
         selectedPreset: .local,
-        lastCustomURL: nil
+        localURL: BackendEnvironmentPreset.local.defaultURL,
+        hostedURL: BackendEnvironmentPreset.hosted.defaultURL
     )
 }
 
@@ -95,6 +128,8 @@ private enum AppSettingsStorageKey {
     static let backendURL = "musicroom.settings.backend-url"
     static let preset = "musicroom.settings.backend-preset"
     static let customBackendURL = "musicroom.settings.custom-backend-url"
+    static let localBackendURL = "musicroom.settings.backend-url-local"
+    static let hostedBackendURL = "musicroom.settings.backend-url-hosted"
 }
 
 private enum AppSettingsClientKey: DependencyKey, TestDependencyKey {
@@ -104,50 +139,67 @@ private enum AppSettingsClientKey: DependencyKey, TestDependencyKey {
             let presetRaw = defaults.string(forKey: AppSettingsStorageKey.preset)
             let preset = BackendEnvironmentPreset(rawValue: presetRaw ?? "") ?? .local
 
-            let storedURLString = defaults.string(forKey: AppSettingsStorageKey.backendURL)
-            let customURLString = defaults.string(forKey: AppSettingsStorageKey.customBackendURL)
+            let legacyBackendURL = defaults.string(forKey: AppSettingsStorageKey.backendURL)
+                .flatMap(URL.init(string:))
+            let legacyCustomURL = defaults.string(forKey: AppSettingsStorageKey.customBackendURL)
+                .flatMap(URL.init(string:))
 
-            let fallbackURL = preset.defaultURL
-            let backendURL = storedURLString.flatMap(URL.init(string:)) ?? fallbackURL
-            let customURL = customURLString.flatMap(URL.init(string:))
+            var localURL = defaults.string(forKey: AppSettingsStorageKey.localBackendURL)
+                .flatMap(URL.init(string:))
+            var hostedURL = defaults.string(forKey: AppSettingsStorageKey.hostedBackendURL)
+                .flatMap(URL.init(string:))
 
-            if preset == .hosted {
-                return AppSettings(
-                    backendURL: customURL ?? backendURL,
-                    selectedPreset: .hosted,
-                    lastCustomURL: customURL ?? backendURL
-                )
-            } else {
-                return AppSettings(
-                    backendURL: backendURL,
-                    selectedPreset: preset,
-                    lastCustomURL: customURL
-                )
+            if localURL == nil {
+                if preset == .local, let legacyBackendURL {
+                    localURL = legacyBackendURL
+                } else {
+                    localURL = BackendEnvironmentPreset.local.defaultURL
+                }
             }
+
+            if hostedURL == nil {
+                if let legacyCustomURL {
+                    hostedURL = legacyCustomURL
+                } else if preset == .hosted, let legacyBackendURL {
+                    hostedURL = legacyBackendURL
+                } else {
+                    hostedURL = BackendEnvironmentPreset.hosted.defaultURL
+                }
+            }
+
+            return AppSettings(
+                selectedPreset: preset,
+                localURL: localURL ?? BackendEnvironmentPreset.local.defaultURL,
+                hostedURL: hostedURL ?? BackendEnvironmentPreset.hosted.defaultURL
+            )
         },
         save: { settings in
             let defaults = UserDefaults.standard
-            defaults.set(
-                settings.backendURL.absoluteString,
-                forKey: AppSettingsStorageKey.backendURL
-            )
+            defaults.set(settings.backendURL.absoluteString, forKey: AppSettingsStorageKey.backendURL)
             defaults.set(
                 settings.selectedPreset.rawValue,
                 forKey: AppSettingsStorageKey.preset
             )
-            let customURLString: String?
-            if settings.selectedPreset == .hosted {
-                customURLString = settings.backendURL.absoluteString
-            } else {
-                customURLString = settings.lastCustomURL?.absoluteString
-            }
-            defaults.set(customURLString, forKey: AppSettingsStorageKey.customBackendURL)
+            defaults.set(
+                settings.localURL.absoluteString,
+                forKey: AppSettingsStorageKey.localBackendURL
+            )
+            defaults.set(
+                settings.hostedURL.absoluteString,
+                forKey: AppSettingsStorageKey.hostedBackendURL
+            )
+            defaults.set(
+                settings.hostedURL.absoluteString,
+                forKey: AppSettingsStorageKey.customBackendURL
+            )
         },
         reset: {
             let defaults = UserDefaults.standard
             defaults.removeObject(forKey: AppSettingsStorageKey.backendURL)
             defaults.removeObject(forKey: AppSettingsStorageKey.preset)
             defaults.removeObject(forKey: AppSettingsStorageKey.customBackendURL)
+            defaults.removeObject(forKey: AppSettingsStorageKey.localBackendURL)
+            defaults.removeObject(forKey: AppSettingsStorageKey.hostedBackendURL)
             return .default
         }
     )

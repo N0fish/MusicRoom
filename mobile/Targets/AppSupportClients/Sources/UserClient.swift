@@ -1,3 +1,4 @@
+import AppSettingsClient
 import Dependencies
 import Foundation
 
@@ -317,6 +318,8 @@ extension UserClient {
     // in UserClient.swift
 
     static func live() -> Self {
+        @Dependency(\.appSettings) var appSettings
+
         @Sendable func logError(
             _ request: URLRequest, _ response: HTTPURLResponse?, _ data: Data?, _ error: Error?
         ) {
@@ -333,6 +336,10 @@ extension UserClient {
                 print("   Error: \(error.localizedDescription)")
             }
             print("--------------------------------------------------\n")
+        }
+
+        @Sendable func baseURLString() -> String {
+            appSettings.load().backendURLString
         }
 
         @Sendable func performRequest<T: Decodable & Sendable>(
@@ -402,7 +409,7 @@ extension UserClient {
 
         return Self(
             me: {
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 // 1. Fetch User Profile
                 let urlProfile = URL(string: "\(baseUrl)/users/me")!
                 var reqProfile = URLRequest(url: urlProfile)
@@ -450,7 +457,7 @@ extension UserClient {
                 return profile
             },
             updateProfile: { profile in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/users/me")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "PATCH"
@@ -493,7 +500,7 @@ extension UserClient {
                 return updatedProfile
             },
             link: { provider, token in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/auth/link/\(provider)")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
@@ -548,7 +555,7 @@ extension UserClient {
                 return profile
             },
             unlink: { provider in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/auth/link/\(provider)")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "DELETE"
@@ -593,7 +600,7 @@ extension UserClient {
                 return profile
             },
             changePassword: { current, new in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/users/me/password")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
@@ -605,7 +612,7 @@ extension UserClient {
                 try await performRequestNoReturn(request)
             },
             generateRandomAvatar: {
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/users/me/avatar/random")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
@@ -632,7 +639,7 @@ extension UserClient {
                 return updatedProfile
             },
             becomePremium: {
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/users/me/premium")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
@@ -658,7 +665,7 @@ extension UserClient {
                 return updatedProfile
             },
             uploadAvatar: { imageData in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/users/me/avatar/upload")!
                 let boundary = "Boundary-\(UUID().uuidString)"
                 var request = URLRequest(url: url)
