@@ -85,6 +85,13 @@ public struct AppFeature: Sendable {
 
     public init() {}
 
+    private func resetAppStatePreservingSettings(_ state: inout AppFeature.State) {
+        let settings = state.settings
+        state = AppFeature.State()
+        state.settings = settings
+        state.destination = .login
+    }
+
     public var body: some ReducerOf<Self> {
         Scope(state: \.settings, action: \.settings) {
             SettingsFeature()
@@ -168,7 +175,11 @@ public struct AppFeature: Sendable {
                 }
 
             case .destinationChanged(let destination):
-                state.destination = destination
+                if destination == .login {
+                    resetAppStatePreservingSettings(&state)
+                } else {
+                    state.destination = destination
+                }
                 return .none
 
             case .startApp:

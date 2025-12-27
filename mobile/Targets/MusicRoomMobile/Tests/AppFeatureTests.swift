@@ -2,9 +2,11 @@ import ComposableArchitecture
 import XCTest
 
 @testable import AppFeature
+@testable import AppSettingsClient
 @testable import AppSupportClients
 @testable import EventFeature
 @testable import MusicRoomDomain
+@testable import SettingsFeature
 
 @MainActor
 final class AppFeatureTests: XCTestCase {
@@ -20,6 +22,7 @@ final class AppFeatureTests: XCTestCase {
                 XCTAssertEqual(action, "user.logout")
             }
         }
+        store.exhaustivity = .off
 
         // Set initial state to logged in (app)
         await store.send(.destinationChanged(.app)) {
@@ -38,6 +41,34 @@ final class AppFeatureTests: XCTestCase {
         // And navigate to login
         await store.receive(\.destinationChanged) {
             $0.destination = .login
+        }
+    }
+
+
+    func testDestinationChangedToLoginResetsStatePreservingSettings() async {
+        let customURL = URL(string: "https://custom.musicroom.app")!
+        var initialState = AppFeature.State()
+        initialState.destination = .app
+        initialState.eventList.hasLoaded = true
+        initialState.profile.hasLoaded = true
+        initialState.friends.hasLoaded = true
+        initialState.settings = SettingsFeature.State(
+            backendURLText: customURL.absoluteString,
+            savedBackendURL: customURL,
+            selectedPreset: .hosted,
+            lastLocalURLText: BackendEnvironmentPreset.local.defaultURL.absoluteString,
+            lastHostedURLText: customURL.absoluteString
+        )
+
+        let store = TestStore(initialState: initialState) {
+            AppFeature()
+        }
+
+        await store.send(.destinationChanged(.login)) {
+            var reset = AppFeature.State()
+            reset.settings = initialState.settings
+            reset.destination = .login
+            $0 = reset
         }
     }
 }

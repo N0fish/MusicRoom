@@ -141,6 +141,60 @@ final class AuthenticationClientTests: XCTestCase {
         // Verify only ONE network request was made
         XCTAssertEqual(counter.value, 1, "Should have deduplicated to a single request")
     }
+
+    func testRefreshDoesNotOverwriteAfterLogout() async throws {
+        let gate = DispatchSemaphore(value: 0)
+
+        AuthMockURLProtocol.requestHandler = { request in
+            guard let url = request.url, url.path.contains("/auth/refresh") else {
+                fatalError("Unexpected URL: \(request.url?.absoluteString ?? "nil")")
+            }
+
+            _ = gate.wait(timeout: .now() + 1.0)
+
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let data = """
+                {
+                    "accessToken": "late_access",
+                    "refreshToken": "late_refresh"
+                }
+                """.data(using: .utf8)!
+            return (response, data)
+        }
+
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [AuthMockURLProtocol.self]
+        let session = URLSession(configuration: config)
+        let baseSettings = AppSettings(
+            selectedPreset: .local,
+            localURL: BackendEnvironmentPreset.local.defaultURL,
+            hostedURL: BackendEnvironmentPreset.hosted.defaultURL
+        )
+        let client = withDependencies {
+            $0.appSettings.load = { baseSettings }
+        } operation: {
+            AuthenticationClient.live(urlSession: session, keychain: InMemoryKeychain())
+        }
+
+        await client.saveTokens("old_access", "old_refresh")
+
+        let refreshTask = Task {
+            try await client.refreshToken()
+        }
+
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        await client.logout()
+        gate.signal()
+
+        _ = try? await refreshTask.value
+
+        XCTAssertNil(client.getAccessToken())
+    }
 }
 
 final class RequestCounter: @unchecked Sendable {

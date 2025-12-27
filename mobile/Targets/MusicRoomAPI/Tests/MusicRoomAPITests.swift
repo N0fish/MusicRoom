@@ -159,6 +159,42 @@ final class MusicRoomAPITests: XCTestCase {
         }
     }
 
+    func testRateLimitedResponse() async throws {
+        await withDependencies {
+            $0.authentication = .testValue
+            $0.appSettings = .testValue
+        } operation: {
+            let config = URLSessionConfiguration.ephemeral
+            config.protocolClasses = [MockURLProtocol.self]
+            let session = URLSession(configuration: config)
+
+            MockURLProtocol.requestHandler = { request in
+                let response = HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 429,
+                    httpVersion: nil,
+                    headerFields: ["Retry-After": "15"]
+                )!
+                return (response, Data())
+            }
+
+            let client = MusicRoomAPIClient.live(urlSession: session)
+
+            do {
+                _ = try await client.listEvents()
+                XCTFail("Expected rateLimited error")
+            } catch let error as MusicRoomAPIError {
+                if case let .rateLimited(retryAfter) = error {
+                    XCTAssertEqual(retryAfter, 15)
+                } else {
+                    XCTFail("Unexpected error: \(error)")
+                }
+            } catch {
+                XCTFail("Unexpected error: \(error)")
+            }
+        }
+    }
+
     func testListEvents() async throws {
         // Setup data
         let events = [

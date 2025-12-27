@@ -132,6 +132,14 @@ extension MusicRoomAPIClient: DependencyKey {
                     throw MusicRoomAPIError.sessionExpired
                 }
 
+                if httpResponse.statusCode == 429 {
+                    let retryAfterHeader = httpResponse.value(forHTTPHeaderField: "Retry-After")
+                    let retryAfter = retryAfterHeader.flatMap(TimeInterval.init)
+                    let err = MusicRoomAPIError.rateLimited(retryAfter: retryAfter)
+                    logError(request, httpResponse, data, err)
+                    throw err
+                }
+
                 // Error Mapping
                 switch httpResponse.statusCode {
                 case 200...299:
@@ -190,6 +198,14 @@ extension MusicRoomAPIClient: DependencyKey {
                 if httpResponse.statusCode == 401 {
                     logError(request, httpResponse, data, MusicRoomAPIError.sessionExpired)
                     throw MusicRoomAPIError.sessionExpired
+                }
+
+                if httpResponse.statusCode == 429 {
+                    let retryAfterHeader = httpResponse.value(forHTTPHeaderField: "Retry-After")
+                    let retryAfter = retryAfterHeader.flatMap(TimeInterval.init)
+                    let err = MusicRoomAPIError.rateLimited(retryAfter: retryAfter)
+                    logError(request, httpResponse, data, err)
+                    throw err
                 }
 
                 switch httpResponse.statusCode {
@@ -612,6 +628,7 @@ public enum MusicRoomAPIError: Error, Equatable, LocalizedError {
     case sessionExpired
     case forbidden
     case notFound
+    case rateLimited(retryAfter: TimeInterval?)
 
     public var errorDescription: String? {
         switch self {
@@ -621,6 +638,9 @@ public enum MusicRoomAPIError: Error, Equatable, LocalizedError {
         case .sessionExpired: return "Session Expired"
         case .forbidden: return "Access Denied"
         case .notFound: return "Not Found"
+        case .rateLimited(let retryAfter):
+            if let retryAfter { return "Too many requests. Retry after \(Int(retryAfter))s" }
+            return "Too many requests. Retry later."
         }
     }
 }

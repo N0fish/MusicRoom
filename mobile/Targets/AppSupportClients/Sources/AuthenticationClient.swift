@@ -118,6 +118,7 @@ extension AuthenticationClient {
     ) -> Self {
         let keychain = keychain
         let refreshActor = RefreshActor()
+        let authGeneration = AuthGeneration()
         @Dependency(\.appSettings) var appSettings
 
         @Sendable func logError(
@@ -196,6 +197,8 @@ extension AuthenticationClient {
 
                     do {
                         let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
+                        await authGeneration.bump()
+                        await refreshActor.cancel()
                         keychain.save(authResponse.accessToken, for: "accessToken")
                         keychain.save(authResponse.refreshToken, for: "refreshToken")
                     } catch {
@@ -263,6 +266,8 @@ extension AuthenticationClient {
 
                     do {
                         let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
+                        await authGeneration.bump()
+                        await refreshActor.cancel()
                         keychain.save(authResponse.accessToken, for: "accessToken")
                         keychain.save(authResponse.refreshToken, for: "refreshToken")
                     } catch {
@@ -277,6 +282,8 @@ extension AuthenticationClient {
                 }
             },
             logout: {
+                await authGeneration.bump()
+                await refreshActor.cancel()
                 keychain.delete("accessToken")
                 keychain.delete("refreshToken")
             },
@@ -287,67 +294,78 @@ extension AuthenticationClient {
                 return keychain.read("accessToken")
             },
             saveTokens: { accessToken, refreshToken in
+                await authGeneration.bump()
+                await refreshActor.cancel()
                 keychain.save(accessToken, for: "accessToken")
                 keychain.save(refreshToken, for: "refreshToken")
             },
             refreshToken: {
-                try await refreshActor.refresh {
-                    guard let currentRefreshToken = keychain.read("refreshToken") else {
-                        throw AuthenticationError.invalidCredentials
-                    }
-
-                    let baseUrl = baseURLString()
-                    let url = URL(string: "\(baseUrl)/auth/refresh")!
-                    var request = URLRequest(url: url)
-                    request.httpMethod = "POST"
-                    request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-
-                    let body = ["refreshToken": currentRefreshToken]
-                    request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-                    do {
-                        let (data, response) = try await urlSession.data(for: request)
-
-                        guard let httpResponse = response as? HTTPURLResponse else {
-                            throw AuthenticationError.networkError("Invalid response")
-                        }
-
-                        if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
-                            // Refresh token invalid/expired
-                            keychain.delete("accessToken")
-                            keychain.delete("refreshToken")
-                            logError(
-                                request, httpResponse, data, AuthenticationError.invalidCredentials)
+                let generationAtStart = await authGeneration.current()
+                do {
+                    try await refreshActor.refresh {
+                        guard let currentRefreshToken = keychain.read("refreshToken") else {
                             throw AuthenticationError.invalidCredentials
                         }
 
-                        guard (200...299).contains(httpResponse.statusCode) else {
-                            let error = AuthenticationError.networkError(
-                                "Server error: \(httpResponse.statusCode)")
-                            logError(request, httpResponse, data, error)
-                            throw error
-                        }
+                        let baseUrl = baseURLString()
+                        let url = URL(string: "\(baseUrl)/auth/refresh")!
+                        var request = URLRequest(url: url)
+                        request.httpMethod = "POST"
+                        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
 
-                        struct RefreshResponse: Decodable {
-                            let accessToken: String
-                            let refreshToken: String
-                        }
+                        let body = ["refreshToken": currentRefreshToken]
+                        request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
                         do {
-                            let refreshResponse = try JSONDecoder().decode(
-                                RefreshResponse.self, from: data)
-                            keychain.save(refreshResponse.accessToken, for: "accessToken")
-                            keychain.save(refreshResponse.refreshToken, for: "refreshToken")
+                            let (data, response) = try await urlSession.data(for: request)
+
+                            guard let httpResponse = response as? HTTPURLResponse else {
+                                throw AuthenticationError.networkError("Invalid response")
+                            }
+
+                            if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                                // Refresh token invalid/expired
+                                keychain.delete("accessToken")
+                                keychain.delete("refreshToken")
+                                logError(
+                                    request, httpResponse, data,
+                                    AuthenticationError.invalidCredentials)
+                                throw AuthenticationError.invalidCredentials
+                            }
+
+                            guard (200...299).contains(httpResponse.statusCode) else {
+                                let error = AuthenticationError.networkError(
+                                    "Server error: \(httpResponse.statusCode)")
+                                logError(request, httpResponse, data, error)
+                                throw error
+                            }
+
+                            struct RefreshResponse: Decodable {
+                                let accessToken: String
+                                let refreshToken: String
+                            }
+
+                            do {
+                                let refreshResponse = try JSONDecoder().decode(
+                                    RefreshResponse.self, from: data)
+                                if await authGeneration.current() != generationAtStart {
+                                    return
+                                }
+                                keychain.save(refreshResponse.accessToken, for: "accessToken")
+                                keychain.save(refreshResponse.refreshToken, for: "refreshToken")
+                            } catch {
+                                logError(request, httpResponse, data, error)
+                                throw error
+                            }
                         } catch {
-                            logError(request, httpResponse, data, error)
+                            if !(error is AuthenticationError) && !(error is CancellationError) {
+                                logError(request, nil, nil, error)
+                            }
                             throw error
                         }
-                    } catch {
-                        if !(error is AuthenticationError) {
-                            logError(request, nil, nil, error)
-                        }
-                        throw error
                     }
+                } catch is CancellationError {
+                    return
                 }
             },
             forgotPassword: { email in
@@ -471,5 +489,24 @@ private actor RefreshActor {
         let result = await task.result
         refreshTask = nil
         try result.get()
+    }
+
+    func cancel() {
+        refreshTask?.cancel()
+        refreshTask = nil
+    }
+}
+
+private actor AuthGeneration {
+    private var value: Int = 0
+
+    @discardableResult
+    func bump() -> Int {
+        value &+= 1
+        return value
+    }
+
+    func current() -> Int {
+        value
     }
 }

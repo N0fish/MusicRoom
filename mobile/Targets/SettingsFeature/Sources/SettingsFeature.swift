@@ -117,6 +117,7 @@ public struct SettingsFeature {
     @Dependency(\.appSettings) var appSettings
     @Dependency(\.diagnostics) var diagnostics
     @Dependency(\.appMetadata) var appMetadata
+    @Dependency(\.authentication) var authentication
     @Dependency(\.date) var date
 
     public init() {}
@@ -180,6 +181,7 @@ public struct SettingsFeature {
                     appSettings.save(settings)
                     await send(.settingsSaved(settings))
                 }
+                .cancellable(id: "settings.save", cancelInFlight: true)
 
             case .resetButtonTapped:
                 state.isPersisting = true
@@ -188,12 +190,18 @@ public struct SettingsFeature {
                 }
 
             case .settingsSaved(let settings):
+                let previousURL = state.savedBackendURL
                 state.isPersisting = false
                 state.selectedPreset = settings.selectedPreset
                 state.savedBackendURL = settings.backendURL
                 state.backendURLText = settings.backendURL.absoluteString
                 state.lastLocalURLText = settings.localURL.absoluteString
                 state.lastHostedURLText = settings.hostedURL.absoluteString
+                if previousURL != settings.backendURL {
+                    return .run { [authentication = self.authentication] _ in
+                        await authentication.logout()
+                    }
+                }
                 return .none
 
             case .runConnectionTest:

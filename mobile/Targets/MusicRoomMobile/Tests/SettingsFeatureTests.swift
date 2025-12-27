@@ -119,6 +119,74 @@ final class SettingsFeatureTests: XCTestCase {
         XCTAssertEqual(savedSettings.value?.selectedPreset, .hosted)
     }
 
+    func testSettingsSavedLogsOutWhenBackendChanges() async {
+        let originalURL = URL(string: "https://old.musicroom.app")!
+        let newURL = URL(string: "https://new.musicroom.app")!
+        let logoutCalled = LockIsolated(false)
+
+        let store = TestStore(
+            initialState: SettingsFeature.State(
+                backendURLText: originalURL.absoluteString,
+                savedBackendURL: originalURL,
+                selectedPreset: .hosted,
+                lastLocalURLText: BackendEnvironmentPreset.local.defaultURL.absoluteString,
+                lastHostedURLText: originalURL.absoluteString)
+        ) {
+            SettingsFeature()
+        } withDependencies: {
+            $0.authentication.logout = { logoutCalled.setValue(true) }
+        }
+
+        await store.send(
+            .settingsSaved(
+                AppSettings(
+                    selectedPreset: .hosted,
+                    localURL: BackendEnvironmentPreset.local.defaultURL,
+                    hostedURL: newURL))
+        ) {
+            $0.isPersisting = false
+            $0.selectedPreset = .hosted
+            $0.savedBackendURL = newURL
+            $0.backendURLText = newURL.absoluteString
+            $0.lastLocalURLText = BackendEnvironmentPreset.local.defaultURL.absoluteString
+            $0.lastHostedURLText = newURL.absoluteString
+        }
+
+        await store.finish()
+
+        XCTAssertTrue(logoutCalled.value)
+    }
+
+    func testSettingsSavedDoesNotLogoutWhenBackendUnchanged() async {
+        let originalURL = URL(string: "https://same.musicroom.app")!
+        let logoutCalled = LockIsolated(false)
+
+        let store = TestStore(
+            initialState: SettingsFeature.State(
+                backendURLText: originalURL.absoluteString,
+                savedBackendURL: originalURL,
+                selectedPreset: .hosted,
+                lastLocalURLText: BackendEnvironmentPreset.local.defaultURL.absoluteString,
+                lastHostedURLText: originalURL.absoluteString)
+        ) {
+            SettingsFeature()
+        } withDependencies: {
+            $0.authentication.logout = { logoutCalled.setValue(true) }
+        }
+
+        await store.send(
+            .settingsSaved(
+                AppSettings(
+                    selectedPreset: .hosted,
+                    localURL: BackendEnvironmentPreset.local.defaultURL,
+                    hostedURL: originalURL))
+        )
+
+        await store.finish()
+
+        XCTAssertFalse(logoutCalled.value)
+    }
+
     func testRunConnectionTestSuccess() async {
         let targetURL = URL(string: "https://api.musicroom.app")!
         let summary = DiagnosticsSummary(
