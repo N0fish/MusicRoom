@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Путь к корню проекта
+# Path to the project root
 ROOT_DIR="$(cd "$(dirname "$0")/.."; pwd)"
 
 echo "Project root: $ROOT_DIR"
 echo "⚙️  Generating .env files..."
 
 
-# Общие ENV для docker-compose (root)
+# ENV for docker-compose (root)
 cat > "${ROOT_DIR}/.env" <<EOF
 POSTGRES_USER=musicroom
 POSTGRES_PASSWORD=musicroom
@@ -17,8 +17,7 @@ EOF
 
 echo "✅ Created .env (root)"
 
-
-# Общие настройки
+# env for each service
 JWT_SECRET="supersecretdev"
 DB_URL="postgres://musicroom:musicroom@postgres:5432/musicroom?sslmode=disable"
 REDIS_URL="redis://redis:6379"
@@ -30,7 +29,7 @@ GATEWAY_PORT=8080
 LOCAL_IP="${LOCAL_IP:-localhost}"
 
 
-# Список сервисов
+# List of services
 SERVICES=(
   "backend/services/api-gateway"
   "backend/services/auth-service"
@@ -43,14 +42,12 @@ SERVICES=(
   "frontend"
 )
 
-# Генерация .env для каждого сервиса
 for svc in "${SERVICES[@]}"; do
   SVC_PATH="${ROOT_DIR}/${svc}"
   mkdir -p "$SVC_PATH"
 
   ENV_FILE="${SVC_PATH}/.env"
 
-  # Если файл уже существует — пропускаем
   if [[ -f "$ENV_FILE" ]]; then
     echo "➡️  Skipped (exists): $svc/.env"
     continue
@@ -83,7 +80,23 @@ RATE_LIMIT_RPS=20
 CORS_ALLOWED_ORIGIN=*
 # CORS_ALLOWED_ORIGIN=http://localhost:5175
 
+# limit
+USER_PATCH_BODY_LIMIT=4096
+USER_PATCH_RPS=5
 AVATAR_UPLOAD_RPS=5
+FRIEND_REQUEST_RPS=5
+AUTHED_RPS=30
+PLAYLIST_AUTHED_RPS=30
+VOTE_AUTHED_RPS=30
+MUSIC_AUTHED_RPS=30
+
+# CERTS
+# TLS_ENABLED=true
+# TLS_CERT_FILE=/certs/cert.pem
+# TLS_KEY_FILE=/certs/key.pem
+
+TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+# TRUSTED_PROXY_CIDRS=10.0.0.0/8 // для теста на localhost
 EENV
       ;;
 

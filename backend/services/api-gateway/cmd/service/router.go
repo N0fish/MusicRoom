@@ -51,23 +51,26 @@ const swaggerUIHTML = `
 
 func stripTrustedHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Prevent header spoofing by clients
 		r.Header.Del("X-User-Id")
 		r.Header.Del("X-User-Email")
-
 		next.ServeHTTP(w, r)
 	})
 }
 
 func setupRouter(cfg Config) *chi.Mux {
+	// Configure trusted proxies for clientIP()
+	setTrustedProxyCIDRs(cfg.TrustedProxyCIDRs)
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
 	r.Use(stripTrustedHeadersMiddleware)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	r.Use(rateLimitMiddleware(cfg.RateLimitRPS))
+	// Global rate limit for public traffic (IP-based)
+	r.Use(rateLimitMiddleware(cfg.RateLimitRPS, rateKeyIP))
 	r.Use(corsMiddleware)
 	r.Use(requestLogMiddleware)
 
@@ -80,6 +83,7 @@ func setupRouter(cfg Config) *chi.Mux {
 	realtimeProxy := mustNewReverseProxy(cfg.RealtimeURL)
 	musicProxy := mustNewReverseProxy(cfg.MusicProviderURL)
 
+	// Websocket / realtime
 	r.Mount("/realtime", realtimeProxy)
 	r.HandleFunc("/ws", realtimeProxy.ServeHTTP)
 
@@ -114,12 +118,13 @@ func setupRouter(cfg Config) *chi.Mux {
 
 		body, _ := io.ReadAll(r.Body)
 		log.Printf("audit_log: user=%s platform=%s device=%s version=%s body=%s",
-			userId, platform, device, version, string(body))
+			userId, platform, device, version, string(body),
+		)
 
 		w.WriteHeader(http.StatusOK)
 	})
 
-	// Auth routes
+	// Auth routes (public)
 	api.Method(http.MethodPost, "/auth/register", authProxy)
 	api.Group(func(r chi.Router) {
 		r.Use(loginRateLimitMiddleware)
@@ -136,19 +141,26 @@ func setupRouter(cfg Config) *chi.Mux {
 	api.Method(http.MethodGet, "/auth/42/login", authProxy)
 	api.Method(http.MethodGet, "/auth/42/callback", authProxy)
 
-	api.Method(http.MethodGet, "/auth/me", authProxy)
-	api.Method(http.MethodPost, "/auth/link/{provider}", authProxy)
-	api.Method(http.MethodDelete, "/auth/link/{provider}", authProxy)
+	// Auth routes (protected)
+	api.Group(func(r chi.Router) {
+		r.Use(jwtAuthMiddleware(cfg.JWTSecret))
+		r.Method(http.MethodGet, "/auth/me", authProxy)
+		r.Method(http.MethodPost, "/auth/link/{provider}", authProxy)
+		r.Method(http.MethodDelete, "/auth/link/{provider}", authProxy)
+	})
 
 	// User-service
 	api.Method(http.MethodGet, "/avatars/*", userProxy)
+
 	api.Group(func(r chi.Router) {
 		r.Use(jwtAuthMiddleware(cfg.JWTSecret))
+		r.Use(rateLimitMiddleware(getenvInt("AUTHED_RPS", 30), rateKeyUserOrIP))
 
 		r.Method(http.MethodGet, "/users/me", userProxy)
+
 		r.With(
 			bodySizeLimitMiddleware(int64(getenvInt("USER_PATCH_BODY_LIMIT", 4096))),
-			rateLimitMiddleware(getenvInt("USER_PATCH_RPS", 5)),
+			rateLimitMiddleware(getenvInt("USER_PATCH_RPS", 5), rateKeyUserOrIP),
 		).Method(http.MethodPatch, "/users/me", userProxy)
 
 		r.Method(http.MethodPost, "/users/me/premium", userProxy)
@@ -156,7 +168,7 @@ func setupRouter(cfg Config) *chi.Mux {
 		r.Method(http.MethodPost, "/users/me/avatar/random", userProxy)
 		r.With(
 			bodySizeLimitMiddleware(6*1024*1024),
-			rateLimitMiddleware(getenvInt("AVATAR_UPLOAD_RPS", 1)),
+			rateLimitMiddleware(getenvInt("AVATAR_UPLOAD_RPS", 1), rateKeyUserOrIP),
 		).Method(http.MethodPost, "/users/me/avatar/upload", userProxy)
 
 		r.Method(http.MethodGet, "/users/search", userProxy)
@@ -164,13 +176,13 @@ func setupRouter(cfg Config) *chi.Mux {
 		r.Method(http.MethodGet, "/users/me/friends", userProxy)
 		r.Method(http.MethodGet, "/users/me/friends/requests/incoming", userProxy)
 
-		r.With(bodySizeLimitMiddleware(2048), rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5))).
+		r.With(bodySizeLimitMiddleware(2048), rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5), rateKeyUserOrIP)).
 			Method(http.MethodPost, "/users/me/friends/{id}/request", userProxy)
-		r.With(bodySizeLimitMiddleware(2048), rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5))).
+		r.With(bodySizeLimitMiddleware(2048), rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5), rateKeyUserOrIP)).
 			Method(http.MethodPost, "/users/me/friends/{id}/accept", userProxy)
-		r.With(bodySizeLimitMiddleware(2048), rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5))).
+		r.With(bodySizeLimitMiddleware(2048), rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5), rateKeyUserOrIP)).
 			Method(http.MethodPost, "/users/me/friends/{id}/reject", userProxy)
-		r.With(bodySizeLimitMiddleware(2048), rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5))).
+		r.With(bodySizeLimitMiddleware(2048), rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5), rateKeyUserOrIP)).
 			Method(http.MethodDelete, "/users/me/friends/{id}", userProxy)
 
 		r.Method(http.MethodGet, "/users/{id}", userProxy)
@@ -182,6 +194,7 @@ func setupRouter(cfg Config) *chi.Mux {
 
 	api.Group(func(r chi.Router) {
 		r.Use(jwtAuthMiddleware(cfg.JWTSecret))
+		r.Use(rateLimitMiddleware(getenvInt("PLAYLIST_AUTHED_RPS", 30), rateKeyUserOrIP))
 
 		r.With(playlistCreateRateLimitMiddleware).
 			Method(http.MethodPost, "/playlists", playlistProxy)
@@ -204,9 +217,7 @@ func setupRouter(cfg Config) *chi.Mux {
 	// Events & Voting
 	api.Group(func(r chi.Router) {
 		r.Use(jwtAuthMiddleware(cfg.JWTSecret))
-		// if len(cfg.JWTSecret) != 0 {
-		// 	r.Use(jwtAuthMiddleware(cfg.JWTSecret))
-		// }
+		r.Use(rateLimitMiddleware(getenvInt("VOTE_AUTHED_RPS", 30), rateKeyUserOrIP))
 
 		r.Method(http.MethodGet, "/events", voteProxy)
 		r.Method(http.MethodPost, "/events", voteProxy)
@@ -233,10 +244,10 @@ func setupRouter(cfg Config) *chi.Mux {
 	// Music provider
 	api.Group(func(r chi.Router) {
 		r.Use(jwtAuthMiddleware(cfg.JWTSecret))
+		r.Use(rateLimitMiddleware(getenvInt("MUSIC_AUTHED_RPS", 30), rateKeyUserOrIP))
 		r.Method(http.MethodGet, "/music/search", musicProxy)
 	})
 
 	r.Mount("/", api)
-
 	return r
 }

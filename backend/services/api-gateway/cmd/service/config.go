@@ -1,6 +1,10 @@
 package main
 
-import "errors"
+import (
+	"errors"
+	"net/netip"
+	"strings"
+)
 
 type Config struct {
 	Port             string
@@ -15,6 +19,8 @@ type Config struct {
 
 	JWTSecret    []byte
 	RateLimitRPS int
+
+	TrustedProxyCIDRs []netip.Prefix
 }
 
 func loadConfigFromEnv() (Config, error) {
@@ -36,5 +42,33 @@ func loadConfigFromEnv() (Config, error) {
 		return Config{}, errors.New("api-gateway: JWT_SECRET is empty, cannot start without JWT validation")
 	}
 
+	cidrs := getenv("TRUSTED_PROXY_CIDRS", "127.0.0.1/32,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16")
+	pfx, err := parseCIDRList(cidrs)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.TrustedProxyCIDRs = pfx
+
 	return cfg, nil
+}
+
+func parseCIDRList(raw string) ([]netip.Prefix, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]netip.Prefix, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		pr, err := netip.ParsePrefix(p)
+		if err != nil {
+			return nil, errors.New("api-gateway: invalid TRUSTED_PROXY_CIDRS entry: " + p)
+		}
+		out = append(out, pr)
+	}
+	return out, nil
 }
