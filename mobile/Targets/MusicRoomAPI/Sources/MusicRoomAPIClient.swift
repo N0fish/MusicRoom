@@ -52,7 +52,7 @@ public struct MusicRoomAPIClient: Sendable {
         public let userId: String
         public let email: String
         public let emailVerified: Bool
-        public let isPremium: Bool
+        public let isPremium: Bool?
         public let linkedProviders: [String]?
     }
 
@@ -365,7 +365,7 @@ extension MusicRoomAPIClient: DependencyKey {
                 var components = URLComponents()
                 components.scheme = scheme
                 // Fix for iOS Simulator: 'localhost' can cause socket errors (SO_CONNECTION_IDLE), use 127.0.0.1
-                components.host = host == "localhost" ? "127.0.0.1" : host
+                components.host = (host == "localhost") ? "127.0.0.1" : host
                 components.port = port  // Use same port as API for now (Gateway)
                 components.path = "/ws"
 

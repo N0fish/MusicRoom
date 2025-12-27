@@ -97,7 +97,7 @@ extension DiagnosticsClient: DependencyKey {
 
         var components = URLComponents()
         components.scheme = url.scheme == "https" ? "wss" : "ws"
-        components.host = host == "localhost" ? "127.0.0.1" : host
+        components.host = (host == "localhost") ? "127.0.0.1" : host
         components.port = port
         components.path = "/ws"
 
