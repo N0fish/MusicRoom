@@ -13,14 +13,18 @@ import (
 
 func (s *Server) handleListPublicPlaylists(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	userID := r.Header.Get("X-User-Id")
 
 	rows, err := s.db.Query(ctx, `
-		SELECT id, owner_id, name, description, is_public, edit_mode, created_at
-		FROM playlists
-		WHERE is_public = TRUE
-		ORDER BY created_at DESC
+		SELECT p.id, p.owner_id, p.name, p.description, p.is_public, p.edit_mode, p.created_at
+		FROM playlists p
+		LEFT JOIN playlist_members pm ON p.id = pm.playlist_id AND pm.user_id = $1
+		WHERE p.is_public = TRUE
+		   OR ($1 <> '' AND p.owner_id = $1)
+		   OR ($1 <> '' AND pm.user_id IS NOT NULL)
+		ORDER BY p.created_at DESC
 		LIMIT 200
-	`)
+	`, userID)
 	if err != nil {
 		log.Printf("playlist-service: list playlists: %v", err)
 		writeError(w, http.StatusInternalServerError, "database error")
