@@ -4,6 +4,9 @@ var API = "{{.API}}";
 if (typeof currentEventIdForSettings === 'undefined') {
     var currentEventIdForSettings = null;
 }
+if (typeof currentEventLicenseMode === 'undefined') {
+    var currentEventLicenseMode = null;
+}
 
 async function refreshEvents() {
   const container = document.getElementById('events-list')
@@ -47,9 +50,14 @@ async function refreshEvents() {
     name.textContent = decodeHTMLEntities(ev.name)
     info.appendChild(name)
 
+    const vis = ev.visibility.charAt(0).toUpperCase() + ev.visibility.slice(1);
+    const lic = ev.licenseMode === 'invited_only' ? 'Invited Only' : 
+                ev.licenseMode === 'geo_time' ? 'Location/Time' : 
+                (ev.licenseMode ? ev.licenseMode.charAt(0).toUpperCase() + ev.licenseMode.slice(1) : 'Everyone');
+    
     const meta = document.createElement('div')
     meta.className = 'text-sm text-text-muted truncate'
-    meta.textContent = `${ev.visibility} • ${ev.licenseMode}`
+    meta.textContent = `${vis} • License: ${lic}`
     info.appendChild(meta)
     
     item.appendChild(info)
@@ -98,8 +106,17 @@ async function loadEvent(id) {
         return
     }
     const ev = await res.json()
+    
+    currentEventLicenseMode = ev.licenseMode;
+    
     document.getElementById('ev-name').textContent = decodeHTMLEntities(ev.name)
-    document.getElementById('ev-meta').textContent = `${ev.visibility} • ${ev.licenseMode}`
+    
+    const vis = ev.visibility.charAt(0).toUpperCase() + ev.visibility.slice(1);
+    const lic = ev.licenseMode === 'invited_only' ? 'Invited Only' : 
+                ev.licenseMode === 'geo_time' ? 'Location/Time' : 
+                (ev.licenseMode ? ev.licenseMode.charAt(0).toUpperCase() + ev.licenseMode.slice(1) : 'Everyone');
+
+    document.getElementById('ev-meta').textContent = `${vis} • License: ${lic}`
 
     // Check ownership
     const meRes = await authService.fetchWithAuth(API + '/users/me');
@@ -120,20 +137,56 @@ window.openEventSettings = async function() {
     const ev = await res.json();
 
     const isPrivate = ev.visibility === 'private';
-    const invitesDisplay = isPrivate ? 'block' : 'none';
+    const licenseMode = ev.licenseMode || 'everyone';
+    const showInvites = isPrivate || licenseMode === 'invited_only';
+    const showGeo = licenseMode === 'geo_time';
 
     // Create Modal Content
     const content = `
       <div class="space-y-4 text-left">
         <div>
-           <label class="block text-sm font-medium text-text-muted mb-1">Visibility</label>
-           <select id="setting-visibility" onchange="toggleInvites(this.value)" class="w-full bg-input-bg border border-input-border rounded px-2 py-1 focus:outline-none text-text">
-             <option value="public" ${!isPrivate ? 'selected' : ''}>Public</option>
-             <option value="private" ${isPrivate ? 'selected' : ''}>Private</option>
+           <label class="block text-sm font-medium text-text-muted mb-1">Visibility (Who can see/join)</label>
+           <select id="setting-visibility" onchange="updateSettingsUI()" class="w-full bg-input-bg border border-input-border rounded px-2 py-1 focus:outline-none text-text">
+             <option value="public" ${ev.visibility === 'public' ? 'selected' : ''}>Public</option>
+             <option value="private" ${ev.visibility === 'private' ? 'selected' : ''}>Private</option>
+           </select>
+           <p class="text-xs text-text-muted mt-1">Private: Only invited users can find and vote.</p>
+        </div>
+
+        <div>
+           <label class="block text-sm font-medium text-text-muted mb-1">Voting License (Who can vote)</label>
+           <select id="setting-license" onchange="updateSettingsUI()" class="w-full bg-input-bg border border-input-border rounded px-2 py-1 focus:outline-none text-text">
+             <option value="everyone" ${licenseMode === 'everyone' ? 'selected' : ''}>Everyone</option>
+             <option value="invited_only" ${licenseMode === 'invited_only' ? 'selected' : ''}>Invited Only</option>
+             <option value="geo_time" ${licenseMode === 'geo_time' ? 'selected' : ''}>Location/Time (License)</option>
            </select>
         </div>
         
-        <div id="settings-invites-section" class="border-t border-input-border pt-4" style="display: ${invitesDisplay};">
+        <div id="settings-geo-section" class="border-t border-input-border pt-4" style="display: ${showGeo ? 'block' : 'none'};">
+            <h4 class="text-md font-medium mb-2">Location Requirements</h4>
+            <div class="grid grid-cols-2 gap-2 mb-2">
+                <div>
+                    <label class="text-xs text-text-muted">Latitude</label>
+                    <input id="setting-geo-lat" type="number" step="any" value="${ev.geoLat || ''}" class="w-full bg-input-bg border border-input-border rounded px-2 py-1 text-text" />
+                </div>
+                <div>
+                    <label class="text-xs text-text-muted">Longitude</label>
+                    <input id="setting-geo-lng" type="number" step="any" value="${ev.geoLng || ''}" class="w-full bg-input-bg border border-input-border rounded px-2 py-1 text-text" />
+                </div>
+            </div>
+            <div class="mb-2">
+                <label class="text-xs text-text-muted">Radius (meters)</label>
+                <input id="setting-geo-radius" type="number" value="${ev.geoRadiusM || 100}" class="w-full bg-input-bg border border-input-border rounded px-2 py-1 text-text" />
+            </div>
+            <button onclick="setEventLocationFromDevice()" class="btn-small w-full flex items-center justify-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
+                </svg>
+                Set to My Location
+            </button>
+        </div>
+
+        <div id="settings-invites-section" class="border-t border-input-border pt-4" style="display: ${showInvites ? 'block' : 'none'};">
            <h4 class="text-md font-medium mb-2">Invites</h4>
            <div class="flex gap-2 mb-2">
              <input id="invite-user-id" placeholder="User ID to invite" class="flex-1 bg-input-bg border border-input-border rounded px-2 py-1 focus:outline-none text-sm text-text" />
@@ -155,19 +208,48 @@ window.openEventSettings = async function() {
         ]
     });
 
-    if (isPrivate) {
+    if (showInvites) {
         loadInvitesList(id);
     }
 }
 
-window.toggleInvites = function(val) {
-    const el = document.getElementById('settings-invites-section');
-    if (el) {
-        el.style.display = (val === 'private') ? 'block' : 'none';
-        if (val === 'private') {
+window.updateSettingsUI = function() {
+    const vis = document.getElementById('setting-visibility').value;
+    const lic = document.getElementById('setting-license').value;
+    
+    const invitesSection = document.getElementById('settings-invites-section');
+    const geoSection = document.getElementById('settings-geo-section');
+    
+    const showInvites = (vis === 'private' || lic === 'invited_only');
+    const showGeo = (lic === 'geo_time');
+
+    if (invitesSection) {
+        const wasHidden = invitesSection.style.display === 'none';
+        invitesSection.style.display = showInvites ? 'block' : 'none';
+        if (showInvites && wasHidden && currentEventIdForSettings) {
             loadInvitesList(currentEventIdForSettings);
         }
     }
+    
+    if (geoSection) {
+        geoSection.style.display = showGeo ? 'block' : 'none';
+    }
+}
+
+// Alias for compatibility if needed, but updateSettingsUI handles both
+window.toggleInvites = window.updateSettingsUI;
+
+window.setEventLocationFromDevice = function() {
+    if (!navigator.geolocation) {
+        window.showAlert({ title: 'Error', content: 'Geolocation is not supported.' });
+        return;
+    }
+    navigator.geolocation.getCurrentPosition((pos) => {
+        document.getElementById('setting-geo-lat').value = pos.coords.latitude;
+        document.getElementById('setting-geo-lng').value = pos.coords.longitude;
+    }, (err) => {
+        window.showAlert({ title: 'Error', content: 'Could not get location: ' + err.message });
+    });
 }
 
 async function loadInvitesList(eventId) {
@@ -232,11 +314,28 @@ window.removeInvite = async function(userId) {
 
 window.saveEventSettings = async function() {
     const visibility = document.getElementById('setting-visibility').value;
+    const licenseMode = document.getElementById('setting-license').value;
+    
+    const payload = { visibility, licenseMode };
+
+    if (licenseMode === 'geo_time') {
+        const latStr = document.getElementById('setting-geo-lat').value;
+        const lngStr = document.getElementById('setting-geo-lng').value;
+        const radStr = document.getElementById('setting-geo-radius').value;
+
+        if (latStr && lngStr) {
+            payload.geoLat = parseFloat(latStr);
+            payload.geoLng = parseFloat(lngStr);
+        }
+        if (radStr) {
+            payload.geoRadiusM = parseInt(radStr, 10);
+        }
+    }
     
     const res = await authService.fetchWithAuth(API + '/events/' + currentEventIdForSettings, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ visibility })
+        body: JSON.stringify(payload)
     });
 
     if (res.ok) {
@@ -267,9 +366,15 @@ async function loadTally(id) {
         return
     }
 
-    tally.forEach(row => {
+    tally.forEach((row, index) => {
         const item = document.createElement('div')
-        item.className = 'flex justify-between items-center p-3 bg-white/5 rounded-md'
+        item.className = 'flex items-center p-3 bg-white/5 rounded-md gap-3'
+        
+        // Rank
+        const rank = document.createElement('div');
+        rank.className = 'text-xl font-bold text-primary w-8 text-center flex-shrink-0';
+        rank.textContent = (index + 1) + '.';
+        item.appendChild(rank);
         
         let displayTitle = row.track;
         let displayArtist = '';
@@ -283,22 +388,22 @@ async function loadTally(id) {
         } catch (e) {}
 
         const trackInfo = document.createElement('div')
-        trackInfo.className = 'flex flex-col min-w-0 pr-2'
+        trackInfo.className = 'flex flex-col min-w-0 flex-1'
         
         const titleDiv = document.createElement('div')
         titleDiv.className = 'font-medium truncate'
-        titleDiv.textContent = displayTitle
+        titleDiv.textContent = decodeHTMLEntities(displayTitle)
         trackInfo.appendChild(titleDiv)
 
         if (displayArtist) {
             const artistDiv = document.createElement('div')
             artistDiv.className = 'text-xs text-text-muted truncate'
-            artistDiv.textContent = displayArtist
+            artistDiv.textContent = decodeHTMLEntities(displayArtist)
             trackInfo.appendChild(artistDiv)
         }
         
         const count = document.createElement('div')
-        count.className = 'text-primary font-bold ml-4 whitespace-nowrap'
+        count.className = 'text-text font-bold ml-2 whitespace-nowrap'
         count.textContent = row.count + (row.count === 1 ? ' vote' : ' votes')
         
         item.appendChild(trackInfo)

@@ -27,7 +27,7 @@
                      autocomplete="off"
                      onkeydown="if(event.key === 'Enter') searchAndVote()"
                      class="block w-full bg-input-bg border-input-border rounded-md pl-10 pr-3 py-2 focus:outline-none focus:ring-1 focus:ring-input-ring focus:border-input-focus text-text" 
-                     placeholder="Search for tracks to vote..." />
+                     placeholder="Search to suggest or vote for tracks..." />
             </div>
             <ul id="track-search-results" class="mt-4 space-y-1 text-text-muted"></ul>
         </div>
@@ -102,10 +102,30 @@ async function searchAndVote() {
 
 async function castVote(trackId) {
     const eventId = document.getElementById('ev-id').textContent;
+    let payload = { trackId };
+
+    if (currentEventLicenseMode === 'geo_time') {
+        if (!navigator.geolocation) {
+             window.showAlert({ title: 'Error', content: 'Geolocation is not supported by your browser.' });
+             return;
+        }
+        
+        try {
+            const position = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject);
+            });
+            payload.lat = position.coords.latitude;
+            payload.lng = position.coords.longitude;
+        } catch (e) {
+             window.showAlert({ title: 'Error', content: 'Location access is required to vote in this event. Please allow location access.' });
+             return;
+        }
+    }
+
     const res = await authService.fetchWithAuth(authService.apiUrl + `/events/${eventId}/vote`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ trackId })
+        body: JSON.stringify(payload)
     });
 
     if (res.ok) {
