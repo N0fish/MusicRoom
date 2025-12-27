@@ -34,8 +34,8 @@ func main() {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-	r.Use(rateLimitMiddleware(rps))
 	r.Use(corsMiddleware)
+	r.Use(rateLimitMiddleware(rps))
 	r.Use(requestLogMiddleware)
 
 	// health
@@ -137,7 +137,8 @@ func main() {
 	})
 
 	// Playlists
-	r.Method(http.MethodGet, "/playlists", playlistProxy) // public playlists
+	r.With(optionalJwtAuthMiddleware(jwtSecret)).
+		Method(http.MethodGet, "/playlists", playlistProxy)
 	r.Group(func(r chi.Router) {
 		if len(jwtSecret) != 0 {
 			r.Use(jwtAuthMiddleware(jwtSecret))

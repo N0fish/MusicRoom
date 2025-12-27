@@ -1,5 +1,3 @@
-var API = "{{.API}}";
-
 // Avoid re-declaration error with HTMX
 if (typeof currentEventIdForSettings === 'undefined') {
     var currentEventIdForSettings = null;
@@ -13,8 +11,8 @@ async function refreshEvents() {
   if (!container) return
 
   const [eventsRes, meRes] = await Promise.all([
-      authService.fetchWithAuth(API + '/events'),
-      authService.fetchWithAuth(API + '/users/me')
+      authService.fetchWithAuth(authService.apiUrl + '/events'),
+      authService.fetchWithAuth(authService.apiUrl + '/users/me')
   ]);
 
   if (!eventsRes.ok) {
@@ -104,7 +102,7 @@ async function refreshEvents() {
 }
 
 async function loadEvent(id) {
-    const res = await authService.fetchWithAuth(API + '/events/' + id)
+    const res = await authService.fetchWithAuth(authService.apiUrl + '/events/' + id)
     if (!res.ok) {
         window.showAlert({ title: 'Error', content: 'Failed to load event.' })
         return
@@ -123,12 +121,20 @@ async function loadEvent(id) {
     document.getElementById('ev-meta').textContent = `${vis} • License: ${lic}`
 
     // Check ownership
-    const meRes = await authService.fetchWithAuth(API + '/users/me');
+    const meRes = await authService.fetchWithAuth(authService.apiUrl + '/users/me');
     if (meRes.ok) {
         const me = await meRes.json();
         if (me.userId === ev.ownerId) {
             const btn = document.getElementById('ev-settings-btn');
             if (btn) btn.classList.remove('hidden');
+            
+            // Show start round button for owner
+            const roundBtn = document.getElementById('btn-start-round');
+            if (roundBtn) roundBtn.style.display = 'inline-block';
+        } else {
+            // Ensure hidden for non-owners
+            const roundBtn = document.getElementById('btn-start-round');
+            if (roundBtn) roundBtn.style.display = 'none';
         }
     }
     
@@ -139,7 +145,7 @@ window.openEventSettings = async function() {
     const id = document.getElementById('ev-id').textContent;
     currentEventIdForSettings = id;
 
-    const res = await authService.fetchWithAuth(API + '/events/' + id);
+    const res = await authService.fetchWithAuth(authService.apiUrl + '/events/' + id);
     const ev = await res.json();
 
     const isPrivate = ev.visibility === 'private';
@@ -262,7 +268,7 @@ async function loadInvitesList(eventId) {
     const ul = document.getElementById('settings-invites-list');
     if (!ul) return;
 
-    const res = await authService.fetchWithAuth(API + `/events/${eventId}/invites`);
+    const res = await authService.fetchWithAuth(authService.apiUrl + `/events/${eventId}/invites`);
     if (!res.ok) {
         ul.innerHTML = '<li>Failed to load invites.</li>';
         return;
@@ -275,11 +281,26 @@ async function loadInvitesList(eventId) {
         return;
     }
 
-    invites.forEach(inv => {
+    // Resolve usernames in parallel
+    const resolvedInvites = await Promise.all(invites.map(async (inv) => {
+        try {
+            const userRes = await authService.fetchWithAuth(authService.apiUrl + `/users/${inv.userId}`);
+            if (userRes.ok) {
+                const user = await userRes.json();
+                return { ...inv, username: user.username, displayName: user.displayName };
+            }
+        } catch (e) {
+            console.error('Failed to resolve user', inv.userId, e);
+        }
+        return { ...inv, username: inv.userId }; // Fallback to ID
+    }));
+
+    resolvedInvites.forEach(inv => {
         const li = document.createElement('li');
         li.className = 'flex justify-between items-center bg-white/5 px-2 py-1 rounded';
+        const displayName = inv.displayName ? `${inv.displayName} (@${inv.username})` : inv.username;
         li.innerHTML = `
-           <span class="truncate pr-2">${inv.userId}</span>
+           <span class="truncate pr-2" title="${inv.userId}">${displayName}</span>
            <button onclick="removeInvite('${inv.userId}')" class="text-error hover:text-red-400">&times;</button>
         `;
         ul.appendChild(li);
@@ -288,10 +309,42 @@ async function loadInvitesList(eventId) {
 
 window.sendInvite = async function() {
     const userIdInput = document.getElementById('invite-user-id');
-    const userId = userIdInput.value.trim();
+    let userId = userIdInput.value.trim();
     if (!userId) return;
 
-    const res = await authService.fetchWithAuth(API + `/events/${currentEventIdForSettings}/invites`, {
+    // Resolve username to UUID if needed
+    const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+    if (!uuidRegex.test(userId)) {
+        // Assume it's a username or display name, try to resolve it
+        try {
+            const searchRes = await authService.fetchWithAuth(authService.apiUrl + '/users/search?query=' + encodeURIComponent(userId));
+            if (searchRes.ok) {
+                const searchData = await searchRes.json();
+                if (searchData.items && searchData.items.length > 0) {
+                    // Try to find exact match on username
+                    const exactMatch = searchData.items.find(u => u.username.toLowerCase() === userId.toLowerCase() || u.displayName.toLowerCase() === userId.toLowerCase());
+                    if (exactMatch) {
+                        userId = exactMatch.userId;
+                    } else {
+                        // Use the first result if no exact match
+                        userId = searchData.items[0].userId;
+                    }
+                } else {
+                    window.showAlert({ title: 'Error', content: 'User not found.' });
+                    return;
+                }
+            } else {
+                window.showAlert({ title: 'Error', content: 'Failed to search for user.' });
+                return;
+            }
+        } catch (e) {
+            console.error('User resolution failed', e);
+            window.showAlert({ title: 'Error', content: 'Failed to resolve user.' });
+            return;
+        }
+    }
+
+    const res = await authService.fetchWithAuth(authService.apiUrl + `/events/${currentEventIdForSettings}/invites`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ userId })
@@ -301,6 +354,29 @@ window.sendInvite = async function() {
         userIdInput.value = '';
         loadInvitesList(currentEventIdForSettings);
         window.showToast('User invited.');
+
+        // Sync invite to playlist
+        try {
+            const eventName = document.getElementById('ev-name')?.textContent;
+            if (eventName && currentEventIdForSettings) {
+                // Fetch event details to ensure context
+                let eventObj = null;
+                const evRes = await authService.fetchWithAuth(authService.apiUrl + '/events/' + currentEventIdForSettings);
+                if (evRes.ok) eventObj = await evRes.json();
+
+                const playlistId = await getOrCreateEventPlaylist(currentEventIdForSettings, eventName, eventObj);
+                if (playlistId) {
+                    await authService.fetchWithAuth(authService.apiUrl + `/playlists/${playlistId}/invites`, {
+                        method: 'POST',
+                        headers: { 'content-type': 'application/json' },
+                        body: JSON.stringify({ userId })
+                    });
+                }
+            }
+        } catch (e) {
+            console.error('Failed to sync invite to playlist', e);
+        }
+
     } else {
         const err = await res.json().catch(() => ({}));
         window.showAlert({ title: 'Error', content: err.error || 'Failed to invite user.' });
@@ -308,11 +384,32 @@ window.sendInvite = async function() {
 }
 
 window.removeInvite = async function(userId) {
-     const res = await authService.fetchWithAuth(API + `/events/${currentEventIdForSettings}/invites/${userId}`, {
+     const res = await authService.fetchWithAuth(authService.apiUrl + `/events/${currentEventIdForSettings}/invites/${userId}`, {
         method: 'DELETE'
     });
     if (res.ok) {
         loadInvitesList(currentEventIdForSettings);
+
+        // Sync remove invite from playlist
+        try {
+            const eventName = document.getElementById('ev-name')?.textContent;
+            if (eventName && currentEventIdForSettings) {
+                // Fetch event details
+                let eventObj = null;
+                const evRes = await authService.fetchWithAuth(authService.apiUrl + '/events/' + currentEventIdForSettings);
+                if (evRes.ok) eventObj = await evRes.json();
+
+                const playlistId = await getOrCreateEventPlaylist(currentEventIdForSettings, eventName, eventObj);
+                if (playlistId) {
+                    await authService.fetchWithAuth(authService.apiUrl + `/playlists/${playlistId}/invites/${userId}`, {
+                        method: 'DELETE'
+                    });
+                }
+            }
+        } catch (e) {
+            console.error('Failed to sync remove invite from playlist', e);
+        }
+
     } else {
         window.showAlert({ title: 'Error', content: 'Failed to remove invite.' });
     }
@@ -338,7 +435,7 @@ window.saveEventSettings = async function() {
         }
     }
     
-    const res = await authService.fetchWithAuth(API + '/events/' + currentEventIdForSettings, {
+    const res = await authService.fetchWithAuth(authService.apiUrl + '/events/' + currentEventIdForSettings, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload)
@@ -348,6 +445,49 @@ window.saveEventSettings = async function() {
         window.closeModal();
         window.showAlert({ title: 'Success', content: 'Settings updated.' });
         loadEvent(currentEventIdForSettings); // Refresh main view
+        
+        // Sync playlist settings
+        try {
+            const eventName = document.getElementById('ev-name')?.textContent;
+            if (eventName) {
+                // Pass new settings via event object simulation to get/create correctly
+                const eventObj = { visibility, licenseMode };
+                const playlistId = await getOrCreateEventPlaylist(currentEventIdForSettings, eventName, eventObj);
+                
+                if (playlistId) {
+                    let plPublic = true;
+                    
+                    // Enforce Private Playlist if Event is Private
+                    if (visibility === 'private') {
+                        plPublic = false;
+                    }
+                    
+                    await authService.fetchWithAuth(authService.apiUrl + '/playlists/' + playlistId, {
+                        method: 'PATCH',
+                        headers: { 'content-type': 'application/json' },
+                        body: JSON.stringify({ isPublic: plPublic, editMode: 'invited' })
+                    });
+
+                    // Sync invites to ensure "exact same users invited"
+                    const invitesRes = await authService.fetchWithAuth(authService.apiUrl + `/events/${currentEventIdForSettings}/invites`);
+                    if (invitesRes.ok) {
+                        const invites = await invitesRes.json();
+                        if (invites && invites.length > 0) {
+                            await Promise.all(invites.map(inv => 
+                                authService.fetchWithAuth(authService.apiUrl + `/playlists/${playlistId}/invites`, {
+                                    method: 'POST',
+                                    headers: { 'content-type': 'application/json' },
+                                    body: JSON.stringify({ userId: inv.userId })
+                                })
+                            ));
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Failed to sync playlist settings', e);
+        }
+
     } else {
         const err = await res.json().catch(() => ({}));
         window.showAlert({ title: 'Error', content: err.error || 'Update failed.' });
@@ -360,8 +500,8 @@ async function loadTally(id) {
 
     // Fetch Tally and Event Name (if needed for playlist lookup)
     const [tallyRes, eventRes] = await Promise.all([
-        authService.fetchWithAuth(API + `/events/${eventId}/tally`),
-        authService.fetchWithAuth(API + `/events/${eventId}`)
+        authService.fetchWithAuth(authService.apiUrl + `/events/${eventId}/tally`),
+        authService.fetchWithAuth(authService.apiUrl + `/events/${eventId}`)
     ]);
 
     if (!tallyRes.ok) return;
@@ -371,9 +511,9 @@ async function loadTally(id) {
     let excludedIds = new Set();
     if (eventRes.ok) {
         const ev = await eventRes.json();
-        const playlistId = await getOrCreateEventPlaylist(eventId, ev.name);
+        const playlistId = await getOrCreateEventPlaylist(eventId, ev.name, ev);
         if (playlistId) {
-             const plRes = await authService.fetchWithAuth(API + `/playlists/${playlistId}`);
+             const plRes = await authService.fetchWithAuth(authService.apiUrl + `/playlists/${playlistId}`);
              if (plRes.ok) {
                  const plData = await plRes.json();
                  if (plData.tracks) {
@@ -390,12 +530,17 @@ async function loadTally(id) {
 
     container.innerHTML = ''
     
+    // Handle null tally
+    const tallyList = tally || [];
+
     // Filter tally
-    const filteredTally = tally.filter(row => {
+    const filteredTally = tallyList.filter(row => {
         try {
-            const t = row.track.startsWith('{') ? JSON.parse(row.track) : { title: row.track };
+            const t = row.track.startsWith('{') ? JSON.parse(row.track) : { title: row.track, id: row.track };
             const pid = t.id || t.providerTrackId;
-            return pid && !excludedIds.has(pid);
+            // If no ID, we show it (can't check against playlist)
+            if (!pid) return true;
+            return !excludedIds.has(pid);
         } catch (e) { return true; }
     });
 
@@ -452,42 +597,99 @@ async function loadTally(id) {
 
 // ... existing imports ...
 
-async function getOrCreateEventPlaylist(eventId, eventName) {
-    const res = await authService.fetchWithAuth(API + '/playlists');
+// Ensure mrState exists
+window.mrState = window.mrState || {};
+window.mrState.eventPlaylistIds = window.mrState.eventPlaylistIds || {};
+
+async function getOrCreateEventPlaylist(eventId, eventName, eventObj) {
+    // Check cache first
+    if (eventId && window.mrState.eventPlaylistIds[eventId]) {
+        return window.mrState.eventPlaylistIds[eventId];
+    }
+
+    const res = await authService.fetchWithAuth(authService.apiUrl + '/playlists');
     if (!res.ok) return null;
     const playlists = await res.json();
 
     // Naming convention for event playlists
-    const expectedName = `Event: ${eventName} (${eventId})`; 
-    const existing = playlists.find(p => p.name === expectedName);
+    const expectedName = `Event: ${eventName}`; 
+    const existing = playlists.find(p => p.name === expectedName || p.name === `Event: ${eventName} (${eventId})`);
     
-    if (existing) return existing.id;
+    if (existing) {
+        if (eventId) window.mrState.eventPlaylistIds[eventId] = existing.id;
+        return existing.id;
+    }
+
+    // Determine settings
+    let isPublic = true;
+    const editMode = 'invited'; // ALWAYS restricted for event playlists (owner + invited)
+
+    // If event object provided, enforce rules
+    if (eventObj) {
+        // Rule: If Event is Private => Playlist Private
+        if (eventObj.visibility === 'private') {
+            isPublic = false;
+        }
+    }
 
     // Create if not exists
-    const createRes = await authService.fetchWithAuth(API + '/playlists', {
+    const createRes = await authService.fetchWithAuth(authService.apiUrl + '/playlists', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: expectedName, isPublic: true, editMode: 'everyone' })
+        body: JSON.stringify({ name: expectedName, isPublic: isPublic, editMode: editMode })
     });
 
     if (createRes.ok) {
         const newPl = await createRes.json();
-        return newPl.id;
+        const playlistId = newPl.id;
+        
+        if (eventId) window.mrState.eventPlaylistIds[eventId] = playlistId;
+
+        // Sync initial invites from event to playlist
+        if (eventId) {
+            try {
+                const invitesRes = await authService.fetchWithAuth(authService.apiUrl + `/events/${eventId}/invites`);
+                if (invitesRes.ok) {
+                    const invites = await invitesRes.json();
+                    if (invites && invites.length > 0) {
+                        // Add each invite to the playlist
+                        await Promise.all(invites.map(inv => 
+                            authService.fetchWithAuth(authService.apiUrl + `/playlists/${playlistId}/invites`, {
+                                method: 'POST',
+                                headers: { 'content-type': 'application/json' },
+                                body: JSON.stringify({ userId: inv.userId })
+                            })
+                        ));
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to sync initial invites to playlist', e);
+            }
+        }
+
+        return playlistId;
     }
     return null;
 }
 
 async function syncEventPlaylist(eventId, eventName) {
-    const playlistId = await getOrCreateEventPlaylist(eventId, eventName);
+    // Attempt to fetch event for context
+    let eventObj = null;
+    try {
+        const evRes = await authService.fetchWithAuth(authService.apiUrl + '/events/' + eventId);
+        if (evRes.ok) eventObj = await evRes.json();
+    } catch (e) {}
+
+    const playlistId = await getOrCreateEventPlaylist(eventId, eventName, eventObj);
     if (!playlistId) return;
 
     // Get Tally (sorted by votes)
-    const tallyRes = await authService.fetchWithAuth(API + `/events/${eventId}/tally`);
+    const tallyRes = await authService.fetchWithAuth(authService.apiUrl + `/events/${eventId}/tally`);
     if (!tallyRes.ok) return;
     const tally = await tallyRes.json();
 
     // Get Playlist Tracks
-    const plRes = await authService.fetchWithAuth(API + `/playlists/${playlistId}`);
+    const plRes = await authService.fetchWithAuth(authService.apiUrl + `/playlists/${playlistId}`);
     if (!plRes.ok) return;
     const plData = await plRes.json();
     // Refresh local track list as we modify it
@@ -518,7 +720,7 @@ async function syncEventPlaylist(eventId, eventName) {
 
         if (!existingTrack) {
             // Add it
-             await authService.fetchWithAuth(API + `/playlists/${playlistId}/tracks`, {
+             await authService.fetchWithAuth(authService.apiUrl + `/playlists/${playlistId}/tracks`, {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
                 body: JSON.stringify({
@@ -532,7 +734,7 @@ async function syncEventPlaylist(eventId, eventName) {
             // Don't re-fetch immediately for performance, just assume added at end? 
             // Actually, we need to know its ID to move it later if needed.
             // So we should re-fetch playlist tracks or response.
-            const updatedPlRes = await authService.fetchWithAuth(API + `/playlists/${playlistId}`);
+            const updatedPlRes = await authService.fetchWithAuth(authService.apiUrl + `/playlists/${playlistId}`);
             if (updatedPlRes.ok) {
                 const updatedData = await updatedPlRes.json();
                 currentTracks = updatedData.tracks || [];
@@ -542,14 +744,14 @@ async function syncEventPlaylist(eventId, eventName) {
             const currentIdx = currentTracks.indexOf(existingTrack);
             if (currentIdx !== i) {
                 // Move
-                 await authService.fetchWithAuth(API + `/playlists/${playlistId}/tracks/${existingTrack.id}`, {
+                 await authService.fetchWithAuth(authService.apiUrl + `/playlists/${playlistId}/tracks/${existingTrack.id}`, {
                     method: 'PATCH',
                     headers: { 'content-type': 'application/json' },
                     body: JSON.stringify({ newPosition: i })
                 });
                 // Update local list to avoid confusion? 
                 // A move changes other indices. Re-fetching is safest.
-                const updatedPlRes = await authService.fetchWithAuth(API + `/playlists/${playlistId}`);
+                const updatedPlRes = await authService.fetchWithAuth(authService.apiUrl + `/playlists/${playlistId}`);
                 if (updatedPlRes.ok) {
                     const updatedData = await updatedPlRes.json();
                     currentTracks = updatedData.tracks || [];
@@ -582,7 +784,7 @@ window.castVote = async function(trackIdPayload) {
         }
     }
 
-    const res = await authService.fetchWithAuth(API + `/events/${eventId}/vote`, {
+    const res = await authService.fetchWithAuth(authService.apiUrl + `/events/${eventId}/vote`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload)
@@ -692,110 +894,146 @@ async function endVotingRound(eventId) {
     const onPage = (document.getElementById('ev-id')?.textContent === eventId);
     if (onPage) window.showToast('Round ended! Processing winner...');
 
-    // 1. Get Event Name (needed for playlist lookup)
-    let eventName = document.getElementById('ev-name')?.textContent;
-    if (!eventName && onPage === false) {
-        // If we are off-page, we might need to fetch event name or rely on cache?
-        // For simplicity, let's try to fetch the event details if name is missing
-        const evRes = await authService.fetchWithAuth(API + '/events/' + eventId);
+    let shouldRestart = true;
+    let isOwner = false;
+
+    try {
+        // 1. Get Event Details
+        let eventName = document.getElementById('ev-name')?.textContent;
+        let eventObj = null;
+
+        // Always fetch event to ensure we have latest settings for playlist creation
+        const evRes = await authService.fetchWithAuth(authService.apiUrl + '/events/' + eventId);
+        if (evRes.status === 404) {
+            console.log('Event not found, stopping timer loop and cleaning up localStorage.');
+            localStorage.removeItem('mr_round_end_' + eventId);
+            shouldRestart = false;
+            return;
+        }
         if (evRes.ok) {
-            const ev = await evRes.json();
-            eventName = ev.name;
-        } else {
-            eventName = 'Event'; // Fallback
+            eventObj = await evRes.json();
+            eventName = eventObj.name;
+        } else if (!eventName) {
+            eventName = 'Event';
         }
-    }
 
-    // 2. Get Playlist & Tracks (to filter out winners)
-    const playlistId = await getOrCreateEventPlaylist(eventId, eventName);
-    let existingTrackIds = new Set();
-    
-    if (playlistId) {
-        const plRes = await authService.fetchWithAuth(API + '/playlists/' + playlistId);
-        if (plRes.ok) {
-             const plData = await plRes.json();
-             if (plData.tracks) {
-                 plData.tracks.forEach(t => {
-                     if (t.providerTrackId) existingTrackIds.add(t.providerTrackId);
-                 });
-             }
-        }
-    }
-
-    // 3. Get Tally
-    const tallyRes = await authService.fetchWithAuth(API + `/events/${eventId}/tally`);
-    if (!tallyRes.ok) {
-        if(onPage) window.showAlert({ title: 'Error', content: 'Failed to fetch tally.' });
-        // Restart anyway?
-        setTimeout(() => startVotingRound(eventId), 2000); 
-        return;
-    }
-    const tally = await tallyRes.json();
-    
-    // 4. Filter Tally
-    const candidates = tally.filter(row => {
-        let trackObj = {};
+        // Check ownership
         try {
-            trackObj = row.track.startsWith('{') ? JSON.parse(row.track) : { title: row.track };
-        } catch (e) { return false; }
+            const meRes = await authService.fetchWithAuth(authService.apiUrl + '/users/me');
+            if (meRes.ok && eventObj) {
+                const me = await meRes.json();
+                if (me.userId === eventObj.ownerId) {
+                    isOwner = true;
+                }
+            }
+        } catch (e) {
+            console.error('Failed to verify ownership', e);
+        }
         
-        const pid = trackObj.id || trackObj.providerTrackId;
-        return pid && !existingTrackIds.has(pid);
-    });
+        console.log('endVotingRound: isOwner =', isOwner);
 
-    if (candidates.length === 0) {
-        if(onPage) window.showToast('No new votes (or all candidates already in playlist). Round skipped.');
-        // Auto-restart
-        setTimeout(() => startVotingRound(eventId), 2000);
-        return;
-    }
+        // 2. Get Playlist & Tracks (to filter out winners)
+        const playlistId = await getOrCreateEventPlaylist(eventId, eventName, eventObj);
+        let existingTrackIds = new Set();
+        
+        if (playlistId) {
+            const plRes = await authService.fetchWithAuth(authService.apiUrl + '/playlists/' + playlistId);
+            if (plRes.ok) {
+                 const plData = await plRes.json();
+                 if (plData.tracks) {
+                     plData.tracks.forEach(t => {
+                         if (t.providerTrackId) existingTrackIds.add(t.providerTrackId);
+                     });
+                 }
+            }
+        }
 
-    // 5. Identify Winner
-    const winner = candidates[0]; // Already sorted by count DESC, time ASC
-    let winnerTrack = JSON.parse(winner.track);
-    const providerId = winnerTrack.id || winnerTrack.providerTrackId;
-
-    // 6. Add to Playlist
-    if (playlistId && providerId) {
-         const addRes = await authService.fetchWithAuth(API + `/playlists/${playlistId}/tracks`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-                title: winnerTrack.title,
-                artist: winnerTrack.artist,
-                provider: winnerTrack.provider || 'youtube',
-                providerTrackId: providerId,
-                thumbnailUrl: winnerTrack.thumbnailUrl
-            })
+        // 3. Get Tally
+        const tallyRes = await authService.fetchWithAuth(authService.apiUrl + `/events/${eventId}/tally`);
+        if (!tallyRes.ok) {
+            if(onPage) window.showAlert({ title: 'Error', content: 'Failed to fetch tally.' });
+            return; 
+        }
+        let tally = await tallyRes.json();
+        if (!tally) tally = [];
+        
+        // 4. Filter Tally
+        const candidates = tally.filter(row => {
+            let trackObj = {};
+            try {
+                trackObj = row.track.startsWith('{') ? JSON.parse(row.track) : { title: row.track, id: row.track };
+            } catch (e) { return false; }
+            
+            const pid = trackObj.id || trackObj.providerTrackId;
+            // If no ID, we can't filter by existence in playlist easily, but we'll allow it for now
+            return !pid || !existingTrackIds.has(pid);
         });
+
+        if (candidates.length === 0) {
+            if(onPage) window.showToast('No new votes (or all candidates already in playlist). Round skipped.');
+            return;
+        }
+
+        // 5. Identify Winner
+        const winner = candidates[0]; 
+        let winnerTrack = {};
+        try {
+            winnerTrack = winner.track.startsWith('{') ? JSON.parse(winner.track) : { title: winner.track, id: winner.track };
+        } catch (e) {
+            winnerTrack = { title: winner.track, id: winner.track };
+        }
         
-        if (addRes.ok) {
-             if(onPage) window.showToast(`Added "${winnerTrack.title}" to playlist.`);
-             else console.log(`Added "${winnerTrack.title}" to playlist.`);
-             
-             // Refresh Tally UI if on page to show it "disappear"
-             if (onPage) loadTally(eventId);
-        } else {
-             console.error('Failed to add to playlist');
+        const providerId = winnerTrack.id || winnerTrack.providerTrackId;
+
+        // 6. Add to Playlist (Only Owner)
+        if (isOwner && playlistId && providerId) {
+             console.log('Adding winner to playlist:', winnerTrack.title);
+             const addRes = await authService.fetchWithAuth(authService.apiUrl + `/playlists/${playlistId}/tracks`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({
+                    title: winnerTrack.title,
+                    artist: winnerTrack.artist || 'Unknown',
+                    provider: winnerTrack.provider || 'youtube',
+                    providerTrackId: providerId,
+                    thumbnailUrl: winnerTrack.thumbnailUrl || ''
+                })
+            });
+            
+            if (addRes.ok) {
+                 if(onPage) window.showToast(`Added "${winnerTrack.title}" to playlist.`);
+                 else console.log(`Added "${winnerTrack.title}" to playlist.`);
+            } else {
+                 const errTxt = await addRes.text();
+                 console.error('Failed to add to playlist:', addRes.status, errTxt);
+            }
+        }
+        
+        // 7. Clear Votes for Winner Only (Carry-over logic) - Only Owner
+        if (isOwner) {
+            // We pass the track string as it is stored in the DB
+            const delRes = await authService.fetchWithAuth(authService.apiUrl + `/events/${eventId}/votes?track=` + encodeURIComponent(winner.track), {
+                method: 'DELETE'
+            });
+            
+            if (!delRes.ok) {
+                console.warn('Failed to clear votes for next round');
+            }
+        }
+
+        // Everyone refreshes tally to see the winner removed
+        if (onPage) loadTally(eventId);
+
+        if(onPage) window.showToast('Round ended. Winner processed.');
+
+    } catch (e) {
+        console.error('Error in endVotingRound:', e);
+    } finally {
+        // Auto-restart next round - ONLY OWNER should start the next round to avoid chaos
+        if (shouldRestart && isOwner) {
+            setTimeout(() => startVotingRound(eventId), 2000);
         }
     }
-    
-    // 7. Clear Votes for Winner Only (Carry-over logic)
-    // We pass the providerId (which is stored in 'track' column in DB)
-    const delRes = await authService.fetchWithAuth(API + `/events/${eventId}/votes?track=` + encodeURIComponent(providerId), {
-        method: 'DELETE'
-    });
-    
-    if (delRes.ok) {
-        if(onPage) loadTally(eventId);
-    } else {
-        console.warn('Failed to clear votes for next round');
-    }
-
-    if(onPage) window.showToast('Round ended. Winner added, their votes cleared.');
-    
-    // Auto-restart next round
-    setTimeout(() => startVotingRound(eventId), 2000);
 }
 
 // Check for active round on load
@@ -829,7 +1067,7 @@ window.openCreateEventModal = function() {
         return
       }
 
-      const res = await authService.fetchWithAuth(API + '/events', {
+      const res = await authService.fetchWithAuth(authService.apiUrl + '/events', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ name: name, visibility: 'public', licenseMode: 'everyone' })
@@ -840,7 +1078,7 @@ window.openCreateEventModal = function() {
         
         // Auto-create playlist
         if (newEvent && newEvent.id) {
-            getOrCreateEventPlaylist(newEvent.id, newEvent.name);
+            getOrCreateEventPlaylist(newEvent.id, newEvent.name, newEvent);
         }
 
         window.showAlert({ title: 'Success', content: 'Event created successfully!' })
@@ -863,13 +1101,30 @@ function renameEvent(id, currentName) {
         window.showAlert({ title: 'Warning', content: 'Name must be at least 3 characters long.' })
         return
       }
-      const res = await authService.fetchWithAuth(API + '/events/' + id, {
+      const res = await authService.fetchWithAuth(authService.apiUrl + '/events/' + id, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ name: newName })
       })
       if (res.ok) {
-         await refreshEvents()
+         await refreshEvents();
+         
+         // Rename Playlist
+         try {
+             // Use OLD name to find it
+             const playlistId = await getOrCreateEventPlaylist(id, currentName, null);
+             if (playlistId) {
+                 const newPlaylistName = `Event: ${newName}`;
+                 await authService.fetchWithAuth(authService.apiUrl + '/playlists/' + playlistId, {
+                    method: 'PATCH',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ name: newPlaylistName })
+                 });
+             }
+         } catch (e) {
+             console.error('Failed to rename associated playlist', e);
+         }
+
       } else {
          const err = await res.json().catch(() => ({}))
          window.showAlert({ title: 'Error', content: (err && err.error) || 'Unknown error' })
@@ -879,17 +1134,64 @@ function renameEvent(id, currentName) {
 }
 
 async function deleteEvent(id) {
+    // 1. Get Event Name to find playlist
+    // We might not be on the event page, so we need to try to get the name first.
+    // However, if we delete the event first, we might lose the name.
+    // So let's try to find the playlist BEFORE deleting the event.
+    
+    // We can't easily get the name if we are on the list page without fetching or parsing DOM.
+    // If we are on list page, the DOM element with data-id has the name.
+    let eventName = null;
+    const listEl = document.querySelector(`div[data-id="${id}"] .font-bold`);
+    if (listEl) {
+        eventName = listEl.textContent;
+    } else {
+        // Maybe on detail page?
+        const detailEl = document.getElementById('ev-name');
+        const detailId = document.getElementById('ev-id');
+        if (detailEl && detailId && detailId.textContent === id) {
+            eventName = detailEl.textContent;
+        }
+    }
+
+    // Fallback: fetch event if name not found
+    if (!eventName) {
+        try {
+            const evRes = await authService.fetchWithAuth(authService.apiUrl + '/events/' + id);
+            if (evRes.ok) {
+                const ev = await evRes.json();
+                eventName = ev.name;
+            }
+        } catch (e) {}
+    }
+
     window.showConfirm({
         title: 'Delete Event',
-        content: 'Are you sure you want to delete this event?',
+        content: 'Are you sure you want to delete this event? This will also delete the associated playlist.',
         onConfirm: async () => {
-            const res = await authService.fetchWithAuth(API + '/events/' + id, {
+            // Delete Event
+            const res = await authService.fetchWithAuth(authService.apiUrl + '/events/' + id, {
                 method: 'DELETE'
             })
 
             if (res.ok) {
-                await refreshEvents()
-                window.showAlert({ title: 'Success', content: 'Event deleted.' })
+                await refreshEvents();
+                window.showAlert({ title: 'Success', content: 'Event deleted.' });
+                
+                // Delete Playlist
+                if (eventName) {
+                    try {
+                        // Pass null as eventObj since event is gone, but logic handles name-based lookup
+                        const playlistId = await getOrCreateEventPlaylist(id, eventName, null);
+                        if (playlistId) {
+                            await authService.fetchWithAuth(authService.apiUrl + '/playlists/' + playlistId, {
+                                method: 'DELETE'
+                            });
+                        }
+                    } catch (e) {
+                        console.error('Failed to delete associated playlist', e);
+                    }
+                }
             } else {
                 const err = await res.json().catch(() => ({}))
                 window.showAlert({ title: 'Error', content: (err && err.error) || 'Unknown error' })
@@ -905,5 +1207,220 @@ function decodeHTMLEntities(text) {
     return textArea.value;
 }
 
-// Initial load
-refreshEvents();
+// Global Event Supervisor
+window.initGlobalEventSupervisor = function() {
+    // Prevent multiple intervals
+    if (window.mrState.supervisorInterval) return;
+    
+    // Track rounds we've already "ended" in this session to prevent loops for non-owners
+    window.mrState.processedExpiredRounds = window.mrState.processedExpiredRounds || new Set();
+
+    window.mrState.supervisorInterval = setInterval(() => {
+        const now = Date.now();
+        // Scan LocalStorage for active rounds
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('mr_round_end_')) {
+                const eventId = key.replace('mr_round_end_', '');
+                
+                // Skip if already processed in this session
+                if (window.mrState.processedExpiredRounds.has(eventId)) continue;
+
+                const endTime = parseInt(localStorage.getItem(key), 10);
+                
+                if (endTime && endTime < now) {
+                    // Expired
+                    console.log('Global Supervisor: Found expired round for event', eventId);
+                    endVotingRound(eventId);
+                }
+            }
+        }
+    }, 1000);
+}
+
+// ... (previous code) ...
+
+async function endVotingRound(eventId) {
+    // Mark as processed in this session so Supervisor doesn't loop
+    window.mrState.processedExpiredRounds = window.mrState.processedExpiredRounds || new Set();
+    window.mrState.processedExpiredRounds.add(eventId);
+
+    // Cleanup local interval
+    if (window.mrState['roundInterval_' + eventId]) {
+        clearInterval(window.mrState['roundInterval_' + eventId]);
+        delete window.mrState['roundInterval_' + eventId];
+    }
+    // NOTE: We do NOT remove localStorage key yet. Only Owner can do that after processing.
+    
+    updateTimerUI(false, eventId);
+
+    const onPage = (document.getElementById('ev-id')?.textContent === eventId);
+    if (onPage) window.showToast('Round ended! Checking results...');
+
+    let shouldRestart = true;
+    let isOwner = false;
+
+    try {
+        // ... (fetch event logic) ...
+        // 1. Get Event Details
+        let eventName = document.getElementById('ev-name')?.textContent;
+        let eventObj = null;
+
+        const evRes = await authService.fetchWithAuth(authService.apiUrl + '/events/' + eventId);
+        if (evRes.status === 404) {
+            console.log('Event not found, cleaning up.');
+            localStorage.removeItem('mr_round_end_' + eventId);
+            shouldRestart = false;
+            return;
+        }
+        if (evRes.ok) {
+            eventObj = await evRes.json();
+            eventName = eventObj.name;
+        } else if (!eventName) {
+            eventName = 'Event';
+        }
+
+        // Check ownership
+        try {
+            const meRes = await authService.fetchWithAuth(authService.apiUrl + '/users/me');
+            if (meRes.ok && eventObj) {
+                const me = await meRes.json();
+                if (me.userId === eventObj.ownerId) {
+                    isOwner = true;
+                }
+            }
+        } catch (e) {
+            console.error('Failed to verify ownership', e);
+        }
+        
+        console.log('endVotingRound: isOwner =', isOwner);
+
+        // If NOT owner, we stop here. We've stopped the UI timer.
+        // We leave the localStorage key so the Owner can process it when they log in.
+        if (!isOwner) {
+            if (onPage) window.showToast('Round ended. Waiting for host to finalize results...');
+            return;
+        }
+
+        // --- OWNER LOGIC BELOW ---
+
+        // 2. Get Playlist & Tracks
+        const playlistId = await getOrCreateEventPlaylist(eventId, eventName, eventObj);
+        let existingTrackIds = new Set();
+        
+        if (playlistId) {
+            const plRes = await authService.fetchWithAuth(authService.apiUrl + '/playlists/' + playlistId);
+            if (plRes.ok) {
+                 const plData = await plRes.json();
+                 if (plData.tracks) {
+                     plData.tracks.forEach(t => {
+                         if (t.providerTrackId) existingTrackIds.add(t.providerTrackId);
+                     });
+                 }
+            }
+        }
+
+        // 3. Get Tally
+        const tallyRes = await authService.fetchWithAuth(authService.apiUrl + `/events/${eventId}/tally`);
+        if (!tallyRes.ok) {
+            if(onPage) window.showToast('Failed to fetch tally. Retrying...');
+            // If fetch failed, we might want to retry? For now, we don't clear key so it will retry on refresh.
+            // But we already added to processedExpiredRounds, so it won't retry this session.
+            // That's acceptable failure mode.
+            return; 
+        }
+        let tally = await tallyRes.json();
+        if (!tally) tally = [];
+        
+        // 4. Filter Tally
+        const candidates = tally.filter(row => {
+            let trackObj = {};
+            try {
+                trackObj = row.track.startsWith('{') ? JSON.parse(row.track) : { title: row.track, id: row.track };
+            } catch (e) { return false; }
+            
+            const pid = trackObj.id || trackObj.providerTrackId;
+            return !pid || !existingTrackIds.has(pid);
+        });
+
+        if (candidates.length === 0) {
+            if(onPage) window.showToast('No new votes (or all candidates already in playlist). Round skipped.');
+            // Even if skipped, we consider the round "Done".
+            localStorage.removeItem('mr_round_end_' + eventId);
+            // Restart if owner
+            if (shouldRestart) setTimeout(() => startVotingRound(eventId), 2000);
+            return;
+        }
+
+        // 5. Identify Winner
+        const winner = candidates[0]; 
+        let winnerTrack = {};
+        try {
+            winnerTrack = winner.track.startsWith('{') ? JSON.parse(winner.track) : { title: winner.track, id: winner.track };
+        } catch (e) {
+            winnerTrack = { title: winner.track, id: winner.track };
+        }
+        
+        const providerId = winnerTrack.id || winnerTrack.providerTrackId;
+
+        // 6. Add to Playlist
+        if (playlistId && providerId) {
+             console.log('Adding winner to playlist:', winnerTrack.title);
+             const addRes = await authService.fetchWithAuth(authService.apiUrl + `/playlists/${playlistId}/tracks`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({
+                    title: winnerTrack.title,
+                    artist: winnerTrack.artist || 'Unknown',
+                    provider: winnerTrack.provider || 'youtube',
+                    providerTrackId: providerId,
+                    thumbnailUrl: winnerTrack.thumbnailUrl || ''
+                })
+            });
+            
+            if (addRes.ok) {
+                 if(onPage) window.showToast(`Added "${winnerTrack.title}" to playlist.`);
+            } else {
+                 console.error('Failed to add to playlist:', addRes.status);
+            }
+        }
+        
+        // 7. Clear Votes
+        const delRes = await authService.fetchWithAuth(authService.apiUrl + `/events/${eventId}/votes?track=` + encodeURIComponent(winner.track), {
+            method: 'DELETE'
+        });
+        
+        if (!delRes.ok) {
+            console.warn('Failed to clear votes');
+        }
+
+        // Refresh Tally
+        if (onPage) loadTally(eventId);
+
+        // FINAL SUCCESS: Remove the timer key
+        localStorage.removeItem('mr_round_end_' + eventId);
+        
+        if(onPage) window.showToast('Round finalized.');
+
+        // Restart
+        if (shouldRestart) {
+            setTimeout(() => startVotingRound(eventId), 2000);
+        }
+
+    } catch (e) {
+        console.error('Error in endVotingRound:', e);
+    }
+}
+// Init function to be called after authService is ready
+window.initEvents = function() {
+    console.log('initEvents called');
+    refreshEvents();
+    if (window.initGlobalEventSupervisor) {
+        window.initGlobalEventSupervisor();
+    }
+}
+
+// Self-invoke if we are on the events page
+if (document.getElementById('events-list')) {
+    window.initEvents();
+}

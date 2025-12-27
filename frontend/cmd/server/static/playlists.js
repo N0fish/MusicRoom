@@ -321,12 +321,18 @@ async function refreshPlaylists() {
   const container = document.getElementById('playlists-list')
   if (!container) return // Do nothing if container is not present (e.g. detail page)
 
-  const res = await authService.fetchWithAuth(authService.apiUrl + '/playlists')
+  const [res, meRes] = await Promise.all([
+      authService.fetchWithAuth(authService.apiUrl + '/playlists'),
+      authService.fetchWithAuth(authService.apiUrl + '/users/me')
+  ]);
+
   if (!res.ok) {
     console.error('Failed to fetch playlists')
     return
   }
   const playlists = await res.json()
+  const me = meRes.ok ? await meRes.json() : null;
+  const currentUserId = me ? me.userId : null;
   
   container.innerHTML = ''
   
@@ -376,28 +382,34 @@ async function refreshPlaylists() {
     const actions = document.createElement('div')
     actions.className = 'flex items-center gap-4 relative z-10'
     
-    // Rename Button
-    const btnRename = document.createElement('button')
-    btnRename.className = 'btn-small'
-    btnRename.textContent = 'Rename'
-    btnRename.onclick = () => {
-        renamePlaylist(pl.id, pl.name)
-    }
-    actions.appendChild(btnRename)
+    // Check if event playlist
+    const isEventPlaylist = pl.name.startsWith('Event: ');
+    const isOwner = currentUserId && pl.ownerId === currentUserId;
 
-    // Delete Button (Trash Icon)
-    const btnDelete = document.createElement('button')
-    btnDelete.className = 'inline-flex items-center justify-center text-primary hover:text-primary-hover transition-colors'
-    btnDelete.title = 'Delete'
-    btnDelete.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-        </svg>
-    `
-    btnDelete.onclick = () => {
-        deletePlaylist(pl.id)
+    if (!isEventPlaylist && isOwner) {
+        // Rename Button
+        const btnRename = document.createElement('button')
+        btnRename.className = 'btn-small'
+        btnRename.textContent = 'Rename'
+        btnRename.onclick = () => {
+            renamePlaylist(pl.id, pl.name)
+        }
+        actions.appendChild(btnRename)
+
+        // Delete Button (Trash Icon)
+        const btnDelete = document.createElement('button')
+        btnDelete.className = 'inline-flex items-center justify-center text-primary hover:text-primary-hover transition-colors'
+        btnDelete.title = 'Delete'
+        btnDelete.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+        `
+        btnDelete.onclick = () => {
+            deletePlaylist(pl.id)
+        }
+        actions.appendChild(btnDelete)
     }
-    actions.appendChild(btnDelete)
 
     item.appendChild(actions)
     container.appendChild(item)
@@ -502,9 +514,7 @@ window.openPlaylistSettings = async function() {
     const data = await res.json();
     const playlist = data.playlist; // response structure is { playlist: ..., tracks: ... }
 
-    const isPrivate = !playlist.isPublic;
-    // editMode: "everyone" or "invited"
-    const invitesDisplay = (isPrivate || playlist.editMode === 'invited') ? 'block' : 'none';
+    const isEventPlaylist = playlist.name.startsWith('Event: ');
 
     // Create Modal Content
     const content = `
@@ -520,9 +530,9 @@ window.openPlaylistSettings = async function() {
 
         <div>
            <label class="block text-sm font-medium text-text-muted mb-1">Who can edit?</label>
-           <select id="setting-editmode" onchange="togglePlaylistInvites()" class="w-full bg-input-bg border border-input-border rounded px-2 py-1 focus:outline-none text-text">
+           <select id="setting-editmode" ${isEventPlaylist ? 'disabled' : ''} onchange="togglePlaylistInvites()" class="w-full bg-input-bg border border-input-border rounded px-2 py-1 focus:outline-none text-text ${isEventPlaylist ? 'opacity-50 cursor-not-allowed' : ''}">
              <option value="everyone" ${playlist.editMode === 'everyone' ? 'selected' : ''}>Everyone</option>
-             <option value="invited" ${playlist.editMode === 'invited' ? 'selected' : ''}>Only Invited Users</option>
+             <option value="invited" ${playlist.editMode === 'invited' ? 'selected' : ''}>Only Invited Users ${isEventPlaylist ? '(Required for Events)' : ''}</option>
            </select>
         </div>
         
@@ -588,11 +598,26 @@ async function loadPlaylistInvites(playlistId) {
         return;
     }
 
-    invites.forEach(inv => {
+    // Resolve usernames in parallel
+    const resolvedInvites = await Promise.all(invites.map(async (inv) => {
+        try {
+            const userRes = await authService.fetchWithAuth(authService.apiUrl + `/users/${inv.userId}`);
+            if (userRes.ok) {
+                const user = await userRes.json();
+                return { ...inv, username: user.username, displayName: user.displayName };
+            }
+        } catch (e) {
+            console.error('Failed to resolve user', inv.userId, e);
+        }
+        return { ...inv, username: inv.userId }; // Fallback to ID
+    }));
+
+    resolvedInvites.forEach(inv => {
         const li = document.createElement('li');
         li.className = 'flex justify-between items-center bg-white/5 px-2 py-1 rounded';
+        const displayName = inv.displayName ? `${inv.displayName} (@${inv.username})` : inv.username;
         li.innerHTML = `
-           <span class="truncate pr-2">${inv.userId}</span>
+           <span class="truncate pr-2" title="${inv.userId}">${displayName}</span>
            <button onclick="removePlaylistInvite('${inv.userId}')" class="text-error hover:text-red-400">&times;</button>
         `;
         ul.appendChild(li);
@@ -601,8 +626,37 @@ async function loadPlaylistInvites(playlistId) {
 
 window.sendPlaylistInvite = async function() {
     const userIdInput = document.getElementById('invite-user-id');
-    const userId = userIdInput.value.trim();
+    let userId = userIdInput.value.trim();
     if (!userId) return;
+
+    // Resolve username to UUID if needed
+    const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+    if (!uuidRegex.test(userId)) {
+        try {
+            const searchRes = await authService.fetchWithAuth(authService.apiUrl + '/users/search?query=' + encodeURIComponent(userId));
+            if (searchRes.ok) {
+                const searchData = await searchRes.json();
+                if (searchData.items && searchData.items.length > 0) {
+                    const exactMatch = searchData.items.find(u => u.username.toLowerCase() === userId.toLowerCase() || u.displayName.toLowerCase() === userId.toLowerCase());
+                    if (exactMatch) {
+                        userId = exactMatch.userId;
+                    } else {
+                        userId = searchData.items[0].userId;
+                    }
+                } else {
+                    window.showAlert({ title: 'Error', content: 'User not found.' });
+                    return;
+                }
+            } else {
+                window.showAlert({ title: 'Error', content: 'Failed to search for user.' });
+                return;
+            }
+        } catch (e) {
+            console.error('User resolution failed', e);
+            window.showAlert({ title: 'Error', content: 'Failed to resolve user.' });
+            return;
+        }
+    }
 
     const res = await authService.fetchWithAuth(authService.apiUrl + `/playlists/${currentPlaylistIdForSettings}/invites`, {
         method: 'POST',
