@@ -20,7 +20,9 @@ function initAuthService(apiUrl) {
     logout: () => {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
-      window.location.href = '/auth';
+      if (window.location.pathname !== '/auth') {
+        window.location.href = '/auth';
+      }
     },
 
     isLoggedIn: () => {
@@ -141,11 +143,19 @@ function initAuthService(apiUrl) {
     },
 
     fetchWithAuth: async (url, options = {}) => {
+      const token = authService.getAccessToken();
+      if (!token) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
       let res = await fetch(url, {
         ...options,
         headers: {
           ...options.headers,
-          'Authorization': `Bearer ${authService.getAccessToken()}`,
+          'Authorization': `Bearer ${token}`,
         },
       });
 

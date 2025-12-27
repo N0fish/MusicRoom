@@ -881,161 +881,6 @@ function updateTimerUI(isActive, eventId) {
     }
 }
 
-async function endVotingRound(eventId) {
-    // Cleanup
-    if (window.mrState['roundInterval_' + eventId]) {
-        clearInterval(window.mrState['roundInterval_' + eventId]);
-        delete window.mrState['roundInterval_' + eventId];
-    }
-    localStorage.removeItem('mr_round_end_' + eventId);
-    
-    updateTimerUI(false, eventId);
-
-    const onPage = (document.getElementById('ev-id')?.textContent === eventId);
-    if (onPage) window.showToast('Round ended! Processing winner...');
-
-    let shouldRestart = true;
-    let isOwner = false;
-
-    try {
-        // 1. Get Event Details
-        let eventName = document.getElementById('ev-name')?.textContent;
-        let eventObj = null;
-
-        // Always fetch event to ensure we have latest settings for playlist creation
-        const evRes = await authService.fetchWithAuth(authService.apiUrl + '/events/' + eventId);
-        if (evRes.status === 404) {
-            console.log('Event not found, stopping timer loop and cleaning up localStorage.');
-            localStorage.removeItem('mr_round_end_' + eventId);
-            shouldRestart = false;
-            return;
-        }
-        if (evRes.ok) {
-            eventObj = await evRes.json();
-            eventName = eventObj.name;
-        } else if (!eventName) {
-            eventName = 'Event';
-        }
-
-        // Check ownership
-        try {
-            const meRes = await authService.fetchWithAuth(authService.apiUrl + '/users/me');
-            if (meRes.ok && eventObj) {
-                const me = await meRes.json();
-                if (me.userId === eventObj.ownerId) {
-                    isOwner = true;
-                }
-            }
-        } catch (e) {
-            console.error('Failed to verify ownership', e);
-        }
-        
-        console.log('endVotingRound: isOwner =', isOwner);
-
-        // 2. Get Playlist & Tracks (to filter out winners)
-        const playlistId = await getOrCreateEventPlaylist(eventId, eventName, eventObj);
-        let existingTrackIds = new Set();
-        
-        if (playlistId) {
-            const plRes = await authService.fetchWithAuth(authService.apiUrl + '/playlists/' + playlistId);
-            if (plRes.ok) {
-                 const plData = await plRes.json();
-                 if (plData.tracks) {
-                     plData.tracks.forEach(t => {
-                         if (t.providerTrackId) existingTrackIds.add(t.providerTrackId);
-                     });
-                 }
-            }
-        }
-
-        // 3. Get Tally
-        const tallyRes = await authService.fetchWithAuth(authService.apiUrl + `/events/${eventId}/tally`);
-        if (!tallyRes.ok) {
-            if(onPage) window.showAlert({ title: 'Error', content: 'Failed to fetch tally.' });
-            return; 
-        }
-        let tally = await tallyRes.json();
-        if (!tally) tally = [];
-        
-        // 4. Filter Tally
-        const candidates = tally.filter(row => {
-            let trackObj = {};
-            try {
-                trackObj = row.track.startsWith('{') ? JSON.parse(row.track) : { title: row.track, id: row.track };
-            } catch (e) { return false; }
-            
-            const pid = trackObj.id || trackObj.providerTrackId;
-            // If no ID, we can't filter by existence in playlist easily, but we'll allow it for now
-            return !pid || !existingTrackIds.has(pid);
-        });
-
-        if (candidates.length === 0) {
-            if(onPage) window.showToast('No new votes (or all candidates already in playlist). Round skipped.');
-            return;
-        }
-
-        // 5. Identify Winner
-        const winner = candidates[0]; 
-        let winnerTrack = {};
-        try {
-            winnerTrack = winner.track.startsWith('{') ? JSON.parse(winner.track) : { title: winner.track, id: winner.track };
-        } catch (e) {
-            winnerTrack = { title: winner.track, id: winner.track };
-        }
-        
-        const providerId = winnerTrack.id || winnerTrack.providerTrackId;
-
-        // 6. Add to Playlist (Only Owner)
-        if (isOwner && playlistId && providerId) {
-             console.log('Adding winner to playlist:', winnerTrack.title);
-             const addRes = await authService.fetchWithAuth(authService.apiUrl + `/playlists/${playlistId}/tracks`, {
-                method: 'POST',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({
-                    title: winnerTrack.title,
-                    artist: winnerTrack.artist || 'Unknown',
-                    provider: winnerTrack.provider || 'youtube',
-                    providerTrackId: providerId,
-                    thumbnailUrl: winnerTrack.thumbnailUrl || ''
-                })
-            });
-            
-            if (addRes.ok) {
-                 if(onPage) window.showToast(`Added "${winnerTrack.title}" to playlist.`);
-                 else console.log(`Added "${winnerTrack.title}" to playlist.`);
-            } else {
-                 const errTxt = await addRes.text();
-                 console.error('Failed to add to playlist:', addRes.status, errTxt);
-            }
-        }
-        
-        // 7. Clear Votes for Winner Only (Carry-over logic) - Only Owner
-        if (isOwner) {
-            // We pass the track string as it is stored in the DB
-            const delRes = await authService.fetchWithAuth(authService.apiUrl + `/events/${eventId}/votes?track=` + encodeURIComponent(winner.track), {
-                method: 'DELETE'
-            });
-            
-            if (!delRes.ok) {
-                console.warn('Failed to clear votes for next round');
-            }
-        }
-
-        // Everyone refreshes tally to see the winner removed
-        if (onPage) loadTally(eventId);
-
-        if(onPage) window.showToast('Round ended. Winner processed.');
-
-    } catch (e) {
-        console.error('Error in endVotingRound:', e);
-    } finally {
-        // Auto-restart next round - ONLY OWNER should start the next round to avoid chaos
-        if (shouldRestart && isOwner) {
-            setTimeout(() => startVotingRound(eventId), 2000);
-        }
-    }
-}
-
 // Check for active round on load
 function checkActiveRound() {
     const eventId = document.getElementById('ev-id')?.textContent;
@@ -1209,6 +1054,8 @@ function decodeHTMLEntities(text) {
 
 // Global Event Supervisor
 window.initGlobalEventSupervisor = function() {
+    if (!authService.isLoggedIn()) return;
+    
     // Prevent multiple intervals
     if (window.mrState.supervisorInterval) return;
     
@@ -1216,6 +1063,12 @@ window.initGlobalEventSupervisor = function() {
     window.mrState.processedExpiredRounds = window.mrState.processedExpiredRounds || new Set();
 
     window.mrState.supervisorInterval = setInterval(() => {
+        if (!authService.isLoggedIn()) {
+            clearInterval(window.mrState.supervisorInterval);
+            window.mrState.supervisorInterval = null;
+            return;
+        }
+
         const now = Date.now();
         // Scan LocalStorage for active rounds
         for (let i = 0; i < localStorage.length; i++) {
@@ -1241,6 +1094,8 @@ window.initGlobalEventSupervisor = function() {
 // ... (previous code) ...
 
 async function endVotingRound(eventId) {
+    if (!authService.isLoggedIn()) return;
+
     // Mark as processed in this session so Supervisor doesn't loop
     window.mrState.processedExpiredRounds = window.mrState.processedExpiredRounds || new Set();
     window.mrState.processedExpiredRounds.add(eventId);
@@ -1413,6 +1268,7 @@ async function endVotingRound(eventId) {
 }
 // Init function to be called after authService is ready
 window.initEvents = function() {
+    if (!authService.isLoggedIn()) return;
     console.log('initEvents called');
     refreshEvents();
     if (window.initGlobalEventSupervisor) {

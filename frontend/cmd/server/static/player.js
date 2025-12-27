@@ -48,7 +48,7 @@ function onYouTubeIframeAPIReady() {
     window.mrState.player = new YT.Player('yt-player', {
         height: '0',
         width: '0',
-        host: 'https://www.youtube-nocookie.com',
+        host: 'https://www.youtube.com',
         playerVars: {
             'playsinline': 1,
             'controls': 0,
