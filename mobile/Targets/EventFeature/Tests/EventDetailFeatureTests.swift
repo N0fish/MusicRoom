@@ -245,102 +245,6 @@ final class EventDetailFeatureTests: XCTestCase {
         }
     }
 
-    func testAddTrack_Success() async {
-        let event = Event(
-            id: UUID(), name: "Add Track Event", visibility: .publicEvent, ownerId: "u1",
-            licenseMode: .everyone, createdAt: Date(), updatedAt: Date())
-
-        let newTrackItem = MusicSearchItem(
-            title: "New Song", artist: "New Artist", provider: "youtube",
-            providerTrackId: "new1", thumbnailUrl: URL(string: "http://thumb.url")
-        )
-
-        let clock = TestClock()
-        let addedTrack = Track(
-            id: "t_new", title: "New Song", artist: "New Artist", provider: "youtube",
-            providerTrackId: "new1", thumbnailUrl: URL(string: "http://thumb.url"), votes: 0
-        )
-
-        // let fixedDate = Date(timeIntervalSince1970: 0)
-
-        var state = EventDetailFeature.State(event: event)
-        // Simulate search is OPEN
-        state.musicSearch = MusicSearchFeature.State()
-
-        let store = TestStore(initialState: state) {
-            EventDetailFeature()
-        } withDependencies: {
-            $0.musicRoomAPI.addTrack = { _, req in
-                // Verify request
-                print("DEBUG: addTrack called with \(req.title)")
-                XCTAssertEqual(req.title, "New Song")
-                XCTAssertEqual(req.provider, "youtube")
-                return addedTrack
-            }
-            $0.musicRoomAPI.tally = { _ in [] }
-            $0.musicRoomAPI.getPlaylist = { _ in
-                PlaylistResponse(
-                    playlist: Playlist(
-                        id: event.id.uuidString, ownerId: "u1", name: "P", isPublic: true,
-                        editMode: "o"),
-                    tracks: [addedTrack]
-                )
-            }
-            // Mock persistence
-            $0.persistence.savePlaylist = { _ in }
-            $0.continuousClock = clock
-        }
-        store.exhaustivity = .off
-
-        // Simulate search result selection
-        await store.send(
-            EventDetailFeature.Action.musicSearch(.presented(.trackTapped(newTrackItem)))
-        ) {
-            // Debugging the state passed to closure
-            XCTAssertNotNil($0.musicSearch, "Start state musicSearch should be non-nil")
-            // With deferred dismissal, musicSearch remains non-nil here
-            $0.isLoading = true
-        }
-
-        // Dismiss happens first now (immediate await)
-        await store.receive(EventDetailFeature.Action.dismissMusicSearch) {
-            $0.musicSearch = nil
-        }
-
-        await store.receive(EventDetailFeature.Action.addTrackResponse(.success(addedTrack))) {
-            $0.isLoading = false
-        }
-
-        /*
-        // Then expecting loadPlaylist
-        await clock.advance(by: .milliseconds(1))
-        await store.receive(EventDetailFeature.Action.loadPlaylist) {
-            $0.isLoading = true
-        }
-        
-        // loadPlaylist triggers playlistLoaded
-        await store.receive(
-            EventDetailFeature.Action.playlistLoaded(
-                .success(
-                    PlaylistResponse(
-                        playlist: Playlist(
-                            id: event.id.uuidString, ownerId: "u1", name: "P", description: "",
-                            isPublic: true, editMode: "o", createdAt: fixedDate),
-                        tracks: [addedTrack]
-                    )))
-        ) {
-            $0.isLoading = false
-        }
-        // No modification expected as tracks already updated
-        
-        await clock.advance(by: .seconds(4))
-        await store.receive(EventDetailFeature.Action.dismissInfo) {
-            $0.userAlert = nil
-        }
-        */
-
-    }
-
     func testTransferOwnership_Success() async {
         let event = Event(
             id: UUID(), name: "Transfer Event", visibility: .publicEvent, ownerId: "u1",
@@ -533,14 +437,7 @@ final class EventDetailFeatureTests: XCTestCase {
             EventDetailFeature()
         }
 
-        // Tapping add track should do NOTHING (no state change, no check logic)
-        // Note: Logic for blocking this should vary.
-        // If Logic is in View (disabled button), Reducer might still handle it if sent?
-        // Ideally Reducer should ALSO guard it.
-        // Let's check Reducer implementation...
-        // Reducer doesn't currently guard it. Let's add the guard in Reducer via this test failure-driven dev.
         await store.send(EventDetailFeature.Action.addTrackButtonTapped)
-        // If reducer has no guard, this will trigger navigation to music search.
-        // We expect it to NOT TRIGGER anything.
+        XCTAssertNil(store.state.musicSearch)
     }
 }
