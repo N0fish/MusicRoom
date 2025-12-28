@@ -3,6 +3,7 @@ import AuthenticationServices
 import ComposableArchitecture
 import Foundation
 import MusicRoomAPI
+import UIKit
 
 @Reducer
 public struct ProfileFeature: Sendable {
@@ -77,18 +78,16 @@ public struct ProfileFeature: Sendable {
             switch action {
             case .onAppear:
                 let fetchStatsEffect = Effect<Action>.send(.fetchStats)
-
-                if !state.hasLoaded {
-                    state.isLoading = true
-                    return .merge(
-                        fetchStatsEffect,
-                        .run { [userClient] send in
-                            await send(.profileResponse(TaskResult { try await userClient.me() }))
-                        }
-                    )
+                let profileEffect = Effect<Action>.run { [userClient] send in
+                    await send(.profileResponse(TaskResult { try await userClient.me() }))
                 }
 
-                return fetchStatsEffect
+                if state.userProfile == nil {
+                    state.isLoading = true
+                    state.errorMessage = nil
+                }
+
+                return .merge(fetchStatsEffect, profileEffect)
 
             case .profileResponse(.success(let profile)):
                 state.isLoading = false
@@ -103,7 +102,9 @@ public struct ProfileFeature: Sendable {
 
             case .profileResponse(.failure(let error)):
                 state.isLoading = false
-                state.errorMessage = error.localizedDescription
+                if state.userProfile == nil {
+                    state.errorMessage = error.localizedDescription
+                }
                 return .none
 
             case .toggleEditMode:
@@ -396,19 +397,30 @@ public struct ProfileFeature: Sendable {
             case .imagePlaygroundResponse(let url):
                 state.isImagePlaygroundPresented = false
                 guard let url = url else { return .none }
+                guard !state.isAvatarLoading else { return .none }
                 state.isAvatarLoading = true
 
                 return .run { send in
                     do {
-                        let data = try Data(contentsOf: url)
-                        guard let image = UIImage(data: data),
-                            let jpegData = image.jpegData(compressionQuality: 0.8)
-                        else {
-                            await send(
-                                .uploadGeneratedAvatarResponse(
-                                    .failure(URLError(.cannotDecodeContentData))))
-                            return
+                        let rawData: Data
+                        if url.isFileURL {
+                            rawData = try await Task.detached(priority: .userInitiated) {
+                                try Data(contentsOf: url)
+                            }.value
+                        } else {
+                            let (data, _) = try await URLSession.shared.data(from: url)
+                            rawData = data
                         }
+
+                        let jpegData = try await Task.detached(priority: .userInitiated) {
+                            guard let image = UIImage(data: rawData),
+                                let jpegData = image.jpegData(compressionQuality: 0.8)
+                            else {
+                                throw URLError(.cannotDecodeContentData)
+                            }
+                            return jpegData
+                        }.value
+
                         await send(.uploadGeneratedAvatar(jpegData))
                     } catch {
                         await send(.uploadGeneratedAvatarResponse(.failure(error)))

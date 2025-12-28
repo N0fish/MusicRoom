@@ -1,7 +1,7 @@
+import AppSettingsClient
 import Dependencies
 import Foundation
 import MusicRoomDomain
-import Security
 
 public struct PlaylistClient: Sendable {
     public var list: @Sendable () async throws -> [Playlist]
@@ -38,21 +38,23 @@ extension DependencyValues {
 
 extension PlaylistClient {
     static func live(urlSession: URLSession = .shared) -> Self {
-        let keychain = KeychainHelper()
+        @Dependency(\.appSettings) var appSettings
+        @Dependency(\.authentication) var authentication
+        @Dependency(\.sessionEvents) var sessionEvents
+        let executor = AuthenticatedRequestExecutor(
+            urlSession: urlSession,
+            authentication: authentication,
+            sessionEvents: sessionEvents
+        )
+
+        @Sendable func baseURLString() -> String {
+            appSettings.load().backendURLString
+        }
 
         @Sendable func performRequest<T: Decodable & Sendable>(_ request: URLRequest) async throws
             -> T
         {
-            var request = request
-            if let token = keychain.read("accessToken") {
-                request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            }
-
-            let (data, response) = try await urlSession.data(for: request)
-
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw URLError(.badServerResponse)
-            }
+            let (data, httpResponse) = try await executor.data(for: request)
 
             guard (200...299).contains(httpResponse.statusCode) else {
                 throw URLError(.init(rawValue: httpResponse.statusCode))
@@ -64,16 +66,7 @@ extension PlaylistClient {
         }
 
         @Sendable func performRequestNoContent(_ request: URLRequest) async throws {
-            var request = request
-            if let token = keychain.read("accessToken") {
-                request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            }
-
-            let (_, response) = try await urlSession.data(for: request)
-
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw URLError(.badServerResponse)
-            }
+            let (_, httpResponse) = try await executor.data(for: request)
 
             guard (200...299).contains(httpResponse.statusCode) else {
                 throw URLError(.init(rawValue: httpResponse.statusCode))
@@ -82,13 +75,13 @@ extension PlaylistClient {
 
         return Self(
             list: {
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 guard let url = URL(string: "\(baseUrl)/playlists") else { throw URLError(.badURL) }
                 let response: [Playlist]? = try await performRequest(URLRequest(url: url))
                 return response ?? []
             },
             create: { payload in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 guard let url = URL(string: "\(baseUrl)/playlists") else { throw URLError(.badURL) }
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
@@ -97,14 +90,14 @@ extension PlaylistClient {
                 return try await performRequest(request)
             },
             get: { id in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 guard let url = URL(string: "\(baseUrl)/playlists/\(id)") else {
                     throw URLError(.badURL)
                 }
                 return try await performRequest(URLRequest(url: url))
             },
             update: { id, payload in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 guard let url = URL(string: "\(baseUrl)/playlists/\(id)") else {
                     throw URLError(.badURL)
                 }
@@ -115,7 +108,7 @@ extension PlaylistClient {
                 return try await performRequest(request)
             },
             addTrack: { id, payload in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 guard let url = URL(string: "\(baseUrl)/playlists/\(id)/tracks") else {
                     throw URLError(.badURL)
                 }
@@ -126,7 +119,7 @@ extension PlaylistClient {
                 return try await performRequest(request)
             },
             deleteTrack: { playlistId, trackId in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 guard let url = URL(string: "\(baseUrl)/playlists/\(playlistId)/tracks/\(trackId)")
                 else { throw URLError(.badURL) }
                 var request = URLRequest(url: url)
@@ -134,7 +127,7 @@ extension PlaylistClient {
                 try await performRequestNoContent(request)
             },
             moveTrack: { playlistId, trackId, newPosition in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 guard let url = URL(string: "\(baseUrl)/playlists/\(playlistId)/tracks/\(trackId)")
                 else { throw URLError(.badURL) }
                 var request = URLRequest(url: url)
@@ -145,7 +138,7 @@ extension PlaylistClient {
                 try await performRequestNoContent(request)
             },
             addInvite: { playlistId, userId in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 guard let url = URL(string: "\(baseUrl)/playlists/\(playlistId)/invites") else {
                     throw URLError(.badURL)
                 }
@@ -157,30 +150,6 @@ extension PlaylistClient {
                 try await performRequestNoContent(request)
             }
         )
-    }
-}
-
-// MARK: - Keychain Helper (Reused from AuthenticationClient or made public)
-// For now, I'll copy the minimal one or assume it's available.
-// In a real project, this should be in a shared place within AppSupportClients.
-
-private struct KeychainHelper {
-    func read(_ key: String) -> String? {
-        let query =
-            [
-                kSecClass: kSecClassGenericPassword,
-                kSecAttrAccount: key,
-                kSecReturnData: true,
-                kSecMatchLimit: kSecMatchLimitOne,
-            ] as [String: Any]
-
-        var dataTypeRef: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &dataTypeRef)
-
-        if status == errSecSuccess, let data = dataTypeRef as? Data {
-            return String(data: data, encoding: .utf8)
-        }
-        return nil
     }
 }
 

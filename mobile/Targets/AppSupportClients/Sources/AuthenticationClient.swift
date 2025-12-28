@@ -1,3 +1,4 @@
+import AppSettingsClient
 import Dependencies
 import Foundation
 import Security
@@ -111,9 +112,14 @@ extension AuthenticationClient {
 // MARK: - Live Implementation
 
 extension AuthenticationClient {
-    static func live(urlSession: URLSession = .shared) -> Self {
-        let keychain = KeychainHelper()
+    static func live(
+        urlSession: URLSession = .shared,
+        keychain: KeychainStoring = KeychainHelper()
+    ) -> Self {
+        let keychain = keychain
         let refreshActor = RefreshActor()
+        let authGeneration = AuthGeneration()
+        @Dependency(\.appSettings) var appSettings
 
         @Sendable func logError(
             _ request: URLRequest, _ response: HTTPURLResponse?, _ data: Data?, _ error: Error?
@@ -133,9 +139,13 @@ extension AuthenticationClient {
             print("--------------------------------------------------\n")
         }
 
+        @Sendable func baseURLString() -> String {
+            appSettings.load().backendURLString
+        }
+
         return Self(
             login: { email, password in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/auth/login")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
@@ -187,6 +197,8 @@ extension AuthenticationClient {
 
                     do {
                         let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
+                        await authGeneration.bump()
+                        await refreshActor.cancel()
                         keychain.save(authResponse.accessToken, for: "accessToken")
                         keychain.save(authResponse.refreshToken, for: "refreshToken")
                     } catch {
@@ -204,7 +216,7 @@ extension AuthenticationClient {
                 }
             },
             register: { email, password in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/auth/register")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
@@ -254,6 +266,8 @@ extension AuthenticationClient {
 
                     do {
                         let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
+                        await authGeneration.bump()
+                        await refreshActor.cancel()
                         keychain.save(authResponse.accessToken, for: "accessToken")
                         keychain.save(authResponse.refreshToken, for: "refreshToken")
                     } catch {
@@ -268,6 +282,8 @@ extension AuthenticationClient {
                 }
             },
             logout: {
+                await authGeneration.bump()
+                await refreshActor.cancel()
                 keychain.delete("accessToken")
                 keychain.delete("refreshToken")
             },
@@ -278,71 +294,82 @@ extension AuthenticationClient {
                 return keychain.read("accessToken")
             },
             saveTokens: { accessToken, refreshToken in
+                await authGeneration.bump()
+                await refreshActor.cancel()
                 keychain.save(accessToken, for: "accessToken")
                 keychain.save(refreshToken, for: "refreshToken")
             },
             refreshToken: {
-                try await refreshActor.refresh {
-                    guard let currentRefreshToken = keychain.read("refreshToken") else {
-                        throw AuthenticationError.invalidCredentials
-                    }
-
-                    let baseUrl = BaseURL.resolve()
-                    let url = URL(string: "\(baseUrl)/auth/refresh")!
-                    var request = URLRequest(url: url)
-                    request.httpMethod = "POST"
-                    request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-
-                    let body = ["refreshToken": currentRefreshToken]
-                    request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-                    do {
-                        let (data, response) = try await urlSession.data(for: request)
-
-                        guard let httpResponse = response as? HTTPURLResponse else {
-                            throw AuthenticationError.networkError("Invalid response")
-                        }
-
-                        if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
-                            // Refresh token invalid/expired
-                            keychain.delete("accessToken")
-                            keychain.delete("refreshToken")
-                            logError(
-                                request, httpResponse, data, AuthenticationError.invalidCredentials)
+                let generationAtStart = await authGeneration.current()
+                do {
+                    try await refreshActor.refresh {
+                        guard let currentRefreshToken = keychain.read("refreshToken") else {
                             throw AuthenticationError.invalidCredentials
                         }
 
-                        guard (200...299).contains(httpResponse.statusCode) else {
-                            let error = AuthenticationError.networkError(
-                                "Server error: \(httpResponse.statusCode)")
-                            logError(request, httpResponse, data, error)
-                            throw error
-                        }
+                        let baseUrl = baseURLString()
+                        let url = URL(string: "\(baseUrl)/auth/refresh")!
+                        var request = URLRequest(url: url)
+                        request.httpMethod = "POST"
+                        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
 
-                        struct RefreshResponse: Decodable {
-                            let accessToken: String
-                            let refreshToken: String
-                        }
+                        let body = ["refreshToken": currentRefreshToken]
+                        request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
                         do {
-                            let refreshResponse = try JSONDecoder().decode(
-                                RefreshResponse.self, from: data)
-                            keychain.save(refreshResponse.accessToken, for: "accessToken")
-                            keychain.save(refreshResponse.refreshToken, for: "refreshToken")
+                            let (data, response) = try await urlSession.data(for: request)
+
+                            guard let httpResponse = response as? HTTPURLResponse else {
+                                throw AuthenticationError.networkError("Invalid response")
+                            }
+
+                            if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                                // Refresh token invalid/expired
+                                keychain.delete("accessToken")
+                                keychain.delete("refreshToken")
+                                logError(
+                                    request, httpResponse, data,
+                                    AuthenticationError.invalidCredentials)
+                                throw AuthenticationError.invalidCredentials
+                            }
+
+                            guard (200...299).contains(httpResponse.statusCode) else {
+                                let error = AuthenticationError.networkError(
+                                    "Server error: \(httpResponse.statusCode)")
+                                logError(request, httpResponse, data, error)
+                                throw error
+                            }
+
+                            struct RefreshResponse: Decodable {
+                                let accessToken: String
+                                let refreshToken: String
+                            }
+
+                            do {
+                                let refreshResponse = try JSONDecoder().decode(
+                                    RefreshResponse.self, from: data)
+                                if await authGeneration.current() != generationAtStart {
+                                    return
+                                }
+                                keychain.save(refreshResponse.accessToken, for: "accessToken")
+                                keychain.save(refreshResponse.refreshToken, for: "refreshToken")
+                            } catch {
+                                logError(request, httpResponse, data, error)
+                                throw error
+                            }
                         } catch {
-                            logError(request, httpResponse, data, error)
+                            if !(error is AuthenticationError) && !(error is CancellationError) {
+                                logError(request, nil, nil, error)
+                            }
                             throw error
                         }
-                    } catch {
-                        if !(error is AuthenticationError) {
-                            logError(request, nil, nil, error)
-                        }
-                        throw error
                     }
+                } catch is CancellationError {
+                    return
                 }
             },
             forgotPassword: { email in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/auth/forgot-password")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
@@ -375,7 +402,13 @@ extension AuthenticationClient {
 
 // MARK: - Keychain Helper
 
-private struct KeychainHelper {
+protocol KeychainStoring: Sendable {
+    func save(_ value: String, for key: String)
+    func read(_ key: String) -> String?
+    func delete(_ key: String)
+}
+
+private struct KeychainHelper: KeychainStoring {
     func save(_ value: String, for key: String) {
         let data = value.data(using: .utf8)!
         let query =
@@ -456,5 +489,24 @@ private actor RefreshActor {
         let result = await task.result
         refreshTask = nil
         try result.get()
+    }
+
+    func cancel() {
+        refreshTask?.cancel()
+        refreshTask = nil
+    }
+}
+
+private actor AuthGeneration {
+    private var value: Int = 0
+
+    @discardableResult
+    func bump() -> Int {
+        value &+= 1
+        return value
+    }
+
+    func current() -> Int {
+        value
     }
 }

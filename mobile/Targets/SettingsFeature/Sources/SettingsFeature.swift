@@ -9,7 +9,8 @@ public struct SettingsFeature {
         public var backendURLText: String
         public var savedBackendURL: URL?
         public var selectedPreset: BackendEnvironmentPreset
-        public var lastCustomURLText: String
+        public var lastLocalURLText: String
+        public var lastHostedURLText: String
         public var lastPingedURL: URL?
         public var diagnosticsSummary: DiagnosticsSummary?
         public var metadata: AppMetadata?
@@ -19,10 +20,11 @@ public struct SettingsFeature {
         @PresentationState public var alert: AlertState<Alert>?
 
         public init(
-            backendURLText: String = "",
+            backendURLText: String = BackendEnvironmentPreset.local.defaultURL.absoluteString,
             savedBackendURL: URL? = nil,
             selectedPreset: BackendEnvironmentPreset = .local,
-            lastCustomURLText: String = BackendEnvironmentPreset.local.defaultURL.absoluteString,
+            lastLocalURLText: String = BackendEnvironmentPreset.local.defaultURL.absoluteString,
+            lastHostedURLText: String = BackendEnvironmentPreset.hosted.defaultURL.absoluteString,
             lastPingedURL: URL? = nil,
             diagnosticsSummary: DiagnosticsSummary? = nil,
             metadata: AppMetadata? = nil,
@@ -33,7 +35,8 @@ public struct SettingsFeature {
             self.backendURLText = backendURLText
             self.savedBackendURL = savedBackendURL
             self.selectedPreset = selectedPreset
-            self.lastCustomURLText = lastCustomURLText
+            self.lastLocalURLText = lastLocalURLText
+            self.lastHostedURLText = lastHostedURLText
             self.lastPingedURL = lastPingedURL
             self.diagnosticsSummary = diagnosticsSummary
             self.metadata = metadata
@@ -46,7 +49,7 @@ public struct SettingsFeature {
             savedBackendURL?.absoluteString ?? "Not configured"
         }
 
-        public var canEditBackendURL: Bool { selectedPreset == .hosted }
+        public var canEditBackendURL: Bool { true }
 
         public var environmentNote: String { selectedPreset.note }
 
@@ -114,6 +117,7 @@ public struct SettingsFeature {
     @Dependency(\.appSettings) var appSettings
     @Dependency(\.diagnostics) var diagnostics
     @Dependency(\.appMetadata) var appMetadata
+    @Dependency(\.authentication) var authentication
     @Dependency(\.date) var date
 
     public init() {}
@@ -123,8 +127,11 @@ public struct SettingsFeature {
             switch action {
             case .backendURLTextChanged(let text):
                 state.backendURLText = text
-                if state.canEditBackendURL {
-                    state.lastCustomURLText = text
+                switch state.selectedPreset {
+                case .local:
+                    state.lastLocalURLText = text
+                case .hosted:
+                    state.lastHostedURLText = text
                 }
                 return .none
 
@@ -141,8 +148,8 @@ public struct SettingsFeature {
                 state.selectedPreset = settings.selectedPreset
                 state.savedBackendURL = settings.backendURL
                 state.backendURLText = settings.backendURL.absoluteString
-                state.lastCustomURLText =
-                    settings.lastCustomURL?.absoluteString ?? settings.backendURL.absoluteString
+                state.lastLocalURLText = settings.localURL.absoluteString
+                state.lastHostedURLText = settings.hostedURL.absoluteString
                 return .none
 
             case .metadataLoaded(let metadata):
@@ -152,10 +159,10 @@ public struct SettingsFeature {
             case .presetChanged(let preset):
                 state.selectedPreset = preset
                 switch preset {
+                case .local:
+                    state.backendURLText = state.lastLocalURLText
                 case .hosted:
-                    state.backendURLText = state.lastCustomURLText
-                default:
-                    state.backendURLText = preset.defaultURL.absoluteString
+                    state.backendURLText = state.lastHostedURLText
                 }
                 return .none
 
@@ -167,19 +174,14 @@ public struct SettingsFeature {
                 }
                 state.isPersisting = true
                 let preset = state.selectedPreset
-                let customURL = preset == .hosted ? targetURL : URL(string: state.lastCustomURLText)
                 return .run { [appSettings = self.appSettings] send in
-                    var settings = AppSettings(
-                        backendURL: targetURL,
-                        selectedPreset: preset,
-                        lastCustomURL: customURL
-                    )
-                    if preset == .hosted {
-                        settings.lastCustomURL = targetURL
-                    }
+                    var settings = appSettings.load()
+                    settings.selectedPreset = preset
+                    settings.setURL(targetURL, for: preset)
                     appSettings.save(settings)
                     await send(.settingsSaved(settings))
                 }
+                .cancellable(id: "settings.save", cancelInFlight: true)
 
             case .resetButtonTapped:
                 state.isPersisting = true
@@ -188,15 +190,17 @@ public struct SettingsFeature {
                 }
 
             case .settingsSaved(let settings):
+                let previousURL = state.savedBackendURL
                 state.isPersisting = false
                 state.selectedPreset = settings.selectedPreset
                 state.savedBackendURL = settings.backendURL
                 state.backendURLText = settings.backendURL.absoluteString
-                if settings.selectedPreset == .hosted {
-                    state.lastCustomURLText = settings.backendURL.absoluteString
-                } else {
-                    state.lastCustomURLText =
-                        settings.lastCustomURL?.absoluteString ?? state.lastCustomURLText
+                state.lastLocalURLText = settings.localURL.absoluteString
+                state.lastHostedURLText = settings.hostedURL.absoluteString
+                if previousURL != settings.backendURL {
+                    return .run { [authentication = self.authentication] _ in
+                        await authentication.logout()
+                    }
                 }
                 return .none
 
@@ -247,11 +251,7 @@ extension SettingsFeature.State {
     fileprivate func resolveURLForCurrentPreset() -> URL? {
         let trimmed = backendURLText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        if selectedPreset == .hosted {
-            return URL(string: trimmed)
-        } else {
-            return selectedPreset.defaultURL
-        }
+        return URL(string: trimmed)
     }
 }
 

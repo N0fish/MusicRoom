@@ -1,3 +1,4 @@
+import AppSettingsClient
 import AppSupportClients
 import AuthenticationFeature
 import ComposableArchitecture
@@ -19,6 +20,7 @@ public struct AppFeature: Sendable {
             case splash
         }
         public var destination: Destination = .splash
+        public var isSettingsPresented: Bool = false
         public var authentication = AuthenticationFeature.State()
         public var settings: SettingsFeature.State
         public var eventList = EventListFeature.State()
@@ -32,12 +34,15 @@ public struct AppFeature: Sendable {
         public var isOffline: Bool = false
 
         public init() {
+            let defaultSettings = AppSettings.default
             self.settings = SettingsFeature.State(
-                backendURLText: "http://localhost:8080",
-                savedBackendURL: URL(string: "http://localhost:8080"),
-                selectedPreset: .local,
+                backendURLText: defaultSettings.backendURL.absoluteString,
+                savedBackendURL: defaultSettings.backendURL,
+                selectedPreset: defaultSettings.selectedPreset,
+                lastLocalURLText: defaultSettings.localURL.absoluteString,
+                lastHostedURLText: defaultSettings.hostedURL.absoluteString,
                 diagnosticsSummary: DiagnosticsSummary(
-                    testedURL: URL(string: "http://localhost:8080")!,
+                    testedURL: defaultSettings.backendURL,
                     status: .reachable,
                     latencyMs: 0,
                     wsStatus: .reachable,
@@ -64,12 +69,15 @@ public struct AppFeature: Sendable {
         case friends(FriendsFeature.Action)
         case playlistList(PlaylistListFeature.Action)
         case task
+        case sessionEvent(SessionEvent)
         case destinationChanged(State.Destination)
         case startApp
         case logoutButtonTapped
         case handleDeepLink(URL)
         case networkStatusChanged(NetworkStatus)
         case checkInitialLoad
+        case shakeDetected
+        case setSettingsPresented(Bool)
     }
 
     @Dependency(\.musicRoomAPI) var musicRoomAPI
@@ -78,8 +86,24 @@ public struct AppFeature: Sendable {
     @Dependency(\.telemetry) var telemetry
     @Dependency(\.authentication) var authentication
     @Dependency(\.networkMonitor) var networkMonitor
+    @Dependency(\.sessionEvents) var sessionEvents
 
     public init() {}
+
+    private enum CancelID { case sessionEvents }
+
+    private func resetAppStatePreservingSettings(
+        _ state: inout AppFeature.State,
+        authMessage: String? = nil
+    ) {
+        let settings = state.settings
+        state = AppFeature.State()
+        state.settings = settings
+        state.destination = .login
+        if let authMessage {
+            state.authentication.errorMessage = authMessage
+        }
+    }
 
     public var body: some ReducerOf<Self> {
         Scope(state: \.settings, action: \.settings) {
@@ -108,11 +132,25 @@ public struct AppFeature: Sendable {
 
         Reduce { state, action in
             switch action {
+            case .settings(.settingsSaved):
+                guard state.destination == .app else { return .none }
+                state.eventList.hasLoaded = false
+                state.profile.hasLoaded = false
+                state.friends.hasLoaded = false
+                return .concatenate(
+                    .send(.eventList(.loadEvents)),
+                    .send(.eventList(.startRealtimeConnection)),
+                    .send(.playlistList(.loadPlaylists)),
+                    .send(.playlistList(.startRealtimeConnection)),
+                    .send(.friends(.loadData)),
+                    .send(.profile(.onAppear))
+                )
+
             case .settings:
                 return .none
 
             case .eventList(.delegate(.sessionExpired)):
-                return .send(.logoutButtonTapped)
+                return .send(.sessionEvent(.expired))
 
             case .eventList(.eventsLoaded), .eventList(.eventsLoadedFromCache):
                 return .send(.checkInitialLoad)
@@ -151,20 +189,47 @@ public struct AppFeature: Sendable {
                 return .none
 
             case .task:
-                return .run { [authentication = self.authentication] send in
-                    if authentication.isAuthenticated() {
-                        // Trigger initial loads
-                        await send(.eventList(.onAppear))
-                        await send(.profile(.onAppear))
-                        await send(.friends(.onAppear))
-                        await send(.startApp)
-                    } else {
-                        await send(.destinationChanged(.login))
+                return .merge(
+                    .run { [sessionEvents] send in
+                        for await event in sessionEvents.stream() {
+                            await send(.sessionEvent(event))
+                        }
                     }
+                    .cancellable(id: CancelID.sessionEvents, cancelInFlight: true),
+                    .run { [authentication = self.authentication] send in
+                        if authentication.isAuthenticated() {
+                            // Trigger initial loads
+                            await send(.eventList(.onAppear))
+                            await send(.profile(.onAppear))
+                            await send(.friends(.onAppear))
+                            await send(.startApp)
+                        } else {
+                            await send(.destinationChanged(.login))
+                        }
+                    }
+                )
+
+            case .sessionEvent(.expired):
+                guard state.destination != .login else { return .none }
+                let userId = state.eventList.currentUserId
+                resetAppStatePreservingSettings(
+                    &state,
+                    authMessage: "Session expired. Please log in again."
+                )
+                return .run { [authentication = self.authentication, telemetry] _ in
+                    await telemetry.log(
+                        "user.session.expired",
+                        userId.map { ["userId": $0] } ?? [:]
+                    )
+                    await authentication.logout()
                 }
 
             case .destinationChanged(let destination):
-                state.destination = destination
+                if destination == .login {
+                    resetAppStatePreservingSettings(&state)
+                } else {
+                    state.destination = destination
+                }
                 return .none
 
             case .startApp:
@@ -225,6 +290,15 @@ public struct AppFeature: Sendable {
                     await authentication.logout()
                     await send(.destinationChanged(.login))
                 }
+
+            case .shakeDetected:
+                guard !state.isSettingsPresented else { return .none }
+                state.isSettingsPresented = true
+                return .none
+
+            case .setSettingsPresented(let isPresented):
+                state.isSettingsPresented = isPresented
+                return .none
             }
         }
     }

@@ -14,11 +14,11 @@ public struct FriendsView: View {
     public var body: some View {
         @Bindable var store = store
         NavigationStack(path: $store.scope(state: \.path, action: \.path)) {
-            ZStack {
+            ZStack(alignment: .top) {
                 LiquidBackground()
                     .ignoresSafeArea()
 
-                VStack {
+                VStack(spacing: 0) {
                     Picker("Segment", selection: $store.selectedSegment.sending(\.segmentChanged)) {
                         ForEach(FriendsFeature.Segment.allCases) { segment in
                             Text(segment.rawValue).tag(segment)
@@ -27,32 +27,10 @@ public struct FriendsView: View {
                     .pickerStyle(.segmented)
                     .padding()
 
-                    switch store.selectedSegment {
-                    case .friends:
-                        if store.friends.isEmpty && !store.isLoading {
-                            ContentUnavailableView(
-                                "No Friends Yet", systemImage: "person.2.slash",
-                                description: Text("Search and add friends to see them here.")
-                            )
-                        } else {
-                            friendsList(store: store, friends: store.friends)
-                                .scrollContentBackground(.hidden)
-                        }
-                    case .requests:
-                        if store.incomingRequests.isEmpty && !store.isLoading {
-                            ContentUnavailableView(
-                                "No Requests", systemImage: "tray",
-                                description: Text("You have no incoming friend requests.")
-                            )
-                        } else {
-                            requestsList(store: store, requests: store.incomingRequests)
-                                .scrollContentBackground(.hidden)
-                        }
-                    case .search:
-                        searchView(store: store)
-                    }
+                    segmentContent(store: store)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
-                .padding(.top)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
             .navigationTitle("Friends")
             .navigationBarTitleDisplayMode(.inline)
@@ -63,6 +41,48 @@ public struct FriendsView: View {
             }
         } destination: { store in
             FriendProfileView(store: store)
+        }
+    }
+
+    @ViewBuilder
+    private func segmentContent(store: StoreOf<FriendsFeature>) -> some View {
+        switch store.selectedSegment {
+        case .friends:
+            if store.friends.isEmpty && !store.isLoading {
+                emptyState(
+                    title: "No Friends Yet",
+                    systemImage: "person.2.slash",
+                    description: "Search and add friends to see them here."
+                )
+            } else {
+                friendsList(store: store, friends: store.friends)
+                    .scrollContentBackground(.hidden)
+            }
+        case .requests:
+            if store.incomingRequests.isEmpty && !store.isLoading {
+                emptyState(
+                    title: "No Requests",
+                    systemImage: "tray",
+                    description: "You have no incoming friend requests."
+                )
+            } else {
+                requestsList(store: store, requests: store.incomingRequests)
+                    .scrollContentBackground(.hidden)
+            }
+        case .search:
+            searchView(store: store)
+        }
+    }
+
+    private func emptyState(title: String, systemImage: String, description: String) -> some View {
+        VStack(spacing: 0) {
+            ContentUnavailableView(
+                title, systemImage: systemImage,
+                description: Text(description)
+            )
+            .padding(.top, 12)
+
+            Spacer(minLength: 0)
         }
     }
 

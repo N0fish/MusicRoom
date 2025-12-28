@@ -346,7 +346,13 @@ final class ProfileFeatureTests: XCTestCase {
             ProfileFeature()
         } withDependencies: {
             $0.user.generateRandomAvatar = { randomProfile }
-            $0.appSettings.load = { AppSettings(backendURL: backendURL) }
+            $0.appSettings.load = {
+                AppSettings(
+                    selectedPreset: .hosted,
+                    localURL: BackendEnvironmentPreset.local.defaultURL,
+                    hostedURL: backendURL
+                )
+            }
         }
 
         store.exhaustivity = .off
@@ -365,6 +371,47 @@ final class ProfileFeatureTests: XCTestCase {
         // Ideally we would inject a UUID generator dependency, but for now this fixes the build.
     }
 
+    func testImagePlaygroundResponse_UploadsAvatar() async {
+        let pngBase64 =
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg=="
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "\(UUID().uuidString).png")
+        let pngData = Data(base64Encoded: pngBase64)
+        XCTAssertNotNil(pngData)
+        try? pngData?.write(to: tempURL)
+
+        let uploadedProfile = UserProfile(
+            id: "1",
+            userId: "user1",
+            username: "test",
+            displayName: "Test",
+            avatarUrl: nil,
+            hasCustomAvatar: true,
+            preferences: UserPreferences(),
+            isPremium: true,
+            linkedProviders: [],
+            email: nil
+        )
+
+        let store = TestStore(initialState: ProfileFeature.State()) {
+            ProfileFeature()
+        } withDependencies: {
+            $0.user.uploadAvatar = { _ in uploadedProfile }
+        }
+
+        store.exhaustivity = .off
+
+        await store.send(ProfileFeature.Action.imagePlaygroundResponse(tempURL)) {
+            $0.isImagePlaygroundPresented = false
+            $0.isAvatarLoading = true
+        }
+
+        await store.receive(.uploadGeneratedAvatarResponse(.success(uploadedProfile))) {
+            $0.isAvatarLoading = false
+            $0.userProfile = uploadedProfile
+        }
+    }
+
     func testOnAppear_RefetchesStats_WhenAlreadyLoaded() async {
         let profile = UserProfile(
             id: "1", userId: "user1", username: "u", displayName: "d",
@@ -373,6 +420,8 @@ final class ProfileFeatureTests: XCTestCase {
             isPremium: false,
             linkedProviders: [], email: nil
         )
+
+        let meCalled = LockIsolated(false)
 
         var state = ProfileFeature.State()
         state.userProfile = profile
@@ -385,19 +434,23 @@ final class ProfileFeatureTests: XCTestCase {
             $0.musicRoomAPI.getStats = {
                 MusicRoomAPIClient.UserStats(eventsHosted: 5, votesCast: 10)
             }
+            $0.user.me = {
+                meCalled.setValue(true)
+                return profile
+            }
         }
 
-        // Action: .onAppear
+        store.exhaustivity = .off
+
         await store.send(ProfileFeature.Action.onAppear)
-        // Expect NO state change immediately (isLoading remains false)
-
         await store.receive(.fetchStats)
-
         await store.receive(
             .statsResponse(.success(MusicRoomAPIClient.UserStats(eventsHosted: 5, votesCast: 10)))
         ) {
             $0.userStats = MusicRoomAPIClient.UserStats(eventsHosted: 5, votesCast: 10)
         }
+
+        XCTAssertTrue(meCalled.value)
     }
 
     func testBecomePremium_Success() async {

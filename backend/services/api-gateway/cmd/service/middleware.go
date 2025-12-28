@@ -219,13 +219,13 @@ func rateKeyIP(r *http.Request) string {
 	return "ip:" + clientIP(r)
 }
 
-func rateLimitMiddleware(rps int, keyFn func(*http.Request) string) func(http.Handler) http.Handler {
+func rateLimitMiddleware(rps int, keyFn func(*http.Request) string, scope string) func(http.Handler) http.Handler {
 	window := time.Second
 	lim := globalLimiter
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			key := keyFn(r)
+			key := scope + ":" + keyFn(r)
 			ok, retry := lim.allow(key, window, rps)
 			if !ok {
 				w.Header().Set("Retry-After", strconv.Itoa(retry))
@@ -239,7 +239,7 @@ func rateLimitMiddleware(rps int, keyFn func(*http.Request) string) func(http.Ha
 
 func loginRateLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ok, _ := loginLimiter.allow(rateKeyIP(r), time.Second, 1)
+		ok, _ := loginLimiter.allow(rateKeyIP(r), time.Second, 10)
 		if !ok {
 			writeError(w, http.StatusTooManyRequests, "too many login attempts")
 			return
@@ -250,7 +250,7 @@ func loginRateLimitMiddleware(next http.Handler) http.Handler {
 
 func playlistCreateRateLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ok, _ := playlistLimiter.allow(rateKeyUserOrIP(r), 5*time.Second, 1)
+		ok, _ := playlistLimiter.allow(rateKeyUserOrIP(r), 5*time.Second, 10)
 		if !ok {
 			writeError(w, http.StatusTooManyRequests, "too many playlist creations")
 			return

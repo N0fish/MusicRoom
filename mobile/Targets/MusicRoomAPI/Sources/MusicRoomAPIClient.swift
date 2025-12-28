@@ -85,6 +85,12 @@ extension MusicRoomAPIClient: DependencyKey {
     public static func live(urlSession: URLSession = .shared) -> MusicRoomAPIClient {
         @Dependency(\.appSettings) var settings
         @Dependency(\.authentication) var authentication
+        @Dependency(\.sessionEvents) var sessionEvents
+        let executor = AuthenticatedRequestExecutor(
+            urlSession: urlSession,
+            authentication: authentication,
+            sessionEvents: sessionEvents
+        )
 
         let appVersion =
             Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
@@ -112,9 +118,8 @@ extension MusicRoomAPIClient: DependencyKey {
         }
 
         @Sendable func performRequest<T: Decodable & Sendable>(
-            _ request: URLRequest, retryCount: Int = 0
-        )
-            async throws -> T
+            _ request: URLRequest
+        ) async throws -> T
         {
             var request = request
             // Headers
@@ -124,42 +129,20 @@ extension MusicRoomAPIClient: DependencyKey {
             request.setValue(deviceName, forHTTPHeaderField: "X-Device")
             request.setValue(appVersion, forHTTPHeaderField: "X-App-Version")
 
-            // Auth
-            if let token = authentication.getAccessToken() {
-                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            }
-
             do {
-                let (data, response) = try await urlSession.data(for: request)
+                let (data, httpResponse) = try await executor.data(for: request)
 
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    throw MusicRoomAPIError.networkError("Invalid response")
+                if httpResponse.statusCode == 401 {
+                    logError(request, httpResponse, data, MusicRoomAPIError.sessionExpired)
+                    throw MusicRoomAPIError.sessionExpired
                 }
 
-                // Token Refresh (401)
-                if httpResponse.statusCode == 401 {
-                    if retryCount < 1 {
-                        do {
-                            try await authentication.refreshToken()
-                            // Update token in new request is handled by recursive call
-                            return try await performRequest(request, retryCount: retryCount + 1)
-                        } catch let error as AuthenticationError {
-                            // Only logout if credentials are truly invalid
-                            if error == .invalidCredentials {
-                                logError(
-                                    request, httpResponse, data, MusicRoomAPIError.sessionExpired)
-                                throw MusicRoomAPIError.sessionExpired
-                            }
-                            // Otherwise propagate as network/server error to avoid logout
-                            throw MusicRoomAPIError.networkError(error.localizedDescription)
-                        } catch {
-                            logError(request, httpResponse, data, MusicRoomAPIError.sessionExpired)
-                            throw MusicRoomAPIError.sessionExpired
-                        }
-                    } else {
-                        logError(request, httpResponse, data, MusicRoomAPIError.sessionExpired)
-                        throw MusicRoomAPIError.sessionExpired
-                    }
+                if httpResponse.statusCode == 429 {
+                    let retryAfterHeader = httpResponse.value(forHTTPHeaderField: "Retry-After")
+                    let retryAfter = retryAfterHeader.flatMap(TimeInterval.init)
+                    let err = MusicRoomAPIError.rateLimited(retryAfter: retryAfter)
+                    logError(request, httpResponse, data, err)
+                    throw err
                 }
 
                 // Error Mapping
@@ -188,6 +171,12 @@ extension MusicRoomAPIClient: DependencyKey {
                     logError(request, httpResponse, data, error)
                     throw error
                 }
+            } catch let error as AuthenticationError {
+                if error == .invalidCredentials {
+                    logError(request, nil, nil, MusicRoomAPIError.sessionExpired)
+                    throw MusicRoomAPIError.sessionExpired
+                }
+                throw MusicRoomAPIError.networkError(error.localizedDescription)
             } catch let error as MusicRoomAPIError {
                 throw error
             } catch {
@@ -197,7 +186,7 @@ extension MusicRoomAPIClient: DependencyKey {
             }
         }
 
-        @Sendable func performRequestNoContent(_ request: URLRequest, retryCount: Int = 0)
+        @Sendable func performRequestNoContent(_ request: URLRequest)
             async throws
         {
             var request = request
@@ -208,38 +197,20 @@ extension MusicRoomAPIClient: DependencyKey {
             request.setValue(deviceName, forHTTPHeaderField: "X-Device")
             request.setValue(appVersion, forHTTPHeaderField: "X-App-Version")
 
-            if let token = authentication.getAccessToken() {
-                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            }
-
             do {
-                let (data, response) = try await urlSession.data(for: request)
-
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    throw MusicRoomAPIError.networkError("Invalid response")
-                }
+                let (data, httpResponse) = try await executor.data(for: request)
 
                 if httpResponse.statusCode == 401 {
-                    if retryCount < 1 {
-                        do {
-                            try await authentication.refreshToken()
-                            return try await performRequestNoContent(
-                                request, retryCount: retryCount + 1)
-                        } catch let error as AuthenticationError {
-                            if error == .invalidCredentials {
-                                logError(
-                                    request, httpResponse, data, MusicRoomAPIError.sessionExpired)
-                                throw MusicRoomAPIError.sessionExpired
-                            }
-                            throw MusicRoomAPIError.networkError(error.localizedDescription)
-                        } catch {
-                            logError(request, httpResponse, data, MusicRoomAPIError.sessionExpired)
-                            throw MusicRoomAPIError.sessionExpired
-                        }
-                    } else {
-                        logError(request, httpResponse, data, MusicRoomAPIError.sessionExpired)
-                        throw MusicRoomAPIError.sessionExpired
-                    }
+                    logError(request, httpResponse, data, MusicRoomAPIError.sessionExpired)
+                    throw MusicRoomAPIError.sessionExpired
+                }
+
+                if httpResponse.statusCode == 429 {
+                    let retryAfterHeader = httpResponse.value(forHTTPHeaderField: "Retry-After")
+                    let retryAfter = retryAfterHeader.flatMap(TimeInterval.init)
+                    let err = MusicRoomAPIError.rateLimited(retryAfter: retryAfter)
+                    logError(request, httpResponse, data, err)
+                    throw err
                 }
 
                 switch httpResponse.statusCode {
@@ -258,6 +229,12 @@ extension MusicRoomAPIClient: DependencyKey {
                     logError(request, httpResponse, data, err)
                     throw err
                 }
+            } catch let error as AuthenticationError {
+                if error == .invalidCredentials {
+                    logError(request, nil, nil, MusicRoomAPIError.sessionExpired)
+                    throw MusicRoomAPIError.sessionExpired
+                }
+                throw MusicRoomAPIError.networkError(error.localizedDescription)
             } catch let error as MusicRoomAPIError {
                 throw error
             } catch {
@@ -656,6 +633,7 @@ public enum MusicRoomAPIError: Error, Equatable, LocalizedError {
     case sessionExpired
     case forbidden
     case notFound
+    case rateLimited(retryAfter: TimeInterval?)
 
     public var errorDescription: String? {
         switch self {
@@ -665,6 +643,9 @@ public enum MusicRoomAPIError: Error, Equatable, LocalizedError {
         case .sessionExpired: return "Session Expired"
         case .forbidden: return "Access Denied"
         case .notFound: return "Not Found"
+        case .rateLimited(let retryAfter):
+            if let retryAfter { return "Too many requests. Retry after \(Int(retryAfter))s" }
+            return "Too many requests. Retry later."
         }
     }
 }

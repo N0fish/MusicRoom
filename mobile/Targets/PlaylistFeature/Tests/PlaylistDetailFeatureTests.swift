@@ -153,4 +153,36 @@ final class PlaylistDetailFeatureTests: XCTestCase {
             $0.isPlaying = false
         }
     }
+
+    func testReadOnlyEventPlaylistBlocksEdits() async {
+        let playlist = Playlist(
+            id: "p1",
+            ownerId: "u1",
+            name: "Event Playlist",
+            description: Playlist.eventDescriptionPrefix + "Live Set",
+            isPublic: true,
+            editMode: "everyone"
+        )
+        let track = Track(
+            id: "t1",
+            title: "Song 1",
+            artist: "Artist 1",
+            provider: "youtube",
+            providerTrackId: "v1",
+            thumbnailUrl: nil
+        )
+
+        var state = PlaylistDetailFeature.State(playlist: playlist)
+        state.tracks = [track]
+
+        let store = TestStore(initialState: state) {
+            PlaylistDetailFeature()
+        }
+
+        await store.send(.addTrackButtonTapped)
+        XCTAssertNil(store.state.musicSearch)
+
+        await store.send(.deleteTrackTapped(track))
+        XCTAssertEqual(store.state.tracks, [track])
+    }
 }

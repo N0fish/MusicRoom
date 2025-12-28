@@ -38,7 +38,7 @@ public struct SettingsView: View {
 
                 Section {
                     TextField(
-                        "https://api.musicroom.app",
+                        viewStore.selectedPreset.defaultURL.absoluteString,
                         text: viewStore.binding(
                             get: \SettingsFeature.State.backendURLText,
                             send: SettingsFeature.Action.backendURLTextChanged
@@ -61,9 +61,7 @@ public struct SettingsView: View {
                 } header: {
                     Text("Backend API")
                 } footer: {
-                    if !viewStore.canEditBackendURL {
-                        Text("Switch to Hosted to edit the URL manually.")
-                    }
+                    Text("Each preset remembers its own URL. Include the full scheme (http/https).")
                 }
 
                 Section {

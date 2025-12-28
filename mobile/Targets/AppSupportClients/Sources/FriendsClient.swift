@@ -1,3 +1,4 @@
+import AppSettingsClient
 import Dependencies
 import Foundation
 
@@ -170,7 +171,18 @@ extension DependencyValues {
 // MARK: - Live Implementation
 
 extension FriendsClient {
-    static func live() -> Self {
+    static func live(urlSession: URLSession = .shared) -> Self {
+        @Dependency(\.appSettings) var appSettings
+        @Dependency(\.authentication) var authentication
+        @Dependency(\.sessionEvents) var sessionEvents
+        let executor = AuthenticatedRequestExecutor(
+            urlSession: urlSession,
+            authentication: authentication,
+            sessionEvents: sessionEvents
+        )
+        let friendsCache = FriendsListCache(ttl: 5)
+        let requestsCache = IncomingRequestsCache(ttl: 5)
+
         @Sendable func logError(
             _ request: URLRequest, _ response: HTTPURLResponse?, _ data: Data?, _ error: Error?
         ) {
@@ -189,18 +201,15 @@ extension FriendsClient {
             print("--------------------------------------------------\n")
         }
 
+        @Sendable func baseURLString() -> String {
+            appSettings.load().backendURLString
+        }
+
         @Sendable func performRequest<T: Decodable & Sendable>(
             _ request: URLRequest
         ) async throws -> T {
-            var request = request
-            attachAuth(to: &request)
-
             do {
-                let (data, response) = try await URLSession.shared.data(for: request)
-
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    throw URLError(.badServerResponse)
-                }
+                let (data, httpResponse) = try await executor.data(for: request)
 
                 if !(200...299).contains(httpResponse.statusCode) {
                     let error = URLError(.badServerResponse)  // Or custom error
@@ -222,15 +231,8 @@ extension FriendsClient {
         }
 
         @Sendable func performRequestNoContent(_ request: URLRequest) async throws {
-            var request = request
-            attachAuth(to: &request)
-
             do {
-                let (data, response) = try await URLSession.shared.data(for: request)
-
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    throw URLError(.badServerResponse)
-                }
+                let (data, httpResponse) = try await executor.data(for: request)
 
                 if !(200...299).contains(httpResponse.statusCode) {
                     let error = URLError(.badServerResponse)
@@ -245,84 +247,95 @@ extension FriendsClient {
 
         return Self(
             listFriends: {
-                let baseUrl = BaseURL.resolve()
-                let url = URL(string: "\(baseUrl)/users/me/friends")!
-                var request = URLRequest(url: url)
-                request.httpMethod = "GET"
+                let token = authentication.getAccessToken()
+                return try await friendsCache.get(token: token) {
+                    let baseUrl = baseURLString()
+                    let url = URL(string: "\(baseUrl)/users/me/friends")!
+                    var request = URLRequest(url: url)
+                    request.httpMethod = "GET"
 
-                let list: FriendsListResponse = try await performRequest(request)
-                return (list.items ?? []).map { item in
-                    var friend = item.toFriend()
-                    if let avatarUrl = friend.avatarUrl, !avatarUrl.hasPrefix("http") {
-                        friend = Friend(
-                            id: friend.id,
-                            userId: friend.userId,
-                            username: friend.username,
-                            displayName: friend.displayName,
-                            avatarUrl: baseUrl + avatarUrl,
-                            isPremium: friend.isPremium
-                        )
+                    let list: FriendsListResponse = try await performRequest(request)
+                    return (list.items ?? []).map { item in
+                        var friend = item.toFriend()
+                        if let avatarUrl = friend.avatarUrl, !avatarUrl.hasPrefix("http") {
+                            friend = Friend(
+                                id: friend.id,
+                                userId: friend.userId,
+                                username: friend.username,
+                                displayName: friend.displayName,
+                                avatarUrl: baseUrl + avatarUrl,
+                                isPremium: friend.isPremium
+                            )
+                        }
+                        return friend
                     }
-                    return friend
                 }
             },
             incomingRequests: {
-                let baseUrl = BaseURL.resolve()
-                let url = URL(string: "\(baseUrl)/users/me/friends/requests/incoming")!
-                var request = URLRequest(url: url)
-                request.httpMethod = "GET"
+                let token = authentication.getAccessToken()
+                return try await requestsCache.get(token: token) {
+                    let baseUrl = baseURLString()
+                    let url = URL(string: "\(baseUrl)/users/me/friends/requests/incoming")!
+                    var request = URLRequest(url: url)
+                    request.httpMethod = "GET"
 
-                let list: IncomingRequestsResponse = try await performRequest(request)
-                return (list.items ?? []).map { item in
-                    let date = ISO8601DateFormatter().date(from: item.createdAt) ?? Date()
-                    var avatarUrl = item.from.avatarUrl
-                    if let url = avatarUrl, !url.hasPrefix("http") {
-                        avatarUrl = baseUrl + url
+                    let list: IncomingRequestsResponse = try await performRequest(request)
+                    return (list.items ?? []).map { item in
+                        let date = ISO8601DateFormatter().date(from: item.createdAt) ?? Date()
+                        var avatarUrl = item.from.avatarUrl
+                        if let url = avatarUrl, !url.hasPrefix("http") {
+                            avatarUrl = baseUrl + url
+                        }
+
+                        return FriendRequest(
+                            id: item.from.userId,
+                            senderId: item.from.userId,
+                            senderUsername: item.from.username,
+                            senderDisplayName: item.from.displayName,
+                            senderAvatarUrl: avatarUrl,
+                            senderIsPremium: item.from.isPremium,
+                            status: "pending",
+                            sentAt: date
+                        )
                     }
-
-                    return FriendRequest(
-                        id: item.from.userId,
-                        senderId: item.from.userId,
-                        senderUsername: item.from.username,
-                        senderDisplayName: item.from.displayName,
-                        senderAvatarUrl: avatarUrl,
-                        senderIsPremium: item.from.isPremium,
-                        status: "pending",
-                        sentAt: date
-                    )
                 }
             },
             sendRequest: { userId in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/users/me/friends/\(userId)/request")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 try await performRequestNoContent(request)
+                await requestsCache.invalidate()
             },
             acceptRequest: { senderId in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/users/me/friends/\(senderId)/accept")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 try await performRequestNoContent(request)
+                await friendsCache.invalidate()
+                await requestsCache.invalidate()
             },
             rejectRequest: { senderId in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/users/me/friends/\(senderId)/reject")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 try await performRequestNoContent(request)
+                await requestsCache.invalidate()
             },
             removeFriend: { friendId in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/users/me/friends/\(friendId)")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "DELETE"
                 try await performRequestNoContent(request)
+                await friendsCache.invalidate()
             },
             searchUsers: { query in
                 guard !query.isEmpty else { return [] }
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 var components = URLComponents(string: "\(baseUrl)/users/search")!
                 components.queryItems = [URLQueryItem(name: "query", value: query)]
 
@@ -346,7 +359,7 @@ extension FriendsClient {
                 }
             },
             getProfile: { userId in
-                let baseUrl = BaseURL.resolve()
+                let baseUrl = baseURLString()
                 let url = URL(string: "\(baseUrl)/users/\(userId)")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "GET"
@@ -369,10 +382,133 @@ extension FriendsClient {
         )
     }
 
-    private static func attachAuth(to request: inout URLRequest) {
-        if let token = KeychainHelper().read("accessToken") {
-            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+}
+
+private actor FriendsListCache {
+    private struct Entry {
+        let value: [Friend]
+        let token: String?
+        let fetchedAt: Date
+    }
+
+    private let ttl: TimeInterval
+    private var entry: Entry?
+    private var inFlight: Task<[Friend], Error>?
+    private var inFlightToken: String?
+
+    init(ttl: TimeInterval) {
+        self.ttl = ttl
+    }
+
+    func get(
+        token: String?,
+        fetch: @escaping @Sendable () async throws -> [Friend]
+    ) async throws -> [Friend] {
+        let now = Date()
+        if let entry, entry.token == token, now.timeIntervalSince(entry.fetchedAt) < ttl {
+            return entry.value
         }
+
+        if entry?.token != token {
+            entry = nil
+            if let currentInFlight = inFlight, inFlightToken != token {
+                currentInFlight.cancel()
+                inFlight = nil
+                inFlightToken = nil
+            }
+        }
+
+        if let inFlight, inFlightToken == token {
+            return try await inFlight.value
+        }
+
+        let task = Task {
+            try await fetch()
+        }
+        inFlight = task
+        inFlightToken = token
+        let result = await task.result
+        inFlight = nil
+        inFlightToken = nil
+
+        switch result {
+        case .success(let value):
+            entry = Entry(value: value, token: token, fetchedAt: Date())
+            return value
+        case .failure(let error):
+            throw error
+        }
+    }
+
+    func invalidate() {
+        entry = nil
+        inFlight?.cancel()
+        inFlight = nil
+        inFlightToken = nil
+    }
+}
+
+private actor IncomingRequestsCache {
+    private struct Entry {
+        let value: [FriendRequest]
+        let token: String?
+        let fetchedAt: Date
+    }
+
+    private let ttl: TimeInterval
+    private var entry: Entry?
+    private var inFlight: Task<[FriendRequest], Error>?
+    private var inFlightToken: String?
+
+    init(ttl: TimeInterval) {
+        self.ttl = ttl
+    }
+
+    func get(
+        token: String?,
+        fetch: @escaping @Sendable () async throws -> [FriendRequest]
+    ) async throws -> [FriendRequest] {
+        let now = Date()
+        if let entry, entry.token == token, now.timeIntervalSince(entry.fetchedAt) < ttl {
+            return entry.value
+        }
+
+        if entry?.token != token {
+            entry = nil
+            if let currentInFlight = inFlight, inFlightToken != token {
+                currentInFlight.cancel()
+                inFlight = nil
+                inFlightToken = nil
+            }
+        }
+
+        if let inFlight, inFlightToken == token {
+            return try await inFlight.value
+        }
+
+        let task = Task {
+            try await fetch()
+        }
+        inFlight = task
+        inFlightToken = token
+        let result = await task.result
+        inFlight = nil
+        inFlightToken = nil
+
+        switch result {
+        case .success(let value):
+            entry = Entry(value: value, token: token, fetchedAt: Date())
+            return value
+        case .failure(let error):
+            throw error
+        }
+    }
+
+    func invalidate() {
+        entry = nil
+        inFlight?.cancel()
+        inFlight = nil
+        inFlightToken = nil
     }
 }
 
@@ -417,26 +553,5 @@ public struct PublicMusicPreferences: Codable, Equatable, Sendable {
         self.genres = genres
         self.artists = artists
         self.moods = moods
-    }
-}
-
-// Private KeychainHelper helper to avoid dependency on AppSettings if circular
-private struct KeychainHelper {
-    func read(_ key: String) -> String? {
-        let query =
-            [
-                kSecClass: kSecClassGenericPassword,
-                kSecAttrAccount: key,
-                kSecReturnData: true,
-                kSecMatchLimit: kSecMatchLimitOne,
-            ] as [String: Any]
-
-        var dataTypeRef: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &dataTypeRef)
-
-        if status == errSecSuccess, let data = dataTypeRef as? Data {
-            return String(data: data, encoding: .utf8)
-        }
-        return nil
     }
 }

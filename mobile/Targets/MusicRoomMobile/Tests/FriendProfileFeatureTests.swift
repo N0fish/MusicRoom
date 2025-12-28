@@ -38,11 +38,13 @@ final class FriendProfileFeatureTests: XCTestCase {
             FriendProfileFeature()
         } withDependencies: {
             $0.friendsClient.getProfile = { _ in profile }
+            $0.friendsClient.listFriends = { [] }
             $0.user.me = { user }
         }
 
         await store.send(FriendProfileFeature.Action.view(.onAppear)) {
             $0.isLoading = true
+            $0.isCheckingFriend = true
         }
 
         await store.receive(FriendProfileFeature.Action.profileLoaded(.success(profile))) {
@@ -52,6 +54,10 @@ final class FriendProfileFeatureTests: XCTestCase {
 
         await store.receive(FriendProfileFeature.Action.userLoaded(.success(user))) {
             $0.isMe = true
+        }
+
+        await store.receive(FriendProfileFeature.Action.friendsLoaded(.success([]))) {
+            $0.isCheckingFriend = false
         }
     }
 
@@ -87,11 +93,13 @@ final class FriendProfileFeatureTests: XCTestCase {
             FriendProfileFeature()
         } withDependencies: {
             $0.friendsClient.getProfile = { _ in profile }
+            $0.friendsClient.listFriends = { [] }
             $0.user.me = { me }
         }
 
         await store.send(FriendProfileFeature.Action.view(.onAppear)) {
             $0.isLoading = true
+            $0.isCheckingFriend = true
         }
 
         await store.receive(FriendProfileFeature.Action.profileLoaded(.success(profile))) {
@@ -100,5 +108,71 @@ final class FriendProfileFeatureTests: XCTestCase {
         }
 
         await store.receive(FriendProfileFeature.Action.userLoaded(.success(me)))
+
+        await store.receive(FriendProfileFeature.Action.friendsLoaded(.success([]))) {
+            $0.isCheckingFriend = false
+        }
+    }
+
+    func testFriendStatusUpdatesFromFriendsList() async {
+        let profile = PublicUserProfile(
+            userId: "u2",
+            username: "bob",
+            displayName: "Bob",
+            avatarUrl: nil,
+            isPremium: false,
+            bio: nil,
+            visibility: "public",
+            preferences: nil
+        )
+        let me = UserProfile(
+            id: "1",
+            userId: "u1",
+            username: "alice",
+            displayName: "Alice",
+            avatarUrl: nil,
+            hasCustomAvatar: false,
+            bio: nil,
+            visibility: "public",
+            preferences: UserPreferences(),
+            isPremium: false,
+            linkedProviders: [],
+            email: "alice@example.com"
+        )
+        let friend = Friend(
+            id: "u2",
+            userId: "u2",
+            username: "bob",
+            displayName: "Bob",
+            avatarUrl: nil,
+            isPremium: false
+        )
+
+        let store = TestStore(
+            initialState: FriendProfileFeature.State(userId: "u2", isFriend: false)
+        ) {
+            FriendProfileFeature()
+        } withDependencies: {
+            $0.friendsClient.getProfile = { _ in profile }
+            $0.friendsClient.listFriends = { [friend] }
+            $0.user.me = { me }
+        }
+
+        await store.send(FriendProfileFeature.Action.view(.onAppear)) {
+            $0.isLoading = true
+            $0.isCheckingFriend = true
+        }
+
+        await store.receive(FriendProfileFeature.Action.profileLoaded(.success(profile))) {
+            $0.isLoading = false
+            $0.profile = profile
+        }
+
+        await store.receive(FriendProfileFeature.Action.userLoaded(.success(me)))
+
+        await store.receive(FriendProfileFeature.Action.friendsLoaded(.success([friend]))) {
+            $0.isCheckingFriend = false
+            $0.isFriend = true
+        }
     }
 }

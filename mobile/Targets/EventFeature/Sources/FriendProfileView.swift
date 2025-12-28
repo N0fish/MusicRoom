@@ -28,16 +28,35 @@ public struct FriendProfileView: View {
                                 size: 120
                             )
 
-                            VStack(spacing: 4) {
-                                Text(profile.displayName)
-                                    .font(.title2)
-                                    .fontWeight(.bold)
-                                    .foregroundStyle(.white)
+                        VStack(spacing: 4) {
+                            let displayName = profile.displayName.isEmpty
+                                ? profile.username
+                                : profile.displayName
 
-                                Text("@\(profile.username)")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.white.opacity(0.6))
+                            Text(displayName)
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundStyle(.white)
+
+                            Text("@\(profile.username)")
+                                .font(.subheadline)
+                                .foregroundStyle(.white.opacity(0.6))
+
+                            if store.isFriend && !store.isMe {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "checkmark.seal.fill")
+                                        .font(.caption)
+                                    Text("Friends")
+                                        .font(.caption.bold())
+                                }
+                                .foregroundStyle(Color.liquidAccent)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(Color.white.opacity(0.15))
+                                .clipShape(Capsule())
+                                .padding(.top, 6)
                             }
+                        }
                         }
                         .padding(.top, 40)
 
@@ -67,7 +86,7 @@ public struct FriendProfileView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                if store.isLoading {
+                if store.isLoading || store.isCheckingFriend {
                     ProgressView()
                 } else if !store.isMe {
                     if store.isFriend {

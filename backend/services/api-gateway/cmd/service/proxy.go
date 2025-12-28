@@ -1,12 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/netip"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -39,9 +41,11 @@ func mustNewReverseProxy(target string) http.Handler {
 	if err != nil {
 		log.Fatalf("api-gateway: invalid service URL %q: %v", target, err)
 	}
+	fmt.Fprintf(os.Stderr, "url.Parsed: %s, target: %s\n", u.String(), target)
+	fmt.Fprintln(os.Stderr, "ENVS", os.Getenv("HTTP_PROXY"), os.Getenv("HTTPS_PROXY"), os.Getenv("NO_PROXY"))
 	proxy := httputil.NewSingleHostReverseProxy(u)
 	proxy.Transport = &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
+		Proxy: nil,
 		DialContext: (&net.Dialer{
 			Timeout:   10 * time.Second,
 			KeepAlive: 30 * time.Second,
@@ -55,10 +59,21 @@ func mustNewReverseProxy(target string) http.Handler {
 	}
 
 	origDirector := proxy.Director
+
 	proxy.Director = func(req *http.Request) {
+		incomingHost := req.Host // AVANT origDirector
+
 		origDirector(req)
-		req.Header.Set("X-Forwarded-Host", req.Host)
-		req.Header.Set("X-Forwarded-Proto", "http")
+
+		// Assure-toi que l'upstream Host est bien celui du backend
+		req.Host = u.Host
+
+		// Forwarded headers = info sur le client -> gateway, pas gateway -> backend
+		req.Header.Set("X-Forwarded-Host", incomingHost)
+
+		// Proto côté client (si ta gateway reçoit en HTTPS sur Render, mets "https")
+		// Si tu ne sais pas, ne force pas: laisse le reverse proxy gérer.
+		// req.Header.Set("X-Forwarded-Proto", "https")
 	}
 
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {

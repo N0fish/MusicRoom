@@ -29,6 +29,12 @@ extension TelemetryClient: DependencyKey {
         // 2. Backend Audit Trail
         @Dependency(\.appSettings) var settings
         @Dependency(\.authentication) var authentication
+        @Dependency(\.sessionEvents) var sessionEvents
+        let executor = AuthenticatedRequestExecutor(
+            urlSession: .shared,
+            authentication: authentication,
+            sessionEvents: sessionEvents
+        )
 
         let backendURL = settings.load().backendURL
         let endpoint = backendURL.appendingPathComponent("audit/logs")  // Generic endpoint for logs
@@ -45,10 +51,6 @@ extension TelemetryClient: DependencyKey {
             request.setValue(version, forHTTPHeaderField: "X-Client-App-Version")
         }
 
-        if let token = authentication.getAccessToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-
         let body: [String: Any] = [
             "action": action,
             "metadata": metadata,
@@ -57,10 +59,8 @@ extension TelemetryClient: DependencyKey {
 
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
-            let (_, response) = try await URLSession.shared.data(for: request)
-            if let httpResponse = response as? HTTPURLResponse,
-                !(200...299).contains(httpResponse.statusCode)
-            {
+            let (_, httpResponse) = try await executor.data(for: request)
+            if !(200...299).contains(httpResponse.statusCode) {
                 logger.error("Telemetry failed: Server returned \(httpResponse.statusCode)")
             }
         } catch {
