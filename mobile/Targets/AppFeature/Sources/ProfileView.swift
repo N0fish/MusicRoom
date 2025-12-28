@@ -70,8 +70,8 @@ public struct ProfileView: View {
                                 .disabled(store.isAvatarLoading)
                                 .padding(.top, 4)
 
-                                if profile.isPremium && supportsImagePlayground {
-                                    Button(action: { store.send(.toggleImagePlayground(true)) }) {
+                                if profile.isPremium {
+                                    Button(action: { print(supportsImagePlayground); store.send(.toggleImagePlayground(true)) }) {
                                         HStack(spacing: 4) {
                                             Image(systemName: "sparkles")
                                             Text("Generate with AI")

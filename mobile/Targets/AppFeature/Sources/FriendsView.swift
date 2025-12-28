@@ -27,49 +27,10 @@ public struct FriendsView: View {
                     .pickerStyle(.segmented)
                     .padding()
 
-                    Group {
-                        switch store.selectedSegment {
-                        case .friends:
-                            if store.friends.isEmpty && !store.isLoading {
-                                ContentUnavailableView(
-                                    "No Friends Yet", systemImage: "person.2.slash",
-                                    description: Text("Search and add friends to see them here.")
-                                )
-                                .frame(
-                                    maxWidth: .infinity,
-                                    maxHeight: .infinity,
-                                    alignment: .top
-                                )
-                                .padding(.top, 12)
-                            } else {
-                                friendsList(store: store, friends: store.friends)
-                                    .scrollContentBackground(.hidden)
-                            }
-                        case .requests:
-                            if store.incomingRequests.isEmpty && !store.isLoading {
-                                ContentUnavailableView(
-                                    "No Requests", systemImage: "tray",
-                                    description: Text("You have no incoming friend requests.")
-                                )
-                                .frame(
-                                    maxWidth: .infinity,
-                                    maxHeight: .infinity,
-                                    alignment: .top
-                                )
-                                .padding(.top, 12)
-                            } else {
-                                requestsList(store: store, requests: store.incomingRequests)
-                                    .scrollContentBackground(.hidden)
-                            }
-                        case .search:
-                            searchView(store: store)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .background(Color.green)
+                    segmentContent(store: store)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .background(Color.brown)
             }
             .navigationTitle("Friends")
             .navigationBarTitleDisplayMode(.inline)
@@ -78,9 +39,50 @@ public struct FriendsView: View {
             .onAppear {
                 store.send(.onAppear)
             }
-            .background(Color.orange)
         } destination: { store in
             FriendProfileView(store: store)
+        }
+    }
+
+    @ViewBuilder
+    private func segmentContent(store: StoreOf<FriendsFeature>) -> some View {
+        switch store.selectedSegment {
+        case .friends:
+            if store.friends.isEmpty && !store.isLoading {
+                emptyState(
+                    title: "No Friends Yet",
+                    systemImage: "person.2.slash",
+                    description: "Search and add friends to see them here."
+                )
+            } else {
+                friendsList(store: store, friends: store.friends)
+                    .scrollContentBackground(.hidden)
+            }
+        case .requests:
+            if store.incomingRequests.isEmpty && !store.isLoading {
+                emptyState(
+                    title: "No Requests",
+                    systemImage: "tray",
+                    description: "You have no incoming friend requests."
+                )
+            } else {
+                requestsList(store: store, requests: store.incomingRequests)
+                    .scrollContentBackground(.hidden)
+            }
+        case .search:
+            searchView(store: store)
+        }
+    }
+
+    private func emptyState(title: String, systemImage: String, description: String) -> some View {
+        VStack(spacing: 0) {
+            ContentUnavailableView(
+                title, systemImage: systemImage,
+                description: Text(description)
+            )
+            .padding(.top, 12)
+
+            Spacer(minLength: 0)
         }
     }
 
