@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 )
 
 const (
@@ -79,7 +78,6 @@ func (s *Server) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// exchange code for token
 	form := url.Values{}
 	form.Set("code", code)
 	form.Set("client_id", s.googleCfg.ClientID)
@@ -87,8 +85,9 @@ func (s *Server) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	form.Set("redirect_uri", s.googleCfg.RedirectURL)
 	form.Set("grant_type", "authorization_code")
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.PostForm(googleTokenURL, form)
+	form.Set("grant_type", "authorization_code")
+
+	resp, err := s.httpClient.PostForm(googleTokenURL, form)
 	if err != nil {
 		log.Printf("google callback: token exchange error: %v", err)
 		writeError(w, http.StatusBadGateway, "google token exchange failed")
@@ -115,7 +114,7 @@ func (s *Server) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Header.Set("Authorization", "Bearer "+tr.AccessToken)
 
-	uResp, err := client.Do(req)
+	uResp, err := s.httpClient.Do(req)
 	if err != nil {
 		log.Printf("google callback: userinfo error: %v", err)
 		writeError(w, http.StatusBadGateway, "google userinfo failed")
@@ -140,7 +139,7 @@ func (s *Server) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.upsertUserWithGoogle(r.Context(), email, ui.Sub)
+	user, err := s.repo.UpsertUserWithGoogle(r.Context(), email, ui.Sub)
 	if err != nil {
 		log.Printf("google callback: upsertUserWithGoogle: %v", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -154,13 +153,11 @@ func (s *Server) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return tokens as JSON if requested explicitly
 	if r.URL.Query().Get("mode") == "json" {
 		writeJSON(w, http.StatusOK, tokens)
 		return
 	}
 
-	// Default: redirect back to frontend with tokens in URL fragment
 	redirectURL, err := url.Parse(redirect)
 	if err != nil {
 		redirectURL, _ = url.Parse(s.frontendURL)

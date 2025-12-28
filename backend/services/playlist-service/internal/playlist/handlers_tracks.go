@@ -67,6 +67,7 @@ func (s *Server) handleAddTrack(w http.ResponseWriter, r *http.Request) {
 		Provider      string `json:"provider"`
 		ProviderTrack string `json:"providerTrackId"`
 		ThumbnailURL  string `json:"thumbnailUrl"`
+		DurationMs    int    `json:"durationMs"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
@@ -108,18 +109,21 @@ func (s *Server) handleAddTrack(w http.ResponseWriter, r *http.Request) {
           position,
           provider,
           provider_track_id,
-          thumbnail_url
+          thumbnail_url,
+          duration_ms,
+          vote_count,
+          status
       )
       VALUES (
           $1, $2, $3,
           COALESCE(
-            (SELECT MAX(position)+1 FROM tracks WHERE playlist_id = $1),
-            0
+              (SELECT MAX(position)+1 FROM tracks WHERE playlist_id = $1),
+              0
           ),
-          $4, $5, $6
+          $4, $5, $6, $7, 0, 'queued'
       )
       RETURNING id, playlist_id, title, artist, position, created_at,
-                provider, provider_track_id, thumbnail_url
+                provider, provider_track_id, thumbnail_url, duration_ms, vote_count, status
   `,
 		playlistID,
 		body.Title,
@@ -127,6 +131,7 @@ func (s *Server) handleAddTrack(w http.ResponseWriter, r *http.Request) {
 		body.Provider,
 		body.ProviderTrack,
 		body.ThumbnailURL,
+		body.DurationMs,
 	).Scan(
 		&tr.ID,
 		&tr.PlaylistID,
@@ -137,6 +142,9 @@ func (s *Server) handleAddTrack(w http.ResponseWriter, r *http.Request) {
 		&tr.Provider,
 		&tr.ProviderTrackID,
 		&tr.ThumbnailURL,
+		&tr.DurationMs,
+		&tr.VoteCount,
+		&tr.Status,
 	)
 	if err != nil {
 		log.Printf("playlist-service: add track insert: %v", err)

@@ -1,20 +1,25 @@
 package provider
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/redis/go-redis/v9"
 )
 
-type Server struct {
-	yt  *YouTubeClient
-	rdb *redis.Client
+type Provider interface {
+	SearchTracks(ctx context.Context, query string, limit int) ([]MusicSearchItem, error)
 }
 
-func NewServer(yt *YouTubeClient, rdb *redis.Client) *Server {
+type Server struct {
+	provider Provider
+	rdb      *redis.Client
+}
+
+func NewServer(p Provider, rdb *redis.Client) *Server {
 	return &Server{
-		yt:  yt,
-		rdb: rdb,
+		provider: p,
+		rdb:      rdb,
 	}
 }
 

@@ -9,12 +9,10 @@ import (
 	"strings"
 )
 
-// Общий интерфейс
 type EmailSender interface {
 	Send(to, subject, body string) error
 }
 
-// По умолчанию логируем письма (для dev / когда SMTP не настроен)
 type LogEmailSender struct{}
 
 func (LogEmailSender) Send(to, subject, body string) error {
@@ -22,7 +20,6 @@ func (LogEmailSender) Send(to, subject, body string) error {
 	return nil
 }
 
-// SMTP-отправитель
 type SMTPSender struct {
 	host     string
 	port     string

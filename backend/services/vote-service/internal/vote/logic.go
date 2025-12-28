@@ -11,13 +11,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
 
-func registerVote(ctx context.Context, pool *pgxpool.Pool, rdb *redis.Client, eventID, voterID, trackID string, lat, lng *float64) (*VoteResponse, error) {
-	ev, err := loadEvent(ctx, pool, eventID)
+func registerVote(ctx context.Context, store Store, rdb *redis.Client, eventID, voterID, trackID string, lat, lng *float64) (*VoteResponse, error) {
+	ev, err := store.LoadEvent(ctx, eventID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, &voteError{status: http.StatusNotFound, msg: "event not found"}
@@ -25,30 +23,21 @@ func registerVote(ctx context.Context, pool *pgxpool.Pool, rdb *redis.Client, ev
 		return nil, err
 	}
 
-	if ok, reason, err := canUserVote(ctx, pool, ev, voterID, lat, lng, time.Now()); err != nil {
+	if ok, reason, err := canUserVote(ctx, store, ev, voterID, lat, lng, time.Now()); err != nil {
 		return nil, err
 	} else if !ok {
 		return nil, &voteError{status: http.StatusForbidden, msg: reason}
 	}
 
-	_, err = pool.Exec(ctx, `
-        INSERT INTO votes(event_id, track, voter_id)
-        VALUES($1,$2,$3)
-    `, eventID, trackID, voterID)
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
-			if pgErr.Code == "23505" {
-				return nil, &voteError{status: http.StatusConflict, msg: "duplicate vote"}
-			}
+	if err := store.CastVote(ctx, eventID, trackID, voterID); err != nil {
+		if errors.Is(err, ErrVoteConflict) {
+			return nil, &voteError{status: http.StatusConflict, msg: "duplicate vote"}
 		}
 		return nil, err
 	}
 
-	var total int
-	if err := pool.QueryRow(ctx, `
-        SELECT COUNT(*) FROM votes WHERE event_id=$1 AND track=$2
-    `, eventID, trackID).Scan(&total); err != nil {
+	total, err := store.GetVoteCount(ctx, eventID, trackID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -61,7 +50,7 @@ func registerVote(ctx context.Context, pool *pgxpool.Pool, rdb *redis.Client, ev
 			"totalVotes": total,
 		},
 	}
-	if b, err := json.Marshal(evt); err == nil {
+	if b, err := json.Marshal(evt); err == nil && rdb != nil {
 		_ = rdb.Publish(ctx, "broadcast", string(b)).Err()
 	}
 
@@ -72,7 +61,55 @@ func registerVote(ctx context.Context, pool *pgxpool.Pool, rdb *redis.Client, ev
 	}, nil
 }
 
-func checkUserExists(ctx context.Context, baseURL, userID string) error {
+func removeVote(ctx context.Context, store Store, rdb *redis.Client, eventID, voterID, trackID string) (*VoteResponse, error) {
+	ev, err := store.LoadEvent(ctx, eventID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, &voteError{status: http.StatusNotFound, msg: "event not found"}
+		}
+		return nil, err
+	}
+
+	// Verify permission to vote (implies permission to remove vote?)
+	// Usually if you can vote, you can unvote.
+	// We might want to check ownership or voting window?
+	// For simplicity, we re-use canUserVote or just check window.
+	// Let's at least check window.
+	// "Voting has ended" -> cannot remove vote?
+	if ev.VoteEnd != nil && time.Now().After(*ev.VoteEnd) {
+		return nil, &voteError{status: http.StatusForbidden, msg: "voting has ended"}
+	}
+
+	if err := store.RemoveVote(ctx, eventID, trackID, voterID); err != nil {
+		return nil, err
+	}
+
+	total, err := store.GetVoteCount(ctx, eventID, trackID)
+	if err != nil {
+		return nil, err
+	}
+
+	evt := map[string]any{
+		"type": "vote.removed",
+		"payload": map[string]any{
+			"eventId":    eventID,
+			"trackId":    trackID,
+			"voterId":    voterID,
+			"totalVotes": total,
+		},
+	}
+	if b, err := json.Marshal(evt); err == nil && rdb != nil {
+		_ = rdb.Publish(ctx, "broadcast", string(b)).Err()
+	}
+
+	return &VoteResponse{
+		Status:     "ok",
+		TrackID:    trackID,
+		TotalVotes: total,
+	}, nil
+}
+
+func checkUserExists(ctx context.Context, client *http.Client, baseURL, userID string) error {
 	u, err := url.Parse(baseURL)
 	if err != nil {
 		return err
@@ -84,7 +121,7 @@ func checkUserExists(ctx context.Context, baseURL, userID string) error {
 	if err != nil {
 		return err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -106,7 +143,7 @@ func checkUserExists(ctx context.Context, baseURL, userID string) error {
 // - if both set, window must be at least 1 hour and end after start
 func validateVotingWindow(voteStart, voteEnd *time.Time, now time.Time) error {
 	const maxFuture = 365 * 24 * time.Hour
-	const minWindow = time.Hour
+	const minWindow = time.Minute
 
 	if voteStart != nil {
 		if voteStart.Before(now) {
@@ -129,15 +166,15 @@ func validateVotingWindow(voteStart, voteEnd *time.Time, now time.Time) error {
 			return &validationError{"voteEnd must be after voteStart"}
 		}
 		if voteEnd.Sub(*voteStart) < minWindow {
-			return &validationError{"voting window must be at least 1 hour"}
+			return &validationError{"voting window must be at least 1 minute"}
 		}
 	}
 	return nil
 }
 
-func canUserVote(ctx context.Context, pool *pgxpool.Pool, ev *Event, userID string, lat, lng *float64, now time.Time) (bool, string, error) {
+func canUserVote(ctx context.Context, store Store, ev *Event, userID string, lat, lng *float64, now time.Time) (bool, string, error) {
 	if ev.Visibility == visibilityPrivate {
-		invited, err := isInvited(ctx, pool, ev.ID, userID)
+		invited, err := store.IsInvited(ctx, ev.ID, userID)
 		if err != nil {
 			return false, "", err
 		}
@@ -153,15 +190,25 @@ func canUserVote(ctx context.Context, pool *pgxpool.Pool, ev *Event, userID stri
 
 	switch ev.LicenseMode {
 	case "", licenseEveryone:
-		return true, "", nil
-
-	case licenseInvited:
-		invited, err := isInvited(ctx, pool, ev.ID, userID)
+		invited, err := store.IsInvited(ctx, ev.ID, userID)
 		if err != nil {
 			return false, "", err
 		}
 		if !invited {
+			return false, "you must join the event to vote", nil
+		}
+		return true, "", nil
+
+	case licenseInvited:
+		role, err := store.GetParticipantRole(ctx, ev.ID, userID)
+		if err != nil {
+			return false, "", err
+		}
+		if role == "" {
 			return false, "license requires invitation to vote", nil
+		}
+		if role != RoleContributor {
+			return false, "guests cannot vote in invited-only events", nil
 		}
 		return true, "", nil
 

@@ -5,9 +5,34 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"net/netip"
 	"net/url"
+	"strings"
+	"sync"
 	"time"
 )
+
+var (
+	trustedProxyMu    sync.RWMutex
+	trustedProxyCIDRs []netip.Prefix
+)
+
+func setTrustedProxyCIDRs(p []netip.Prefix) {
+	trustedProxyMu.Lock()
+	trustedProxyCIDRs = append([]netip.Prefix(nil), p...)
+	trustedProxyMu.Unlock()
+}
+
+func isTrustedProxyIP(ip netip.Addr) bool {
+	trustedProxyMu.RLock()
+	defer trustedProxyMu.RUnlock()
+	for _, pr := range trustedProxyCIDRs {
+		if pr.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
 
 func mustNewReverseProxy(target string) http.Handler {
 	u, err := url.Parse(target)
@@ -15,6 +40,19 @@ func mustNewReverseProxy(target string) http.Handler {
 		log.Fatalf("api-gateway: invalid service URL %q: %v", target, err)
 	}
 	proxy := httputil.NewSingleHostReverseProxy(u)
+	proxy.Transport = &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   10 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		ResponseHeaderTimeout: 15 * time.Second,
+	}
 
 	origDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
@@ -32,24 +70,33 @@ func mustNewReverseProxy(target string) http.Handler {
 }
 
 func clientIP(r *http.Request) string {
-	if xr := r.Header.Get("X-Real-IP"); xr != "" {
-		return xr
+	peer := remoteIP(r)
+
+	peerAddr, err := netip.ParseAddr(peer)
+	if err != nil || !isTrustedProxyIP(peerAddr) {
+		return peer
 	}
-	if xf := r.Header.Get("X-Forwarded-For"); xf != "" {
-		return xf
+
+	if xr := strings.TrimSpace(r.Header.Get("X-Real-IP")); xr != "" {
+		if ip, err := netip.ParseAddr(xr); err == nil {
+			return ip.String()
+		}
 	}
+
+	if xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); xff != "" {
+		first := strings.TrimSpace(strings.Split(xff, ",")[0])
+		if ip, err := netip.ParseAddr(first); err == nil {
+			return ip.String()
+		}
+	}
+
+	return peer
+}
+
+func remoteIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr
 	}
 	return host
 }
-
-type rateInfo struct {
-	count   int
-	resetAt time.Time
-}
-
-var (
-	rateData = map[string]*rateInfo{}
-)

@@ -24,7 +24,7 @@ func (s *Server) handleListInvites(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ownerID, _, _, err := s.getPlaylistAccessInfo(ctx, playlistID)
+	ownerID, isPublic, _, err := s.getPlaylistAccessInfo(ctx, playlistID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "playlist not found")
 		return
@@ -35,7 +35,27 @@ func (s *Server) handleListInvites(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if userID != ownerID {
+	// Access Rule: Owner OR Public Playlist OR User is Invited
+	// For public playlists, anyone can see the participant list (requirements: "list of participants... on which one can click").
+	allowed := false
+	if userID == ownerID {
+		allowed = true
+	} else if isPublic {
+		allowed = true
+	} else {
+		// Check if user is already a member/invited
+		isMember, err := s.userIsInvited(ctx, playlistID, userID)
+		if err != nil {
+			log.Printf("playlist-service: list invites check member: %v", err)
+			writeError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		if isMember {
+			allowed = true
+		}
+	}
+
+	if !allowed {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
@@ -53,7 +73,7 @@ func (s *Server) handleListInvites(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var invites []PlaylistInvite
+	invites := []PlaylistInvite{}
 	for rows.Next() {
 		var inv PlaylistInvite
 		if err := rows.Scan(&inv.UserID, &inv.CreatedAt); err != nil {
@@ -98,7 +118,7 @@ func (s *Server) handleAddInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ownerID, _, _, err := s.getPlaylistAccessInfo(ctx, playlistID)
+	ownerID, isPublic, _, err := s.getPlaylistAccessInfo(ctx, playlistID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "playlist not found")
 		return
@@ -108,7 +128,18 @@ func (s *Server) handleAddInvite(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
-	if userID != ownerID {
+
+	// Permission logic:
+	// 1. Owner can invite anyone.
+	// 2. Anyone can invite THEMSELVES (join) if the playlist is Public.
+	allowed := false
+	if userID == ownerID {
+		allowed = true
+	} else if isPublic && body.UserID == userID {
+		allowed = true
+	}
+
+	if !allowed {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}

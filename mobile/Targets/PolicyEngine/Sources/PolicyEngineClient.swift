@@ -1,5 +1,5 @@
-import Foundation
 import Dependencies
+import Foundation
 import MusicRoomDomain
 
 public struct PolicyEngineClient: Sendable {
@@ -12,12 +12,12 @@ public struct PolicyEngineClient: Sendable {
 
 extension PolicyEngineClient: DependencyKey {
     public static let liveValue = PolicyEngineClient { event in
-        switch event.licenseTier {
+        switch event.licenseMode {
         case .everyone:
             return PolicyDecision(isAllowed: true, reason: "Open to everyone")
         case .invitedOnly:
             return PolicyDecision(isAllowed: false, reason: "Requires an invitation")
-        case .geoLocked:
+        case .geoTime:
             return PolicyDecision(isAllowed: false, reason: "Geo-locked for on-site participants")
         }
     }

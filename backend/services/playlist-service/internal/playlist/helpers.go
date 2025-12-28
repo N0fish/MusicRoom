@@ -7,7 +7,6 @@ import (
 	"log"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -53,5 +52,4 @@ func (s *Server) publishEvent(ctx context.Context, event map[string]any) {
 	}
 }
 
-type DB = pgxpool.Pool
 type RedisClient = redis.Client

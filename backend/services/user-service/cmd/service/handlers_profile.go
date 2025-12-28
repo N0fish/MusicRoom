@@ -164,3 +164,31 @@ func (s *Server) handleCheckUserExists(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 }
+func (s *Server) handleBecomePremium(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromContext(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	prof, err := s.getOrCreateProfile(r.Context(), userID)
+	if err != nil {
+		log.Printf("user-service: getOrCreateProfile: %v", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	prof.IsPremium = true
+	prof.UpdatedAt = time.Now().UTC()
+
+	if err := s.saveProfile(r.Context(), prof); err != nil {
+		log.Printf("user-service: saveProfile: %v", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	resp := UserProfileResponseFromModel(prof)
+	resp.AvatarURL = resolveAvatarForViewer(prof, false, true)
+
+	writeJSON(w, http.StatusOK, resp)
+}

@@ -1,6 +1,8 @@
 package vote
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
@@ -36,7 +38,7 @@ func (s *HTTPServer) handleCreateInvite(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	ev, err := loadEvent(r.Context(), s.pool, id)
+	ev, err := s.store.LoadEvent(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "event not found")
@@ -45,12 +47,46 @@ func (s *HTTPServer) handleCreateInvite(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	var role string
+
 	if ev.OwnerID != userID {
-		writeError(w, http.StatusForbidden, "forbidden")
-		return
+		// Strict check for Invited Only
+		if ev.LicenseMode == licenseInvited {
+			// If InvitedOnly, ONLY Owner can invite contributors.
+			// BUT, Public events allow listeners to join.
+			// If Self-Join + Public + InvitedOnly -> Guest
+			if ev.Visibility == visibilityPublic && body.UserID == userID {
+				role = RoleGuest
+			} else {
+				// Stranger trying to invite someone or join private?
+				// Private check is handled by visibility usually?
+				// Actually handleCreateInvite: "if ev.OwnerID != userID" ...
+				// If not owner, you can only self-join public events.
+				// (The previous logic allowed this).
+				if ev.Visibility == visibilityPublic && body.UserID == userID {
+					// Logic above handles this branch, but let's be explicit
+					// This block is redundant if we nested cleanly, but let's follow logic.
+				} else {
+					writeError(w, http.StatusForbidden, "cannot join invited-only event without invite")
+					return
+				}
+			}
+		} else {
+			// licenseEveryone or GeoTime
+			// Allow self-invite for public events (Joining)
+			if ev.Visibility == visibilityPublic && body.UserID == userID {
+				role = RoleContributor
+			} else {
+				writeError(w, http.StatusForbidden, "forbidden")
+				return
+			}
+		}
+	} else {
+		// Owner is inviting
+		role = RoleContributor
 	}
 
-	if err := checkUserExists(r.Context(), s.userServiceURL, body.UserID); err != nil {
+	if err := checkUserExists(r.Context(), s.httpClient, s.userServiceURL, body.UserID); err != nil {
 		var ie *inviteError
 		if errors.As(err, &ie) {
 			writeError(w, ie.status, ie.msg)
@@ -61,13 +97,37 @@ func (s *HTTPServer) handleCreateInvite(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if _, err := s.pool.Exec(r.Context(), `
-        INSERT INTO event_invites(event_id, user_id)
-        VALUES($1,$2) ON CONFLICT DO NOTHING
-    `, id, body.UserID); err != nil {
+	if err := s.store.CreateInvite(r.Context(), id, body.UserID, role); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	// Emit event.invited directly to ensure robust realtime delivery
+	go s.publishEvent(context.Background(), "event.invited", map[string]any{
+		"eventId": id,
+		"userId":  body.UserID,
+	})
+
+	// Propagate to playlist-service for Realtime events (kept for backward compat or other services)
+	go func() {
+		// Use a background context with timeout for propagation
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		plReqBody, _ := json.Marshal(map[string]string{"userId": body.UserID})
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.playlistServiceURL+"/playlists/"+id+"/invites", bytes.NewReader(plReqBody))
+		if err == nil {
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("X-User-Id", userID)
+			resp, err := s.httpClient.Do(req)
+			if err != nil {
+				log.Printf("vote-service: failed to propagate invite to playlist-service: %v", err)
+			} else {
+				resp.Body.Close()
+			}
+		}
+	}()
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -79,7 +139,7 @@ func (s *HTTPServer) handleDeleteInvite(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	ev, err := loadEvent(r.Context(), s.pool, id)
+	ev, err := s.store.LoadEvent(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "event not found")
@@ -88,16 +148,35 @@ func (s *HTTPServer) handleDeleteInvite(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if ev.OwnerID != userID {
+	invitedID := chi.URLParam(r, "userId")
+	if ev.OwnerID != userID && userID != invitedID {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
-
-	invitedID := chi.URLParam(r, "userId")
-	if _, err := s.pool.Exec(r.Context(), `DELETE FROM event_invites WHERE event_id=$1 AND user_id=$2`, id, invitedID); err != nil {
+	if err := s.store.DeleteInvite(r.Context(), id, invitedID); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	// Propagate to playlist-service
+	go func() {
+		req, err := http.NewRequest(http.MethodDelete, s.playlistServiceURL+"/playlists/"+id+"/invites/"+invitedID, nil)
+		if err == nil {
+			req.Header.Set("X-User-Id", userID)
+			resp, err := s.httpClient.Do(req)
+			if err != nil {
+				log.Printf("vote-service: failed to propagate delete invite to playlist-service: %v", err)
+			} else {
+				resp.Body.Close()
+			}
+		}
+	}()
+
+	go s.publishEvent(context.Background(), "event.left", map[string]string{
+		"eventId": id,
+		"userId":  invitedID,
+	})
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -109,7 +188,7 @@ func (s *HTTPServer) handleListInvites(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ev, err := loadEvent(r.Context(), s.pool, id)
+	ev, err := s.store.LoadEvent(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "event not found")
@@ -119,27 +198,19 @@ func (s *HTTPServer) handleListInvites(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if ev.OwnerID != userID {
-		writeError(w, http.StatusForbidden, "forbidden")
-		return
-	}
-
-	rows, err := s.pool.Query(r.Context(), `SELECT user_id, created_at FROM event_invites WHERE event_id=$1 ORDER BY created_at`, id)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	defer rows.Close()
-
-	var invites []Invite
-	for rows.Next() {
-		var inv Invite
-		if err := rows.Scan(&inv.UserID, &inv.CreatedAt); err != nil {
+		invited, err := s.store.IsInvited(r.Context(), id, userID)
+		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		invites = append(invites, inv)
+		if !invited {
+			writeError(w, http.StatusForbidden, "forbidden")
+			return
+		}
 	}
-	if err := rows.Err(); err != nil {
+
+	invites, err := s.store.ListInvites(r.Context(), id)
+	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

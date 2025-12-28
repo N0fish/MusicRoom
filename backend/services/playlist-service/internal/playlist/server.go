@@ -1,19 +1,30 @@
 package playlist
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/redis/go-redis/v9"
 )
 
+// DB interface abstracts the database connection (pool or mock).
+type DB interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	BeginTx(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error)
+}
+
 type Server struct {
-	db  *pgxpool.Pool
+	db  DB
 	rdb *redis.Client
 }
 
-func NewServer(db *pgxpool.Pool, rdb *redis.Client) *Server {
+func NewServer(db DB, rdb *redis.Client) *Server {
 	return &Server{
 		db:  db,
 		rdb: rdb,
@@ -29,7 +40,8 @@ func (s *Server) Router(middlewares ...func(http.Handler) http.Handler) chi.Rout
 
 	r.Get("/health", s.handleHealth)
 
-	r.Get("/playlists", s.handleListPublicPlaylists)
+	r.Get("/playlists", s.handleListPlaylists)
+	r.Post("/realtime/event", s.handleBroadcastEvent)
 
 	r.Group(func(r chi.Router) {
 		r.Post("/playlists", s.handleCreatePlaylist)
@@ -43,6 +55,10 @@ func (s *Server) Router(middlewares ...func(http.Handler) http.Handler) chi.Rout
 		r.Get("/playlists/{id}/invites", s.handleListInvites)
 		r.Post("/playlists/{id}/invites", s.handleAddInvite)
 		r.Delete("/playlists/{id}/invites/{userId}", s.handleDeleteInvite)
+
+		// Playback & Voting
+		r.Post("/playlists/{id}/tracks/{trackId}/vote", s.handleVoteTrack)
+		r.Post("/playlists/{id}/next", s.handleNextTrack)
 	})
 
 	return r
@@ -53,4 +69,18 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"status":  "ok",
 		"service": "playlist-service",
 	})
+}
+
+// POST /realtime/event
+// Internal endpoint to broadcast events from other services (e.g. vote-service)
+func (s *Server) handleBroadcastEvent(w http.ResponseWriter, r *http.Request) {
+	// Decoding arbitrary JSON map
+	var body map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+
+	s.publishEvent(r.Context(), body)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

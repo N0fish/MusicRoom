@@ -6,7 +6,7 @@ type MusicSearchItem struct {
 	Provider        string `json:"provider"`        // "youtube"
 	ProviderTrackID string `json:"providerTrackId"` // YouTube video ID
 	ThumbnailURL    string `json:"thumbnailUrl"`    // best available thumbnail
-	DurationSec     int    `json:"durationSec,omitempty"`
+	DurationMs      int    `json:"durationMs,omitempty"`
 }
 
 type SearchResponse struct {

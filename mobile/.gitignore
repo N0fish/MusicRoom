@@ -1,0 +1,11 @@
+# iOS / Xcode / Swift
+*.xcresult
+*.xccheckout
+*.moved-aside
+*.xcuserstate
+*.swp
+*.xctimeline
+xcuserdata/
+**/xcuserdata/
+.build/
+build/
