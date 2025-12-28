@@ -47,6 +47,9 @@ func AutoMigrate(ctx context.Context, pool *pgxpool.Pool) error {
 		ALTER TABLE tracks ADD COLUMN IF NOT EXISTS duration_ms INT NOT NULL DEFAULT 0;
 		ALTER TABLE tracks ADD COLUMN IF NOT EXISTS vote_count INT NOT NULL DEFAULT 0;
 		ALTER TABLE tracks ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'queued';
+		ALTER TABLE tracks ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT '';
+		ALTER TABLE tracks ADD COLUMN IF NOT EXISTS provider_track_id TEXT NOT NULL DEFAULT '';
+		ALTER TABLE tracks ADD COLUMN IF NOT EXISTS thumbnail_url TEXT NOT NULL DEFAULT '';
 	`); err != nil {
 		return err
 	}
