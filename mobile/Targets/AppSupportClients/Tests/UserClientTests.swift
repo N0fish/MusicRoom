@@ -159,17 +159,9 @@ final class UserClientTests: XCTestCase {
         XCTAssertEqual(counter.value(for: "/auth/me"), 1)
     }
 
-    func testUploadAvatar_UsesFileFormField() async throws {
+    func testUpdateProfileEnrichesAuthInfo() async throws {
         UserMockURLProtocol.requestHandler = { request in
             guard let url = request.url else { fatalError("Missing URL") }
-            XCTAssertEqual(url.path, "/users/me/avatar/upload")
-
-            let contentType = request.value(forHTTPHeaderField: "Content-Type") ?? ""
-            XCTAssertTrue(contentType.contains("multipart/form-data"))
-
-            let body = readRequestBody(from: request)
-            XCTAssertNotNil(body.range(of: Data("name=\"file\"".utf8)))
-            XCTAssertNotNil(body.range(of: Data("filename=\"avatar.jpg\"".utf8)))
 
             let response = HTTPURLResponse(
                 url: url,
@@ -178,21 +170,133 @@ final class UserClientTests: XCTestCase {
                 headerFields: nil
             )!
 
-            let data = """
-                {
-                    "id": "profile-1",
-                    "userId": "user-1",
-                    "username": "test",
-                    "displayName": "Test User",
-                    "avatarUrl": "/avatars/custom/user-1.jpg",
-                    "hasCustomAvatar": true,
-                    "bio": null,
-                    "visibility": "public",
-                    "preferences": {"genres": [], "artists": [], "moods": []},
-                    "isPremium": false
-                }
-                """.data(using: .utf8)!
-            return (response, data)
+            switch (url.path, request.httpMethod) {
+            case ("/users/me", "PATCH"):
+                let data = """
+                    {
+                        "id": "profile-1",
+                        "userId": "user-1",
+                        "username": "test",
+                        "displayName": "Updated User",
+                        "avatarUrl": null,
+                        "hasCustomAvatar": false,
+                        "bio": null,
+                        "visibility": "public",
+                        "preferences": {"genres": [], "artists": [], "moods": []},
+                        "isPremium": false
+                    }
+                    """.data(using: .utf8)!
+                return (response, data)
+
+            case ("/auth/me", "GET"):
+                let data = """
+                    {"linkedProviders": ["google"], "email": "test@example.com"}
+                    """.data(using: .utf8)!
+                return (response, data)
+
+            default:
+                let errorResponse = HTTPURLResponse(
+                    url: url,
+                    statusCode: 404,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!
+                return (errorResponse, Data())
+            }
+        }
+
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [UserMockURLProtocol.self]
+        let session = URLSession(configuration: config)
+
+        let settings = AppSettings(
+            selectedPreset: .local,
+            localURL: URL(string: "http://localhost:8080")!,
+            hostedURL: URL(string: "http://localhost:8080")!
+        )
+
+        let client = withDependencies {
+            $0.appSettings.load = { settings }
+            $0.authentication.getAccessToken = { "token" }
+        } operation: {
+            UserClient.live(urlSession: session)
+        }
+
+        let profile = UserProfile(
+            id: "profile-1",
+            userId: "user-1",
+            username: "test",
+            displayName: "Updated User",
+            avatarUrl: nil,
+            hasCustomAvatar: false,
+            bio: nil,
+            visibility: "public",
+            preferences: UserPreferences(),
+            isPremium: false,
+            linkedProviders: [],
+            email: nil
+        )
+
+        let updatedProfile = try await client.updateProfile(profile)
+
+        XCTAssertEqual(updatedProfile.email, "test@example.com")
+        XCTAssertEqual(updatedProfile.linkedProviders, ["google"])
+    }
+
+    func testUploadAvatar_UsesFileFormField() async throws {
+        let didValidateUpload = LockIsolated(false)
+
+        UserMockURLProtocol.requestHandler = { request in
+            guard let url = request.url else { fatalError("Missing URL") }
+
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+
+            switch (url.path, request.httpMethod) {
+            case ("/users/me/avatar/upload", "POST"):
+                let contentType = request.value(forHTTPHeaderField: "Content-Type") ?? ""
+                XCTAssertTrue(contentType.contains("multipart/form-data"))
+
+                let body = readRequestBody(from: request)
+                XCTAssertNotNil(body.range(of: Data("name=\"file\"".utf8)))
+                XCTAssertNotNil(body.range(of: Data("filename=\"avatar.jpg\"".utf8)))
+                didValidateUpload.setValue(true)
+
+                let data = """
+                    {
+                        "id": "profile-1",
+                        "userId": "user-1",
+                        "username": "test",
+                        "displayName": "Test User",
+                        "avatarUrl": "/avatars/custom/user-1.jpg",
+                        "hasCustomAvatar": true,
+                        "bio": null,
+                        "visibility": "public",
+                        "preferences": {"genres": [], "artists": [], "moods": []},
+                        "isPremium": false
+                    }
+                    """.data(using: .utf8)!
+                return (response, data)
+
+            case ("/auth/me", "GET"):
+                let data = """
+                    {"linkedProviders": ["google"], "email": "test@example.com"}
+                    """.data(using: .utf8)!
+                return (response, data)
+
+            default:
+                let errorResponse = HTTPURLResponse(
+                    url: url,
+                    statusCode: 404,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!
+                return (errorResponse, Data())
+            }
         }
 
         let config = URLSessionConfiguration.ephemeral
@@ -213,6 +317,7 @@ final class UserClientTests: XCTestCase {
         }
 
         _ = try await client.uploadAvatar(Data([0x01, 0x02, 0x03]))
+        XCTAssertTrue(didValidateUpload.value)
     }
 }
 

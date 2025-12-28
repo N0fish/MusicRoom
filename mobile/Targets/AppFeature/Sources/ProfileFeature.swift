@@ -78,18 +78,16 @@ public struct ProfileFeature: Sendable {
             switch action {
             case .onAppear:
                 let fetchStatsEffect = Effect<Action>.send(.fetchStats)
-
-                if !state.hasLoaded {
-                    state.isLoading = true
-                    return .merge(
-                        fetchStatsEffect,
-                        .run { [userClient] send in
-                            await send(.profileResponse(TaskResult { try await userClient.me() }))
-                        }
-                    )
+                let profileEffect = Effect<Action>.run { [userClient] send in
+                    await send(.profileResponse(TaskResult { try await userClient.me() }))
                 }
 
-                return fetchStatsEffect
+                if state.userProfile == nil {
+                    state.isLoading = true
+                    state.errorMessage = nil
+                }
+
+                return .merge(fetchStatsEffect, profileEffect)
 
             case .profileResponse(.success(let profile)):
                 state.isLoading = false
@@ -104,7 +102,9 @@ public struct ProfileFeature: Sendable {
 
             case .profileResponse(.failure(let error)):
                 state.isLoading = false
-                state.errorMessage = error.localizedDescription
+                if state.userProfile == nil {
+                    state.errorMessage = error.localizedDescription
+                }
                 return .none
 
             case .toggleEditMode:

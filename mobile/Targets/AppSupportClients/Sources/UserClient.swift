@@ -32,7 +32,7 @@ public struct UserProfile: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, userId, username, displayName, avatarUrl, hasCustomAvatar, bio, visibility,
-            preferences, isPremium
+            preferences, isPremium, linkedProviders, email
     }
 
     public init(from decoder: Decoder) throws {
@@ -48,8 +48,9 @@ public struct UserProfile: Codable, Equatable, Sendable {
         preferences = try container.decode(UserPreferences.self, forKey: .preferences)
         isPremium = try container.decode(Bool.self, forKey: .isPremium)
 
-        email = nil
-        linkedProviders = []
+        linkedProviders =
+            try container.decodeIfPresent([String].self, forKey: .linkedProviders) ?? []
+        email = try container.decodeIfPresent(String.self, forKey: .email)
     }
 
     public init(
@@ -394,56 +395,79 @@ extension UserClient {
             }
         }
 
+        struct AuthMeResponse: Decodable {
+            let linkedProviders: [String]?
+            let email: String?
+        }
+
+        @Sendable func fetchProfile(_ baseUrl: String) async throws -> UserProfile {
+            let urlProfile = URL(string: "\(baseUrl)/users/me")!
+            var reqProfile = URLRequest(url: urlProfile)
+            reqProfile.httpMethod = "GET"
+            return try await performRequest(reqProfile)
+        }
+
+        @Sendable func fetchAuthInfo(_ baseUrl: String) async throws -> AuthMeResponse {
+            let urlAuth = URL(string: "\(baseUrl)/auth/me")!
+            var reqAuth = URLRequest(url: urlAuth)
+            reqAuth.httpMethod = "GET"
+            return try await performRequest(reqAuth)
+        }
+
+        @Sendable func applyAvatarBaseURL(_ profile: UserProfile, baseUrl: String) -> UserProfile {
+            guard let avatarUrl = profile.avatarUrl, !avatarUrl.hasPrefix("http") else {
+                return profile
+            }
+
+            return UserProfile(
+                id: profile.id,
+                userId: profile.userId,
+                username: profile.username,
+                displayName: profile.displayName,
+                avatarUrl: baseUrl + avatarUrl,
+                hasCustomAvatar: profile.hasCustomAvatar,
+                bio: profile.bio,
+                visibility: profile.visibility,
+                preferences: profile.preferences,
+                isPremium: profile.isPremium,
+                linkedProviders: profile.linkedProviders,
+                email: profile.email
+            )
+        }
+
+        @Sendable func enrichProfile(
+            _ profile: UserProfile,
+            baseUrl: String,
+            fallback: UserProfile?,
+            fallbackProviders: [String]? = nil
+        ) async -> UserProfile {
+            var updated = applyAvatarBaseURL(profile, baseUrl: baseUrl)
+
+            do {
+                let authInfo = try await fetchAuthInfo(baseUrl)
+                updated.linkedProviders = authInfo.linkedProviders ?? []
+                updated.email = authInfo.email
+            } catch {
+                print("UserClient: Failed to fetch auth/me: \(error)")
+                let resolvedProviders = fallbackProviders ?? fallback?.linkedProviders
+                if updated.linkedProviders.isEmpty, let resolvedProviders {
+                    updated.linkedProviders = resolvedProviders
+                }
+                if updated.email == nil {
+                    updated.email = fallback?.email
+                }
+            }
+
+            return updated
+        }
+
         return Self(
             me: {
                 let token = authentication.getAccessToken()
-                return try await profileCache.get(token: token) {
+                return try await profileCache.get(token: token) { fallback in
                     let baseUrl = baseURLString()
-                    // 1. Fetch User Profile
-                    let urlProfile = URL(string: "\(baseUrl)/users/me")!
-                    var reqProfile = URLRequest(url: urlProfile)
-                    reqProfile.httpMethod = "GET"
-
-                    var profile: UserProfile = try await performRequest(reqProfile)
-
-                    // 2. Fetch Auth Info (Linked Providers)
-                    let urlAuth = URL(string: "\(baseUrl)/auth/me")!
-                    var reqAuth = URLRequest(url: urlAuth)
-                    reqAuth.httpMethod = "GET"
-
-                    struct AuthMeResponse: Decodable {
-                        let linkedProviders: [String]?
-                        let email: String?
-                    }
-
-                    do {
-                        // We use performRequest but catch error locally to not fail the whole load
-                        let authInfo: AuthMeResponse = try await performRequest(reqAuth)
-                        profile.linkedProviders = authInfo.linkedProviders ?? []
-                        profile.email = authInfo.email
-                    } catch {
-                        print("UserClient: Failed to fetch auth/me: \(error)")
-                        // Keep default empty linkedProviders
-                    }
-
-                    if let avatarUrl = profile.avatarUrl, !avatarUrl.hasPrefix("http") {
-                        profile = UserProfile(
-                            id: profile.id,
-                            userId: profile.userId,
-                            username: profile.username,
-                            displayName: profile.displayName,
-                            avatarUrl: baseUrl + avatarUrl,
-                            hasCustomAvatar: profile.hasCustomAvatar,
-                            bio: profile.bio,
-                            visibility: profile.visibility,
-                            preferences: profile.preferences,
-                            isPremium: profile.isPremium,
-                            linkedProviders: profile.linkedProviders,
-                            email: profile.email
-                        )
-                    }
-
-                    return profile
+                    let profile = try await fetchProfile(baseUrl)
+                    return await enrichProfile(profile, baseUrl: baseUrl, fallback: fallback)
                 }
             },
             updateProfile: { profile in
@@ -469,26 +493,13 @@ extension UserClient {
 
                 request.httpBody = try JSONEncoder().encode(updateReq)
 
-                var updatedProfile: UserProfile = try await performRequest(request)
-
-                if let avatarUrl = updatedProfile.avatarUrl, !avatarUrl.hasPrefix("http") {
-                    updatedProfile = UserProfile(
-                        id: updatedProfile.id,
-                        userId: updatedProfile.userId,
-                        username: updatedProfile.username,
-                        displayName: updatedProfile.displayName,
-                        avatarUrl: baseUrl + avatarUrl,
-                        hasCustomAvatar: updatedProfile.hasCustomAvatar,
-                        bio: updatedProfile.bio,
-                        visibility: updatedProfile.visibility,
-                        preferences: updatedProfile.preferences,
-                        isPremium: updatedProfile.isPremium,
-                        linkedProviders: updatedProfile.linkedProviders,
-                        email: updatedProfile.email
-                    )
-                }
-                await profileCache.set(updatedProfile, token: authentication.getAccessToken())
-                return updatedProfile
+                let updatedProfile: UserProfile = try await performRequest(request)
+                let token = authentication.getAccessToken()
+                let fallback = await profileCache.cachedProfile(token: token)
+                let enrichedProfile = await enrichProfile(
+                    updatedProfile, baseUrl: baseUrl, fallback: fallback)
+                await profileCache.set(enrichedProfile, token: token)
+                return enrichedProfile
             },
             link: { provider, token in
                 let baseUrl = baseURLString()
@@ -501,50 +512,21 @@ extension UserClient {
                 request.httpBody = try JSONEncoder().encode(body)
 
                 try await performRequestNoReturn(request)
-
-                // Refetch logic duplicate? No, I can call the implementation of `me` or just fetch manually.
-                // Since I cannot call `self.me()` which is not available in closure context yet.
-                // I'll replicate the exact logic from `me` above.
-
-                // 1. Fetch User Profile
-                let urlProfile = URL(string: "\(baseUrl)/users/me")!
-                var reqProfile = URLRequest(url: urlProfile)
-                reqProfile.httpMethod = "GET"
-                var profile: UserProfile = try await performRequest(reqProfile)
-
-                // 2. Auth Info
-                let urlAuth = URL(string: "\(baseUrl)/auth/me")!
-                var reqAuth = URLRequest(url: urlAuth)
-                reqAuth.httpMethod = "GET"
-
-                struct AuthMeResponse: Decodable {
-                    let linkedProviders: [String]?
-                    let email: String?
+                let profile = try await fetchProfile(baseUrl)
+                let authToken = authentication.getAccessToken()
+                let fallback = await profileCache.cachedProfile(token: authToken)
+                var optimisticProviders = fallback?.linkedProviders ?? []
+                if !optimisticProviders.contains(provider) {
+                    optimisticProviders.append(provider)
                 }
-                do {
-                    let authInfo: AuthMeResponse = try await performRequest(reqAuth)
-                    profile.linkedProviders = authInfo.linkedProviders ?? []
-                    profile.email = authInfo.email
-                } catch {}
-
-                if let avatarUrl = profile.avatarUrl, !avatarUrl.hasPrefix("http") {
-                    profile = UserProfile(
-                        id: profile.id,
-                        userId: profile.userId,
-                        username: profile.username,
-                        displayName: profile.displayName,
-                        avatarUrl: baseUrl + avatarUrl,
-                        hasCustomAvatar: profile.hasCustomAvatar,
-                        bio: profile.bio,
-                        visibility: profile.visibility,
-                        preferences: profile.preferences,
-                        isPremium: profile.isPremium,
-                        linkedProviders: profile.linkedProviders,
-                        email: profile.email
-                    )
-                }
-                await profileCache.set(profile, token: authentication.getAccessToken())
-                return profile
+                let enrichedProfile = await enrichProfile(
+                    profile,
+                    baseUrl: baseUrl,
+                    fallback: fallback,
+                    fallbackProviders: optimisticProviders
+                )
+                await profileCache.set(enrichedProfile, token: authToken)
+                return enrichedProfile
             },
             unlink: { provider in
                 let baseUrl = baseURLString()
@@ -553,44 +535,19 @@ extension UserClient {
                 request.httpMethod = "DELETE"
 
                 try await performRequestNoReturn(request)
-
-                // Re-fetch logic
-                let urlProfile = URL(string: "\(baseUrl)/users/me")!
-                var reqProfile = URLRequest(url: urlProfile)
-                reqProfile.httpMethod = "GET"
-                var profile: UserProfile = try await performRequest(reqProfile)
-
-                let urlAuth = URL(string: "\(baseUrl)/auth/me")!
-                var reqAuth = URLRequest(url: urlAuth)
-                reqAuth.httpMethod = "GET"
-                struct AuthMeResponse: Decodable {
-                    let linkedProviders: [String]?
-                    let email: String?
-                }
-                do {
-                    let authInfo: AuthMeResponse = try await performRequest(reqAuth)
-                    profile.linkedProviders = authInfo.linkedProviders ?? []
-                    profile.email = authInfo.email
-                } catch {}
-
-                if let avatarUrl = profile.avatarUrl, !avatarUrl.hasPrefix("http") {
-                    profile = UserProfile(
-                        id: profile.id,
-                        userId: profile.userId,
-                        username: profile.username,
-                        displayName: profile.displayName,
-                        avatarUrl: baseUrl + avatarUrl,
-                        hasCustomAvatar: profile.hasCustomAvatar,
-                        bio: profile.bio,
-                        visibility: profile.visibility,
-                        preferences: profile.preferences,
-                        isPremium: profile.isPremium,
-                        linkedProviders: profile.linkedProviders,
-                        email: profile.email
-                    )
-                }
-                await profileCache.set(profile, token: authentication.getAccessToken())
-                return profile
+                let profile = try await fetchProfile(baseUrl)
+                let authToken = authentication.getAccessToken()
+                let fallback = await profileCache.cachedProfile(token: authToken)
+                let optimisticProviders =
+                    (fallback?.linkedProviders ?? []).filter { $0 != provider }
+                let enrichedProfile = await enrichProfile(
+                    profile,
+                    baseUrl: baseUrl,
+                    fallback: fallback,
+                    fallbackProviders: optimisticProviders
+                )
+                await profileCache.set(enrichedProfile, token: authToken)
+                return enrichedProfile
             },
             changePassword: { current, new in
                 let baseUrl = baseURLString()
@@ -611,26 +568,13 @@ extension UserClient {
                 request.httpMethod = "POST"
 
                 // This endpoint returns UserProfile.
-                var updatedProfile: UserProfile = try await performRequest(request)
-
-                if let avatarUrl = updatedProfile.avatarUrl, !avatarUrl.hasPrefix("http") {
-                    updatedProfile = UserProfile(
-                        id: updatedProfile.id,
-                        userId: updatedProfile.userId,
-                        username: updatedProfile.username,
-                        displayName: updatedProfile.displayName,
-                        avatarUrl: baseUrl + avatarUrl,
-                        hasCustomAvatar: updatedProfile.hasCustomAvatar,
-                        bio: updatedProfile.bio,
-                        visibility: updatedProfile.visibility,
-                        preferences: updatedProfile.preferences,
-                        isPremium: updatedProfile.isPremium,
-                        linkedProviders: updatedProfile.linkedProviders,
-                        email: updatedProfile.email
-                    )
-                }
-                await profileCache.set(updatedProfile, token: authentication.getAccessToken())
-                return updatedProfile
+                let updatedProfile: UserProfile = try await performRequest(request)
+                let token = authentication.getAccessToken()
+                let fallback = await profileCache.cachedProfile(token: token)
+                let enrichedProfile = await enrichProfile(
+                    updatedProfile, baseUrl: baseUrl, fallback: fallback)
+                await profileCache.set(enrichedProfile, token: token)
+                return enrichedProfile
             },
             becomePremium: {
                 let baseUrl = baseURLString()
@@ -638,26 +582,13 @@ extension UserClient {
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
 
-                var updatedProfile: UserProfile = try await performRequest(request)
-
-                if let avatarUrl = updatedProfile.avatarUrl, !avatarUrl.hasPrefix("http") {
-                    updatedProfile = UserProfile(
-                        id: updatedProfile.id,
-                        userId: updatedProfile.userId,
-                        username: updatedProfile.username,
-                        displayName: updatedProfile.displayName,
-                        avatarUrl: baseUrl + avatarUrl,
-                        hasCustomAvatar: updatedProfile.hasCustomAvatar,
-                        bio: updatedProfile.bio,
-                        visibility: updatedProfile.visibility,
-                        preferences: updatedProfile.preferences,
-                        isPremium: updatedProfile.isPremium,
-                        linkedProviders: updatedProfile.linkedProviders,
-                        email: updatedProfile.email
-                    )
-                }
-                await profileCache.set(updatedProfile, token: authentication.getAccessToken())
-                return updatedProfile
+                let updatedProfile: UserProfile = try await performRequest(request)
+                let token = authentication.getAccessToken()
+                let fallback = await profileCache.cachedProfile(token: token)
+                let enrichedProfile = await enrichProfile(
+                    updatedProfile, baseUrl: baseUrl, fallback: fallback)
+                await profileCache.set(enrichedProfile, token: token)
+                return enrichedProfile
             },
             uploadAvatar: { imageData in
                 let baseUrl = baseURLString()
@@ -678,26 +609,13 @@ extension UserClient {
                 body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
                 request.httpBody = body
 
-                var updatedProfile: UserProfile = try await performRequest(request)
-
-                if let avatarUrl = updatedProfile.avatarUrl, !avatarUrl.hasPrefix("http") {
-                    updatedProfile = UserProfile(
-                        id: updatedProfile.id,
-                        userId: updatedProfile.userId,
-                        username: updatedProfile.username,
-                        displayName: updatedProfile.displayName,
-                        avatarUrl: baseUrl + avatarUrl,
-                        hasCustomAvatar: updatedProfile.hasCustomAvatar,
-                        bio: updatedProfile.bio,
-                        visibility: updatedProfile.visibility,
-                        preferences: updatedProfile.preferences,
-                        isPremium: updatedProfile.isPremium,
-                        linkedProviders: updatedProfile.linkedProviders,
-                        email: updatedProfile.email
-                    )
-                }
-                await profileCache.set(updatedProfile, token: authentication.getAccessToken())
-                return updatedProfile
+                let updatedProfile: UserProfile = try await performRequest(request)
+                let token = authentication.getAccessToken()
+                let fallback = await profileCache.cachedProfile(token: token)
+                let enrichedProfile = await enrichProfile(
+                    updatedProfile, baseUrl: baseUrl, fallback: fallback)
+                await profileCache.set(enrichedProfile, token: token)
+                return enrichedProfile
             }
         )
     }
@@ -721,9 +639,10 @@ private actor UserProfileCache {
 
     func get(
         token: String?,
-        fetch: @escaping @Sendable () async throws -> UserProfile
+        fetch: @escaping @Sendable (_ fallback: UserProfile?) async throws -> UserProfile
     ) async throws -> UserProfile {
         let now = Date()
+        let fallback = entry?.token == token ? entry?.profile : nil
         if let entry, entry.token == token, now.timeIntervalSince(entry.fetchedAt) < ttl {
             return entry.profile
         }
@@ -742,7 +661,7 @@ private actor UserProfileCache {
         }
 
         let task = Task {
-            try await fetch()
+            try await fetch(fallback)
         }
         inFlight = task
         inFlightToken = token
@@ -763,5 +682,10 @@ private actor UserProfileCache {
         entry = Entry(profile: profile, token: token, fetchedAt: Date())
         inFlight = nil
         inFlightToken = nil
+    }
+
+    func cachedProfile(token: String?) -> UserProfile? {
+        guard let entry, entry.token == token else { return nil }
+        return entry.profile
     }
 }

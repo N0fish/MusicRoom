@@ -421,6 +421,8 @@ final class ProfileFeatureTests: XCTestCase {
             linkedProviders: [], email: nil
         )
 
+        let meCalled = LockIsolated(false)
+
         var state = ProfileFeature.State()
         state.userProfile = profile
         state.hasLoaded = true  // Simulate already loaded
@@ -432,19 +434,23 @@ final class ProfileFeatureTests: XCTestCase {
             $0.musicRoomAPI.getStats = {
                 MusicRoomAPIClient.UserStats(eventsHosted: 5, votesCast: 10)
             }
+            $0.user.me = {
+                meCalled.setValue(true)
+                return profile
+            }
         }
 
-        // Action: .onAppear
+        store.exhaustivity = .off
+
         await store.send(ProfileFeature.Action.onAppear)
-        // Expect NO state change immediately (isLoading remains false)
-
         await store.receive(.fetchStats)
-
         await store.receive(
             .statsResponse(.success(MusicRoomAPIClient.UserStats(eventsHosted: 5, votesCast: 10)))
         ) {
             $0.userStats = MusicRoomAPIClient.UserStats(eventsHosted: 5, votesCast: 10)
         }
+
+        XCTAssertTrue(meCalled.value)
     }
 
     func testBecomePremium_Success() async {
