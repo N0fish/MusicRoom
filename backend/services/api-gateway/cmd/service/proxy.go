@@ -59,10 +59,21 @@ func mustNewReverseProxy(target string) http.Handler {
 	}
 
 	origDirector := proxy.Director
+
 	proxy.Director = func(req *http.Request) {
+		incomingHost := req.Host // AVANT origDirector
+
 		origDirector(req)
-		req.Header.Set("X-Forwarded-Host", req.Host)
-		req.Header.Set("X-Forwarded-Proto", "http")
+
+		// Assure-toi que l'upstream Host est bien celui du backend
+		req.Host = u.Host
+
+		// Forwarded headers = info sur le client -> gateway, pas gateway -> backend
+		req.Header.Set("X-Forwarded-Host", incomingHost)
+
+		// Proto côté client (si ta gateway reçoit en HTTPS sur Render, mets "https")
+		// Si tu ne sais pas, ne force pas: laisse le reverse proxy gérer.
+		// req.Header.Set("X-Forwarded-Proto", "https")
 	}
 
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {

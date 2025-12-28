@@ -77,7 +77,7 @@ public enum BackendEnvironmentPreset: String, CaseIterable, Codable, Sendable {
     public var defaultURL: URL {
         switch self {
         case .local:
-            return URL(string: "http://localhost:8080")!
+            return URL(string: "https://musicroom-4k3a.onrender.com")!
         case .hosted:
             return URL(string: "https://api.musicroom.app")!
         }
