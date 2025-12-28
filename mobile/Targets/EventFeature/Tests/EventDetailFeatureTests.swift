@@ -414,6 +414,57 @@ final class EventDetailFeatureTests: XCTestCase {
         await store.receive(EventDetailFeature.Action.loadEvent)
     }
 
+    func testInviteFriendFlow() async {
+        let clock = TestClock()
+        let event = Event(
+            id: UUID(), name: "Invite Event", visibility: .privateEvent, ownerId: "u1",
+            licenseMode: .invitedOnly, createdAt: Date(), updatedAt: Date()
+        )
+        let friend = Friend(
+            id: "f1",
+            userId: "u2",
+            username: "friend",
+            displayName: "Friend Name",
+            avatarUrl: nil,
+            isPremium: false
+        )
+
+        let store = TestStore(initialState: EventDetailFeature.State(event: event)) {
+            EventDetailFeature()
+        } withDependencies: {
+            $0.friendsClient.listFriends = { [friend] }
+            $0.musicRoomAPI.inviteUser = { _, _ in }
+            $0.continuousClock = clock
+        }
+
+        await store.send(.inviteButtonTapped) {
+            $0.isInvitingFriends = true
+        }
+
+        await store.receive(.inviteFriendsLoaded(.success([friend]))) {
+            $0.isInvitingFriends = false
+            $0.friends = [friend]
+            $0.isShowingInviteSheet = true
+        }
+
+        await store.send(.inviteFriendTapped(friend)) {
+            $0.isShowingInviteSheet = false
+        }
+
+        await store.receive(.inviteFriendResponse(.success(friend))) {
+            $0.userAlert = EventDetailFeature.UserAlert(
+                title: "Invite Sent",
+                message: "Invited Friend Name to this event.",
+                type: .success
+            )
+        }
+
+        await clock.advance(by: .seconds(2))
+        await store.receive(.dismissInfo) {
+            $0.userAlert = nil
+        }
+    }
+
     func testCanVote_PropertyCheck() {
         var state = EventDetailFeature.State(
             event: .init(

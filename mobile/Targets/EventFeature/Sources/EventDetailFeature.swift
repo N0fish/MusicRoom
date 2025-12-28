@@ -22,6 +22,9 @@ public struct EventDetailFeature: Sendable {
         public var currentUserId: String?
         public var timeRemaining: TimeInterval?
         public var currentTrackDuration: TimeInterval?
+        public var friends: [Friend] = []
+        public var isInvitingFriends: Bool = false
+        public var isShowingInviteSheet: Bool = false
         public var currentVideoId: String? {
             guard let eventCurrentId = metadata?.currentTrackId,
                 let track = tracks.first(where: { $0.id == eventCurrentId })
@@ -80,6 +83,10 @@ public struct EventDetailFeature: Sendable {
         case transferOwnership(PublicUserProfile)
         case transferOwnershipResponse(TaskResult<String>)
         case confirmationDialog(PresentationAction<Action>)
+        case inviteButtonTapped
+        case inviteFriendsLoaded(TaskResult<[Friend]>)
+        case inviteFriendTapped(Friend)
+        case inviteFriendResponse(TaskResult<Friend>)
 
         // Search
         case addTrackButtonTapped
@@ -121,6 +128,7 @@ public struct EventDetailFeature: Sendable {
     @Dependency(\.persistence) var persistence
     @Dependency(\.continuousClock) var clock
     @Dependency(\.user) var user
+    @Dependency(\.friendsClient) var friendsClient
 
     public struct UserAlert: Equatable, Sendable {
         public var title: String
@@ -687,6 +695,78 @@ public struct EventDetailFeature: Sendable {
             case .participantsButtonTapped:
                 state.isShowingParticipants = true
                 return .send(.loadParticipants)
+
+            case .inviteButtonTapped:
+                state.isInvitingFriends = true
+                return .run { send in
+                    await send(
+                        .inviteFriendsLoaded(
+                            TaskResult {
+                                try await friendsClient.listFriends()
+                            }
+                        )
+                    )
+                }
+
+            case .inviteFriendsLoaded(.success(let friends)):
+                state.isInvitingFriends = false
+                state.friends = friends
+                if friends.isEmpty {
+                    state.userAlert = UserAlert(
+                        title: "No Friends",
+                        message: "Add friends first to send invites.",
+                        type: .info
+                    )
+                    return .none
+                }
+                state.isShowingInviteSheet = true
+                return .none
+
+            case .inviteFriendsLoaded(.failure(let error)):
+                state.isInvitingFriends = false
+                state.userAlert = UserAlert(
+                    title: "Invite Failed",
+                    message: "Could not load friends: \(error.localizedDescription)",
+                    type: .error
+                )
+                return .none
+
+            case .inviteFriendTapped(let friend):
+                state.isShowingInviteSheet = false
+                return .run { [eventId = state.event.id, friend] send in
+                    await send(
+                        .inviteFriendResponse(
+                            TaskResult {
+                                try await musicRoomAPI.inviteUser(eventId, friend.userId)
+                                return friend
+                            }
+                        )
+                    )
+                }
+
+            case .inviteFriendResponse(.success(let friend)):
+                let displayName = friend.displayName.isEmpty ? friend.username : friend.displayName
+                state.userAlert = UserAlert(
+                    title: "Invite Sent",
+                    message: "Invited \(displayName) to this event.",
+                    type: .success
+                )
+                let shouldReloadParticipants = state.isShowingParticipants
+                return .run { send in
+                    try await clock.sleep(for: .seconds(2))
+                    await send(.dismissInfo)
+                    if shouldReloadParticipants {
+                        await send(.loadParticipants)
+                    }
+                }
+
+            case .inviteFriendResponse(.failure(let error)):
+                state.userAlert = UserAlert(
+                    title: "Invite Failed",
+                    message: error.localizedDescription,
+                    type: .error
+                )
+                return .none
 
             case .loadParticipants:
                 state.isLoadingParticipants = true

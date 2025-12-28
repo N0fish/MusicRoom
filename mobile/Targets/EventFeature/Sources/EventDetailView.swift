@@ -73,11 +73,26 @@ public struct EventDetailView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    store.send(.participantsButtonTapped)
-                } label: {
-                    Image(systemName: "person.2.fill")
-                        .foregroundStyle(.white)
+                HStack(spacing: 16) {
+                    if isOwner {
+                        if store.isInvitingFriends {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Button {
+                                store.send(.inviteButtonTapped)
+                            } label: {
+                                Image(systemName: "person.crop.circle.badge.plus")
+                                    .foregroundStyle(.white)
+                            }
+                        }
+                    }
+                    Button {
+                        store.send(.participantsButtonTapped)
+                    } label: {
+                        Image(systemName: "person.2.fill")
+                            .foregroundStyle(.white)
+                    }
                 }
             }
         }
@@ -87,6 +102,11 @@ public struct EventDetailView: View {
         .sheet(isPresented: $store.isShowingParticipants) {
             ParticipantsListView(store: store)
                 .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $store.isShowingInviteSheet) {
+            InviteEventFriendSheet(friends: store.friends) { friend in
+                store.send(.inviteFriendTapped(friend))
+            }
         }
     }
 }
@@ -319,6 +339,60 @@ struct ParticipantRow: View {
                     Text("@\(profile.username)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
+struct InviteEventFriendSheet: View {
+    let friends: [Friend]
+    let onSelect: (Friend) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List(friends) { friend in
+                Button {
+                    onSelect(friend)
+                    dismiss()
+                } label: {
+                    HStack(spacing: 12) {
+                        PremiumAvatarView(
+                            url: friend.avatarUrl,
+                            isPremium: friend.isPremium,
+                            size: 50
+                        )
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(friend.displayName.isEmpty ? friend.username : friend.displayName)
+                                .font(.body)
+                                .fontWeight(.medium)
+                                .foregroundColor(.primary)
+
+                            Text("@\(friend.username)")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "paperplane")
+                            .foregroundColor(.accentColor)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .listStyle(.plain)
+            .navigationTitle("Invite Friend")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
                 }
             }
         }
