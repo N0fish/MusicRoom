@@ -28,7 +28,7 @@ type App struct {
 
 type Playlist struct {
 	ID          string    `json:"id"`
-	OwnerID     string    `json:"json:"ownerId"`
+	OwnerID     string    `json:"ownerId"`
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
 	IsPublic    bool      `json:"isPublic"`

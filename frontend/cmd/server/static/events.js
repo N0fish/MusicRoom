@@ -138,7 +138,8 @@ async function loadEvent(id) {
         }
     }
     
-    checkActiveRound();
+    checkActiveRound(ev);
+    connectEventWS(id);
 }
 
 window.openEventSettings = async function() {
@@ -354,29 +355,6 @@ window.sendInvite = async function() {
         userIdInput.value = '';
         loadInvitesList(currentEventIdForSettings);
         window.showToast('User invited.');
-
-        // Sync invite to playlist
-        try {
-            const eventName = document.getElementById('ev-name')?.textContent;
-            if (eventName && currentEventIdForSettings) {
-                // Fetch event details to ensure context
-                let eventObj = null;
-                const evRes = await authService.fetchWithAuth(authService.apiUrl + '/events/' + currentEventIdForSettings);
-                if (evRes.ok) eventObj = await evRes.json();
-
-                const playlistId = await getOrCreateEventPlaylist(currentEventIdForSettings, eventName, eventObj);
-                if (playlistId) {
-                    await authService.fetchWithAuth(authService.apiUrl + `/playlists/${playlistId}/invites`, {
-                        method: 'POST',
-                        headers: { 'content-type': 'application/json' },
-                        body: JSON.stringify({ userId })
-                    });
-                }
-            }
-        } catch (e) {
-            console.error('Failed to sync invite to playlist', e);
-        }
-
     } else {
         const err = await res.json().catch(() => ({}));
         window.showAlert({ title: 'Error', content: err.error || 'Failed to invite user.' });
@@ -389,27 +367,6 @@ window.removeInvite = async function(userId) {
     });
     if (res.ok) {
         loadInvitesList(currentEventIdForSettings);
-
-        // Sync remove invite from playlist
-        try {
-            const eventName = document.getElementById('ev-name')?.textContent;
-            if (eventName && currentEventIdForSettings) {
-                // Fetch event details
-                let eventObj = null;
-                const evRes = await authService.fetchWithAuth(authService.apiUrl + '/events/' + currentEventIdForSettings);
-                if (evRes.ok) eventObj = await evRes.json();
-
-                const playlistId = await getOrCreateEventPlaylist(currentEventIdForSettings, eventName, eventObj);
-                if (playlistId) {
-                    await authService.fetchWithAuth(authService.apiUrl + `/playlists/${playlistId}/invites/${userId}`, {
-                        method: 'DELETE'
-                    });
-                }
-            }
-        } catch (e) {
-            console.error('Failed to sync remove invite from playlist', e);
-        }
-
     } else {
         window.showAlert({ title: 'Error', content: 'Failed to remove invite.' });
     }
@@ -417,21 +374,21 @@ window.removeInvite = async function(userId) {
 
 window.saveEventSettings = async function() {
     const visibility = document.getElementById('setting-visibility').value;
-    const licenseMode = document.getElementById('setting-license').value;
+    const license_mode = document.getElementById('setting-license').value;
     
-    const payload = { visibility, licenseMode };
+    const payload = { visibility, license_mode };
 
-    if (licenseMode === 'geo_time') {
+    if (license_mode === 'geo_time') {
         const latStr = document.getElementById('setting-geo-lat').value;
         const lngStr = document.getElementById('setting-geo-lng').value;
         const radStr = document.getElementById('setting-geo-radius').value;
 
         if (latStr && lngStr) {
-            payload.geoLat = parseFloat(latStr);
-            payload.geoLng = parseFloat(lngStr);
+            payload.geo_lat = parseFloat(latStr);
+            payload.geo_lng = parseFloat(lngStr);
         }
         if (radStr) {
-            payload.geoRadiusM = parseInt(radStr, 10);
+            payload.geo_radius_m = parseInt(radStr, 10);
         }
     }
     
@@ -445,49 +402,6 @@ window.saveEventSettings = async function() {
         window.closeModal();
         window.showAlert({ title: 'Success', content: 'Settings updated.' });
         loadEvent(currentEventIdForSettings); // Refresh main view
-        
-        // Sync playlist settings
-        try {
-            const eventName = document.getElementById('ev-name')?.textContent;
-            if (eventName) {
-                // Pass new settings via event object simulation to get/create correctly
-                const eventObj = { visibility, licenseMode };
-                const playlistId = await getOrCreateEventPlaylist(currentEventIdForSettings, eventName, eventObj);
-                
-                if (playlistId) {
-                    let plPublic = true;
-                    
-                    // Enforce Private Playlist if Event is Private
-                    if (visibility === 'private') {
-                        plPublic = false;
-                    }
-                    
-                    await authService.fetchWithAuth(authService.apiUrl + '/playlists/' + playlistId, {
-                        method: 'PATCH',
-                        headers: { 'content-type': 'application/json' },
-                        body: JSON.stringify({ isPublic: plPublic, editMode: 'invited' })
-                    });
-
-                    // Sync invites to ensure "exact same users invited"
-                    const invitesRes = await authService.fetchWithAuth(authService.apiUrl + `/events/${currentEventIdForSettings}/invites`);
-                    if (invitesRes.ok) {
-                        const invites = await invitesRes.json();
-                        if (invites && invites.length > 0) {
-                            await Promise.all(invites.map(inv => 
-                                authService.fetchWithAuth(authService.apiUrl + `/playlists/${playlistId}/invites`, {
-                                    method: 'POST',
-                                    headers: { 'content-type': 'application/json' },
-                                    body: JSON.stringify({ userId: inv.userId })
-                                })
-                            ));
-                        }
-                    }
-                }
-            }
-        } catch (e) {
-            console.error('Failed to sync playlist settings', e);
-        }
-
     } else {
         const err = await res.json().catch(() => ({}));
         window.showAlert({ title: 'Error', content: err.error || 'Update failed.' });
@@ -602,74 +516,8 @@ window.mrState = window.mrState || {};
 window.mrState.eventPlaylistIds = window.mrState.eventPlaylistIds || {};
 
 async function getOrCreateEventPlaylist(eventId, eventName, eventObj) {
-    // Check cache first
-    if (eventId && window.mrState.eventPlaylistIds[eventId]) {
-        return window.mrState.eventPlaylistIds[eventId];
-    }
-
-    const res = await authService.fetchWithAuth(authService.apiUrl + '/playlists');
-    if (!res.ok) return null;
-    const playlists = await res.json();
-
-    // Naming convention for event playlists
-    const expectedName = `Event: ${eventName}`; 
-    const existing = playlists.find(p => p.name === expectedName || p.name === `Event: ${eventName} (${eventId})`);
-    
-    if (existing) {
-        if (eventId) window.mrState.eventPlaylistIds[eventId] = existing.id;
-        return existing.id;
-    }
-
-    // Determine settings
-    let isPublic = true;
-    const editMode = 'invited'; // ALWAYS restricted for event playlists (owner + invited)
-
-    // If event object provided, enforce rules
-    if (eventObj) {
-        // Rule: If Event is Private => Playlist Private
-        if (eventObj.visibility === 'private') {
-            isPublic = false;
-        }
-    }
-
-    // Create if not exists
-    const createRes = await authService.fetchWithAuth(authService.apiUrl + '/playlists', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: expectedName, isPublic: isPublic, editMode: editMode })
-    });
-
-    if (createRes.ok) {
-        const newPl = await createRes.json();
-        const playlistId = newPl.id;
-        
-        if (eventId) window.mrState.eventPlaylistIds[eventId] = playlistId;
-
-        // Sync initial invites from event to playlist
-        if (eventId) {
-            try {
-                const invitesRes = await authService.fetchWithAuth(authService.apiUrl + `/events/${eventId}/invites`);
-                if (invitesRes.ok) {
-                    const invites = await invitesRes.json();
-                    if (invites && invites.length > 0) {
-                        // Add each invite to the playlist
-                        await Promise.all(invites.map(inv => 
-                            authService.fetchWithAuth(authService.apiUrl + `/playlists/${playlistId}/invites`, {
-                                method: 'POST',
-                                headers: { 'content-type': 'application/json' },
-                                body: JSON.stringify({ userId: inv.userId })
-                            })
-                        ));
-                    }
-                }
-            } catch (e) {
-                console.error('Failed to sync initial invites to playlist', e);
-            }
-        }
-
-        return playlistId;
-    }
-    return null;
+    // Backend now automatically creates a playlist with the same ID as the event
+    return eventId;
 }
 
 async function syncEventPlaylist(eventId, eventName) {
@@ -764,6 +612,51 @@ async function syncEventPlaylist(eventId, eventName) {
 window.castVote = async function(trackIdPayload) {
     const eventId = document.getElementById('ev-id').textContent;
     const eventName = document.getElementById('ev-name').textContent;
+
+    // 1. Enforce one-vote limit: find and remove existing vote if present
+    try {
+        const tallyRes = await authService.fetchWithAuth(authService.apiUrl + `/events/${eventId}/tally`);
+        if (tallyRes.ok) {
+            const tally = await tallyRes.json();
+            if (tally) {
+                // Parse the target track ID
+                let targetId = trackIdPayload;
+                try {
+                    if (trackIdPayload.startsWith('{')) {
+                        const parsed = JSON.parse(trackIdPayload);
+                        targetId = parsed.id || parsed.providerTrackId || trackIdPayload;
+                    }
+                } catch (e) {}
+
+                const myVote = tally.find(r => r.isMyVote);
+                if (myVote) {
+                    // Parse my current vote ID
+                    let myVoteId = myVote.track;
+                    try {
+                        if (myVote.track.startsWith('{')) {
+                            const parsed = JSON.parse(myVote.track);
+                            myVoteId = parsed.id || parsed.providerTrackId || myVote.track;
+                        }
+                    } catch (e) {}
+
+                    if (myVoteId === targetId) {
+                        window.showAlert({ title: 'Info', content: 'You already voted for this track.' });
+                        return;
+                    }
+                    
+                    // Remove previous vote
+                    await authService.fetchWithAuth(authService.apiUrl + `/events/${eventId}/vote`, {
+                        method: 'DELETE',
+                        headers: { 'content-type': 'application/json' },
+                        body: JSON.stringify({ trackId: myVote.track })
+                    });
+                }
+            }
+        }
+    } catch (e) {
+        console.error('Failed to manage previous vote', e);
+    }
+
     let payload = { trackId: trackIdPayload };
 
     if (currentEventLicenseMode === 'geo_time') {
@@ -808,20 +701,32 @@ window.castVote = async function(trackIdPayload) {
 // We store the interval ID in the global mrState to persist across HTMX swaps/re-executions
 window.mrState = window.mrState || {};
 
-window.startVotingRound = function(passedEventId) {
+window.startVotingRound = async function(passedEventId) {
     // Get current event ID (from arg or DOM)
     const eventId = passedEventId || document.getElementById('ev-id')?.textContent;
     if (!eventId) return;
 
     // 1 minute default
     const durationSec = 60;
-    const now = Date.now();
-    const endTime = now + (durationSec * 1000);
+    const now = new Date();
+    const endTime = new Date(now.getTime() + (durationSec * 1000));
+    const endTimeISO = endTime.toISOString();
 
-    // Persist to LocalStorage
-    localStorage.setItem('mr_round_end_' + eventId, endTime);
+    // 1. Sync to server so all clients see the timer
+    try {
+        await authService.fetchWithAuth(authService.apiUrl + '/events/' + eventId, {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ vote_end: endTimeISO })
+        });
+    } catch (e) {
+        console.error('Failed to sync round end to server', e);
+    }
+
+    // 2. Persist to LocalStorage
+    localStorage.setItem('mr_round_end_' + eventId, endTime.getTime());
     
-    startTimerInterval(eventId, endTime);
+    startTimerInterval(eventId, endTime.getTime());
     
     // Only toast if on page
     if (document.getElementById('ev-id')?.textContent === eventId) {
@@ -882,13 +787,24 @@ function updateTimerUI(isActive, eventId) {
 }
 
 // Check for active round on load
-function checkActiveRound() {
+function checkActiveRound(ev) {
     const eventId = document.getElementById('ev-id')?.textContent;
     if (!eventId) return;
 
-    const storedEnd = localStorage.getItem('mr_round_end_' + eventId);
-    if (storedEnd) {
-        const endTime = parseInt(storedEnd, 10);
+    let endTime = null;
+
+    // 1. Prefer server state if available
+    if (ev && ev.voteEnd) {
+        endTime = new Date(ev.voteEnd).getTime();
+    } else {
+        // 2. Fallback to LocalStorage
+        const storedEnd = localStorage.getItem('mr_round_end_' + eventId);
+        if (storedEnd) {
+            endTime = parseInt(storedEnd, 10);
+        }
+    }
+
+    if (endTime) {
         const now = Date.now();
         if (endTime > now) {
             // Resume
@@ -896,10 +812,43 @@ function checkActiveRound() {
             startTimerInterval(eventId, endTime);
         } else {
             // Expired while away? Trigger end logic immediately
-            console.log('Round expired while away, ending now.');
+            console.log('Round expired, ending now.');
             endVotingRound(eventId);
         }
     }
+}
+
+var eventWS = null;
+function connectEventWS(eventId) {
+    if (eventWS) {
+        eventWS.close();
+        eventWS = null;
+    }
+    
+    const wsUrl = "{{.WS}}"; // This will be templated if loaded through Chi or inherited from parent
+    // Use window.WS_URL if available
+    const url = window.WS_URL || wsUrl;
+    if (!url || url.includes('{' + '{')) return;
+
+    eventWS = new WebSocket(url);
+    
+    eventWS.onmessage = (e) => {
+        try {
+            const msg = JSON.parse(e.data);
+            if (msg && msg.payload && (msg.payload.eventId === eventId || msg.payload.playlistId === eventId)) {
+                const type = msg.type;
+                // If a track was added to the event playlist, it means a round ended. 
+                // Refresh everything.
+                if (type === 'track.added' || type === 'track.deleted' || type === 'event.updated') {
+                    loadEvent(eventId);
+                    loadTally(eventId);
+                }
+                if (type === 'vote.cast' || type === 'vote.removed') {
+                    loadTally(eventId);
+                }
+            }
+        } catch (err) {}
+    };
 }
 
 window.openCreateEventModal = function() {
@@ -915,15 +864,26 @@ window.openCreateEventModal = function() {
       const res = await authService.fetchWithAuth(authService.apiUrl + '/events', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: name, visibility: 'public', licenseMode: 'everyone' })
+        body: JSON.stringify({ name: name, visibility: 'public', license_mode: 'everyone' })
       })
 
       if (res.ok) {
         const newEvent = await res.json().catch(() => null);
         
-        // Auto-create playlist
+        // Rename the auto-created playlist to match preference (since backend uses "Event: " prefix)
         if (newEvent && newEvent.id) {
-            getOrCreateEventPlaylist(newEvent.id, newEvent.name, newEvent);
+            try {
+                await authService.fetchWithAuth(authService.apiUrl + '/playlists/' + newEvent.id, {
+                    method: 'PATCH',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ 
+                        name: newEvent.name,
+                        description: "Event playlist for " + newEvent.name
+                    })
+                });
+            } catch (e) {
+                console.error('Failed to rename auto-created playlist', e);
+            }
         }
 
         window.showAlert({ title: 'Success', content: 'Event created successfully!' })
@@ -954,22 +914,18 @@ function renameEvent(id, currentName) {
       if (res.ok) {
          await refreshEvents();
          
-         // Rename Playlist
+         // Update associated playlist description
          try {
-             // Use OLD name to find it
-             const playlistId = await getOrCreateEventPlaylist(id, currentName, null);
-             if (playlistId) {
-                 const newPlaylistName = `Event: ${newName}`;
-                 await authService.fetchWithAuth(authService.apiUrl + '/playlists/' + playlistId, {
-                    method: 'PATCH',
-                    headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({ name: newPlaylistName })
-                 });
-             }
+             await authService.fetchWithAuth(authService.apiUrl + '/playlists/' + id, {
+                method: 'PATCH',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ 
+                    description: "Event playlist for " + newName
+                })
+             });
          } catch (e) {
-             console.error('Failed to rename associated playlist', e);
+             console.error('Failed to update playlist description', e);
          }
-
       } else {
          const err = await res.json().catch(() => ({}))
          window.showAlert({ title: 'Error', content: (err && err.error) || 'Unknown error' })
@@ -1023,19 +979,13 @@ async function deleteEvent(id) {
                 await refreshEvents();
                 window.showAlert({ title: 'Success', content: 'Event deleted.' });
                 
-                // Delete Playlist
-                if (eventName) {
-                    try {
-                        // Pass null as eventObj since event is gone, but logic handles name-based lookup
-                        const playlistId = await getOrCreateEventPlaylist(id, eventName, null);
-                        if (playlistId) {
-                            await authService.fetchWithAuth(authService.apiUrl + '/playlists/' + playlistId, {
-                                method: 'DELETE'
-                            });
-                        }
-                    } catch (e) {
-                        console.error('Failed to delete associated playlist', e);
-                    }
+                // Delete associated playlist
+                try {
+                    await authService.fetchWithAuth(authService.apiUrl + `/playlists/${id}`, {
+                        method: 'DELETE'
+                    });
+                } catch (e) {
+                    console.error('Failed to delete associated playlist', e);
                 }
             } else {
                 const err = await res.json().catch(() => ({}))
@@ -1254,6 +1204,13 @@ async function endVotingRound(eventId) {
 
         // FINAL SUCCESS: Remove the timer key
         localStorage.removeItem('mr_round_end_' + eventId);
+        
+        // Clear on server
+        await authService.fetchWithAuth(authService.apiUrl + '/events/' + eventId, {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ vote_end: "" })
+        });
         
         if(onPage) window.showToast('Round finalized.');
 

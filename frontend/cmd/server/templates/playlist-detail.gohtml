@@ -40,14 +40,7 @@
 {
     const id = "{{ .PlaylistID }}";
     if (id) {
-        loadPlaylist(id).then(() => {
-            const plName = document.getElementById('pl-name').textContent;
-            if (plName.startsWith('Event: ')) {
-                // Hide settings button for event playlists to prevent modification
-                const btn = document.getElementById('pl-settings-btn');
-                if (btn) btn.style.display = 'none';
-            }
-        });
+        loadPlaylist(id);
     }
 }
 </script>

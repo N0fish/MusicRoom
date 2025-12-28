@@ -11,13 +11,15 @@ async function loadPlaylist(playlistId) {
   const tracks = data.tracks;
   const canEdit = data.canEdit;
 
+  const isEvent = (playlist.description && playlist.description.startsWith('Event playlist for ')) || playlist.name.startsWith('Event: ');
+
   const currentPlaylistDiv = document.getElementById('current-playlist')
   if (currentPlaylistDiv) currentPlaylistDiv.style.display = 'block'
   
-  // Show/Hide Search section based on canEdit
+  // Show/Hide Search section based on canEdit and if it's NOT an event
   const searchSection = document.getElementById('music-search-query')?.closest('.card');
   if (searchSection) {
-      searchSection.style.display = canEdit ? 'block' : 'none';
+      searchSection.style.display = (canEdit && !isEvent) ? 'block' : 'none';
   }
 
   const plName = document.getElementById('pl-name')
@@ -39,7 +41,13 @@ async function loadPlaylist(playlistId) {
       const me = await meRes.json();
       if (me.userId === playlist.ownerId) {
           const btn = document.getElementById('pl-settings-btn');
-          if (btn) btn.classList.remove('hidden');
+          if (btn) {
+              if (isEvent) {
+                  btn.classList.add('hidden');
+              } else {
+                  btn.classList.remove('hidden');
+              }
+          }
       }
   }
 
@@ -51,8 +59,8 @@ async function loadPlaylist(playlistId) {
           const li = document.createElement('li')
           li.className = 'flex justify-between items-center py-3 px-4 bg-white/5 rounded-md hover:bg-white/10 transition-colors mb-2'
           
-          // Drag and Drop (Only if canEdit is true)
-          if (track.id && canEdit) {
+          // Drag and Drop (Only if canEdit is true and NOT an event)
+          if (track.id && canEdit && !isEvent) {
               li.setAttribute('draggable', 'true')
               li.dataset.index = index
               li.dataset.trackId = track.id
@@ -118,8 +126,8 @@ async function loadPlaylist(playlistId) {
           
           li.appendChild(infoDiv)
 
-          // Only show delete button if canEdit is true
-          if (canEdit) {
+          // Only show delete button if canEdit is true and NOT an event
+          if (canEdit && !isEvent) {
               const btnDelete = document.createElement('button')
               btnDelete.className = 'inline-flex items-center justify-center text-primary hover:text-primary-hover transition-colors p-2'
               btnDelete.title = 'Remove Track'
@@ -383,7 +391,7 @@ async function refreshPlaylists() {
     actions.className = 'flex items-center gap-4 relative z-10'
     
     // Check if event playlist
-    const isEventPlaylist = pl.name.startsWith('Event: ');
+    const isEventPlaylist = (pl.description && pl.description.startsWith('Event playlist for ')) || (pl.name && pl.name.startsWith('Event: '));
     const isOwner = currentUserId && pl.ownerId === currentUserId;
 
     if (!isEventPlaylist && isOwner) {
@@ -514,7 +522,10 @@ window.openPlaylistSettings = async function() {
     const data = await res.json();
     const playlist = data.playlist; // response structure is { playlist: ..., tracks: ... }
 
-    const isEventPlaylist = playlist.name.startsWith('Event: ');
+    const isEventPlaylist = playlist.description && playlist.description.startsWith('Event playlist for ');
+    const isPrivate = !playlist.isPublic;
+    const isInvitedEdit = (playlist.editMode === 'invited');
+    const invitesDisplay = (isPrivate || isInvitedEdit) ? 'block' : 'none';
 
     // Create Modal Content
     const content = `

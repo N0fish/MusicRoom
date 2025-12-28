@@ -64,6 +64,7 @@ func setupRouter(cfg Config) *chi.Mux {
 
 	r := chi.NewRouter()
 
+	r.Use(corsMiddleware)
 	r.Use(middleware.RequestID)
 	r.Use(stripTrustedHeadersMiddleware)
 	r.Use(middleware.Logger)
@@ -71,7 +72,6 @@ func setupRouter(cfg Config) *chi.Mux {
 
 	// Global rate limit for public traffic (IP-based)
 	r.Use(rateLimitMiddleware(cfg.RateLimitRPS, rateKeyIP))
-	r.Use(corsMiddleware)
 	r.Use(requestLogMiddleware)
 
 	// Proxies
@@ -133,6 +133,10 @@ func setupRouter(cfg Config) *chi.Mux {
 	api.Method(http.MethodPost, "/auth/refresh", authProxy)
 	api.Method(http.MethodPost, "/auth/forgot-password", authProxy)
 	api.Method(http.MethodPost, "/auth/reset-password", authProxy)
+	api.Get("/auth/reset-password", func(w http.ResponseWriter, r *http.Request) {
+		token := r.URL.Query().Get("token")
+		http.Redirect(w, r, "http://localhost:5175/auth?mode=reset-password&token="+token, http.StatusFound)
+	})
 	api.Method(http.MethodPost, "/auth/request-email-verification", authProxy)
 	api.Method(http.MethodGet, "/auth/verify-email", authProxy)
 
@@ -201,6 +205,7 @@ func setupRouter(cfg Config) *chi.Mux {
 
 		r.Method(http.MethodPatch, "/playlists/{id}", playlistProxy)
 		r.Method(http.MethodGet, "/playlists/{id}", playlistProxy)
+		r.Method(http.MethodDelete, "/playlists/{id}", playlistProxy)
 
 		r.Method(http.MethodPost, "/playlists/{id}/tracks", playlistProxy)
 		r.Method(http.MethodPatch, "/playlists/{id}/tracks/{trackId}", playlistProxy)
@@ -233,6 +238,7 @@ func setupRouter(cfg Config) *chi.Mux {
 
 		r.Method(http.MethodPost, "/events/{id}/vote", voteProxy)
 		r.Method(http.MethodDelete, "/events/{id}/vote", voteProxy)
+		r.Method(http.MethodDelete, "/events/{id}/votes", voteProxy)
 		r.Method(http.MethodGet, "/events/{id}/tally", voteProxy)
 
 		r.Method(http.MethodGet, "/stats", voteProxy)

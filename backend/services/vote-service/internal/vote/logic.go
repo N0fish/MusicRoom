@@ -35,8 +35,6 @@ func registerVote(ctx context.Context, store Store, rdb *redis.Client, eventID, 
 		}
 		return nil, err
 	}
-		return nil, err
-	}
 
 	total, err := store.GetVoteCount(ctx, eventID, trackID)
 	if err != nil {
@@ -192,13 +190,6 @@ func canUserVote(ctx context.Context, store Store, ev *Event, userID string, lat
 
 	switch ev.LicenseMode {
 	case "", licenseEveryone:
-		invited, err := store.IsInvited(ctx, ev.ID, userID)
-		if err != nil {
-			return false, "", err
-		}
-		if !invited {
-			return false, "you must join the event to vote", nil
-		}
 		return true, "", nil
 
 	case licenseInvited:
