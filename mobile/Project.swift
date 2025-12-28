@@ -109,7 +109,7 @@ let project = Project(
             name: "MusicRoomMobile",
             destinations: .iOS,
             product: .app,
-            bundleId: "com.musicroom.mobile.42",
+            bundleId: "com.musicroom.mobile",
             deploymentTargets: deploymentTargets,
             infoPlist: .extendingDefault(with: [
                 "UILaunchScreen": [:],
@@ -118,7 +118,7 @@ let project = Project(
                 "CFBundleURLTypes": [
                     [
                         "CFBundleTypeRole": "Editor",
-                        "CFBundleURLName": "com.musicroom.mobile.42",
+                        "CFBundleURLName": "com.musicroom.mobile",
                         "CFBundleURLSchemes": ["musicroom"],
                     ]
                 ],
