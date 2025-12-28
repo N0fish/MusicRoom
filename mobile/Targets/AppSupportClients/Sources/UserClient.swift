@@ -334,6 +334,11 @@ extension UserClient {
             print("   Method: \(request.httpMethod ?? "GET")")
             if let response {
                 print("   Status: \(response.statusCode)")
+                if response.statusCode == 429,
+                    let retryAfter = response.value(forHTTPHeaderField: "Retry-After")
+                {
+                    print("   Retry-After: \(retryAfter)")
+                }
             }
             if let data, let body = String(data: data, encoding: .utf8), !body.isEmpty {
                 print("   Response Body: \(body)")
@@ -355,14 +360,8 @@ extension UserClient {
                 let (data, httpResponse) = try await executor.data(for: request)
 
                 if !(200...299).contains(httpResponse.statusCode) {
-                    // Try to decode error response if possible, or just log
-                    let error = URLError(.badServerResponse)
+                    let error = UserClientError.serverError(statusCode: httpResponse.statusCode)
                     logError(request, httpResponse, data, error)
-
-                    // Specific case for server error to match existing logic if needed?
-                    if httpResponse.statusCode == 500 {
-                        throw UserClientError.serverError(statusCode: 500)
-                    }
                     throw error
                 }
 
@@ -385,7 +384,7 @@ extension UserClient {
                 let (data, httpResponse) = try await executor.data(for: request)
 
                 if !(200...299).contains(httpResponse.statusCode) {
-                    let error = URLError(.badServerResponse)
+                    let error = UserClientError.serverError(statusCode: httpResponse.statusCode)
                     logError(request, httpResponse, data, error)
                     throw error
                 }
@@ -672,7 +671,7 @@ extension UserClient {
                 var body = Data()
                 body.append("--\(boundary)\r\n".data(using: .utf8)!)
                 body.append(
-                    "Content-Disposition: form-data; name=\"avatar\"; filename=\"avatar.jpg\"\r\n"
+                    "Content-Disposition: form-data; name=\"file\"; filename=\"avatar.jpg\"\r\n"
                         .data(using: .utf8)!)
                 body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
                 body.append(imageData)

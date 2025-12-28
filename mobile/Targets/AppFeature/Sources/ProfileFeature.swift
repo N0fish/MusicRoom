@@ -3,6 +3,7 @@ import AuthenticationServices
 import ComposableArchitecture
 import Foundation
 import MusicRoomAPI
+import UIKit
 
 @Reducer
 public struct ProfileFeature: Sendable {
@@ -396,19 +397,30 @@ public struct ProfileFeature: Sendable {
             case .imagePlaygroundResponse(let url):
                 state.isImagePlaygroundPresented = false
                 guard let url = url else { return .none }
+                guard !state.isAvatarLoading else { return .none }
                 state.isAvatarLoading = true
 
                 return .run { send in
                     do {
-                        let data = try Data(contentsOf: url)
-                        guard let image = UIImage(data: data),
-                            let jpegData = image.jpegData(compressionQuality: 0.8)
-                        else {
-                            await send(
-                                .uploadGeneratedAvatarResponse(
-                                    .failure(URLError(.cannotDecodeContentData))))
-                            return
+                        let rawData: Data
+                        if url.isFileURL {
+                            rawData = try await Task.detached(priority: .userInitiated) {
+                                try Data(contentsOf: url)
+                            }.value
+                        } else {
+                            let (data, _) = try await URLSession.shared.data(from: url)
+                            rawData = data
                         }
+
+                        let jpegData = try await Task.detached(priority: .userInitiated) {
+                            guard let image = UIImage(data: rawData),
+                                let jpegData = image.jpegData(compressionQuality: 0.8)
+                            else {
+                                throw URLError(.cannotDecodeContentData)
+                            }
+                            return jpegData
+                        }.value
+
                         await send(.uploadGeneratedAvatar(jpegData))
                     } catch {
                         await send(.uploadGeneratedAvatarResponse(.failure(error)))

@@ -70,8 +70,8 @@ public struct ProfileView: View {
                                 .disabled(store.isAvatarLoading)
                                 .padding(.top, 4)
 
-                                if profile.isPremium {
-                                    Button(action: { print(supportsImagePlayground); store.send(.toggleImagePlayground(true)) }) {
+                                if profile.isPremium && supportsImagePlayground {
+                                    Button(action: { store.send(.toggleImagePlayground(true)) }) {
                                         HStack(spacing: 4) {
                                             Image(systemName: "sparkles")
                                             Text("Generate with AI")
@@ -83,6 +83,9 @@ public struct ProfileView: View {
                                         .foregroundColor(.white)
                                         .clipShape(Capsule())
                                     }
+                                    .disabled(
+                                        store.isAvatarLoading || store.isImagePlaygroundPresented
+                                    )
                                     .padding(.top, 4)
                                 }
                             }
@@ -329,6 +332,22 @@ public struct ProfileView: View {
                         insertion: .opacity.combined(with: .move(edge: .bottom)),
                         removal: .opacity
                     ))
+            }
+
+            if store.isAvatarLoading {
+                Color.black.opacity(0.35)
+                    .ignoresSafeArea()
+
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .tint(.white)
+                    Text("Updating avatar...")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.9))
+                }
+                .padding(20)
+                .background(Color.black.opacity(0.6))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
             }
         }
         .navigationTitle("Profile")

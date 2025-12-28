@@ -158,6 +158,91 @@ final class UserClientTests: XCTestCase {
         XCTAssertEqual(counter.value(for: "/users/me"), 1)
         XCTAssertEqual(counter.value(for: "/auth/me"), 1)
     }
+
+    func testUploadAvatar_UsesFileFormField() async throws {
+        UserMockURLProtocol.requestHandler = { request in
+            guard let url = request.url else { fatalError("Missing URL") }
+            XCTAssertEqual(url.path, "/users/me/avatar/upload")
+
+            let contentType = request.value(forHTTPHeaderField: "Content-Type") ?? ""
+            XCTAssertTrue(contentType.contains("multipart/form-data"))
+
+            let body = readRequestBody(from: request)
+            XCTAssertNotNil(body.range(of: Data("name=\"file\"".utf8)))
+            XCTAssertNotNil(body.range(of: Data("filename=\"avatar.jpg\"".utf8)))
+
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+
+            let data = """
+                {
+                    "id": "profile-1",
+                    "userId": "user-1",
+                    "username": "test",
+                    "displayName": "Test User",
+                    "avatarUrl": "/avatars/custom/user-1.jpg",
+                    "hasCustomAvatar": true,
+                    "bio": null,
+                    "visibility": "public",
+                    "preferences": {"genres": [], "artists": [], "moods": []},
+                    "isPremium": false
+                }
+                """.data(using: .utf8)!
+            return (response, data)
+        }
+
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [UserMockURLProtocol.self]
+        let session = URLSession(configuration: config)
+
+        let settings = AppSettings(
+            selectedPreset: .local,
+            localURL: URL(string: "http://localhost:8080")!,
+            hostedURL: URL(string: "http://localhost:8080")!
+        )
+
+        let client = withDependencies {
+            $0.appSettings.load = { settings }
+            $0.authentication.getAccessToken = { "token" }
+        } operation: {
+            UserClient.live(urlSession: session)
+        }
+
+        _ = try await client.uploadAvatar(Data([0x01, 0x02, 0x03]))
+    }
+}
+
+private func readRequestBody(from request: URLRequest) -> Data {
+    if let body = request.httpBody {
+        return body
+    }
+
+    guard let stream = request.httpBodyStream else {
+        return Data()
+    }
+
+    stream.open()
+    defer { stream.close() }
+
+    var data = Data()
+    let bufferSize = 1024
+    let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+    defer { buffer.deallocate() }
+
+    while stream.hasBytesAvailable {
+        let read = stream.read(buffer, maxLength: bufferSize)
+        if read > 0 {
+            data.append(buffer, count: read)
+        } else {
+            break
+        }
+    }
+
+    return data
 }
 
 final class UserMockURLProtocol: URLProtocol {

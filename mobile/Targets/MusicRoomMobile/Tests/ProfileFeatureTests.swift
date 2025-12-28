@@ -371,6 +371,47 @@ final class ProfileFeatureTests: XCTestCase {
         // Ideally we would inject a UUID generator dependency, but for now this fixes the build.
     }
 
+    func testImagePlaygroundResponse_UploadsAvatar() async {
+        let pngBase64 =
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg=="
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "\(UUID().uuidString).png")
+        let pngData = Data(base64Encoded: pngBase64)
+        XCTAssertNotNil(pngData)
+        try? pngData?.write(to: tempURL)
+
+        let uploadedProfile = UserProfile(
+            id: "1",
+            userId: "user1",
+            username: "test",
+            displayName: "Test",
+            avatarUrl: nil,
+            hasCustomAvatar: true,
+            preferences: UserPreferences(),
+            isPremium: true,
+            linkedProviders: [],
+            email: nil
+        )
+
+        let store = TestStore(initialState: ProfileFeature.State()) {
+            ProfileFeature()
+        } withDependencies: {
+            $0.user.uploadAvatar = { _ in uploadedProfile }
+        }
+
+        store.exhaustivity = .off
+
+        await store.send(ProfileFeature.Action.imagePlaygroundResponse(tempURL)) {
+            $0.isImagePlaygroundPresented = false
+            $0.isAvatarLoading = true
+        }
+
+        await store.receive(.uploadGeneratedAvatarResponse(.success(uploadedProfile))) {
+            $0.isAvatarLoading = false
+            $0.userProfile = uploadedProfile
+        }
+    }
+
     func testOnAppear_RefetchesStats_WhenAlreadyLoaded() async {
         let profile = UserProfile(
             id: "1", userId: "user1", username: "u", displayName: "d",
