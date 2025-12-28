@@ -315,12 +315,11 @@ extension DependencyValues {
 }
 
 extension UserClient {
-    // in UserClient.swift
-
     static func live(urlSession: URLSession = .shared) -> Self {
         @Dependency(\.appSettings) var appSettings
         @Dependency(\.authentication) var authentication
         let executor = AuthenticatedRequestExecutor(urlSession: urlSession, authentication: authentication)
+        let profileCache = UserProfileCache(ttl: 5)
 
         @Sendable func logError(
             _ request: URLRequest, _ response: HTTPURLResponse?, _ data: Data?, _ error: Error?
@@ -393,52 +392,55 @@ extension UserClient {
 
         return Self(
             me: {
-                let baseUrl = baseURLString()
-                // 1. Fetch User Profile
-                let urlProfile = URL(string: "\(baseUrl)/users/me")!
-                var reqProfile = URLRequest(url: urlProfile)
-                reqProfile.httpMethod = "GET"
+                let token = authentication.getAccessToken()
+                return try await profileCache.get(token: token) {
+                    let baseUrl = baseURLString()
+                    // 1. Fetch User Profile
+                    let urlProfile = URL(string: "\(baseUrl)/users/me")!
+                    var reqProfile = URLRequest(url: urlProfile)
+                    reqProfile.httpMethod = "GET"
 
-                var profile: UserProfile = try await performRequest(reqProfile)
+                    var profile: UserProfile = try await performRequest(reqProfile)
 
-                // 2. Fetch Auth Info (Linked Providers)
-                let urlAuth = URL(string: "\(baseUrl)/auth/me")!
-                var reqAuth = URLRequest(url: urlAuth)
-                reqAuth.httpMethod = "GET"
+                    // 2. Fetch Auth Info (Linked Providers)
+                    let urlAuth = URL(string: "\(baseUrl)/auth/me")!
+                    var reqAuth = URLRequest(url: urlAuth)
+                    reqAuth.httpMethod = "GET"
 
-                struct AuthMeResponse: Decodable {
-                    let linkedProviders: [String]?
-                    let email: String?
+                    struct AuthMeResponse: Decodable {
+                        let linkedProviders: [String]?
+                        let email: String?
+                    }
+
+                    do {
+                        // We use performRequest but catch error locally to not fail the whole load
+                        let authInfo: AuthMeResponse = try await performRequest(reqAuth)
+                        profile.linkedProviders = authInfo.linkedProviders ?? []
+                        profile.email = authInfo.email
+                    } catch {
+                        print("UserClient: Failed to fetch auth/me: \(error)")
+                        // Keep default empty linkedProviders
+                    }
+
+                    if let avatarUrl = profile.avatarUrl, !avatarUrl.hasPrefix("http") {
+                        profile = UserProfile(
+                            id: profile.id,
+                            userId: profile.userId,
+                            username: profile.username,
+                            displayName: profile.displayName,
+                            avatarUrl: baseUrl + avatarUrl,
+                            hasCustomAvatar: profile.hasCustomAvatar,
+                            bio: profile.bio,
+                            visibility: profile.visibility,
+                            preferences: profile.preferences,
+                            isPremium: profile.isPremium,
+                            linkedProviders: profile.linkedProviders,
+                            email: profile.email
+                        )
+                    }
+
+                    return profile
                 }
-
-                do {
-                    // We use performRequest but catch error locally to not fail the whole load
-                    let authInfo: AuthMeResponse = try await performRequest(reqAuth)
-                    profile.linkedProviders = authInfo.linkedProviders ?? []
-                    profile.email = authInfo.email
-                } catch {
-                    print("UserClient: Failed to fetch auth/me: \(error)")
-                    // Keep default empty linkedProviders
-                }
-
-                if let avatarUrl = profile.avatarUrl, !avatarUrl.hasPrefix("http") {
-                    profile = UserProfile(
-                        id: profile.id,
-                        userId: profile.userId,
-                        username: profile.username,
-                        displayName: profile.displayName,
-                        avatarUrl: baseUrl + avatarUrl,
-                        hasCustomAvatar: profile.hasCustomAvatar,
-                        bio: profile.bio,
-                        visibility: profile.visibility,
-                        preferences: profile.preferences,
-                        isPremium: profile.isPremium,
-                        linkedProviders: profile.linkedProviders,
-                        email: profile.email
-                    )
-                }
-
-                return profile
             },
             updateProfile: { profile in
                 let baseUrl = baseURLString()
@@ -481,6 +483,7 @@ extension UserClient {
                         email: updatedProfile.email
                     )
                 }
+                await profileCache.set(updatedProfile, token: authentication.getAccessToken())
                 return updatedProfile
             },
             link: { provider, token in
@@ -536,6 +539,7 @@ extension UserClient {
                         email: profile.email
                     )
                 }
+                await profileCache.set(profile, token: authentication.getAccessToken())
                 return profile
             },
             unlink: { provider in
@@ -581,6 +585,7 @@ extension UserClient {
                         email: profile.email
                     )
                 }
+                await profileCache.set(profile, token: authentication.getAccessToken())
                 return profile
             },
             changePassword: { current, new in
@@ -620,6 +625,7 @@ extension UserClient {
                         email: updatedProfile.email
                     )
                 }
+                await profileCache.set(updatedProfile, token: authentication.getAccessToken())
                 return updatedProfile
             },
             becomePremium: {
@@ -646,6 +652,7 @@ extension UserClient {
                         email: updatedProfile.email
                     )
                 }
+                await profileCache.set(updatedProfile, token: authentication.getAccessToken())
                 return updatedProfile
             },
             uploadAvatar: { imageData in
@@ -685,8 +692,72 @@ extension UserClient {
                         email: updatedProfile.email
                     )
                 }
+                await profileCache.set(updatedProfile, token: authentication.getAccessToken())
                 return updatedProfile
             }
         )
+    }
+}
+
+private actor UserProfileCache {
+    private struct Entry {
+        let profile: UserProfile
+        let token: String?
+        let fetchedAt: Date
+    }
+
+    private let ttl: TimeInterval
+    private var entry: Entry?
+    private var inFlight: Task<UserProfile, Error>?
+    private var inFlightToken: String?
+
+    init(ttl: TimeInterval) {
+        self.ttl = ttl
+    }
+
+    func get(
+        token: String?,
+        fetch: @escaping @Sendable () async throws -> UserProfile
+    ) async throws -> UserProfile {
+        let now = Date()
+        if let entry, entry.token == token, now.timeIntervalSince(entry.fetchedAt) < ttl {
+            return entry.profile
+        }
+
+        if entry?.token != token {
+            entry = nil
+            if let currentInFlight = inFlight, inFlightToken != token {
+                currentInFlight.cancel()
+                inFlight = nil
+                inFlightToken = nil
+            }
+        }
+
+        if let inFlight, inFlightToken == token {
+            return try await inFlight.value
+        }
+
+        let task = Task {
+            try await fetch()
+        }
+        inFlight = task
+        inFlightToken = token
+        let result = await task.result
+        inFlight = nil
+        inFlightToken = nil
+
+        switch result {
+        case .success(let profile):
+            entry = Entry(profile: profile, token: token, fetchedAt: Date())
+            return profile
+        case .failure(let error):
+            throw error
+        }
+    }
+
+    func set(_ profile: UserProfile, token: String?) {
+        entry = Entry(profile: profile, token: token, fetchedAt: Date())
+        inFlight = nil
+        inFlightToken = nil
     }
 }
