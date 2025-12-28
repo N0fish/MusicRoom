@@ -13,6 +13,7 @@ public struct FriendProfileFeature {
         public var isFriend: Bool
         public var isMe: Bool = false
         public var isLoading: Bool = false
+        public var isCheckingFriend: Bool = false
         @Presents public var alert: AlertState<Action.Alert>?
 
         public init(userId: String, isFriend: Bool, profile: PublicUserProfile? = nil) {
@@ -29,6 +30,7 @@ public struct FriendProfileFeature {
         case alert(PresentationAction<Alert>)
         case profileLoaded(TaskResult<PublicUserProfile>)
         case userLoaded(TaskResult<UserProfile>)
+        case friendsLoaded(TaskResult<[Friend]>)
 
         public enum View: Equatable, Sendable {
             case onAppear
@@ -58,18 +60,21 @@ public struct FriendProfileFeature {
             switch action {
             case .view(.onAppear):
                 state.isLoading = true
+                state.isCheckingFriend = true
                 return .run { [friendsClient, userClient, userId = state.userId] send in
-                    await send(
-                        .profileLoaded(
-                            TaskResult {
-                                try await friendsClient.getProfile(userId)
-                            }))
+                    async let profileResult = TaskResult {
+                        try await friendsClient.getProfile(userId)
+                    }
+                    async let userResult = TaskResult {
+                        try await userClient.me()
+                    }
+                    async let friendsResult = TaskResult {
+                        try await friendsClient.listFriends()
+                    }
 
-                    await send(
-                        .userLoaded(
-                            TaskResult {
-                                try await userClient.me()
-                            }))
+                    await send(.profileLoaded(await profileResult))
+                    await send(.userLoaded(await userResult))
+                    await send(.friendsLoaded(await friendsResult))
                 }
 
             case .profileLoaded(.success(let profile)):
@@ -88,6 +93,17 @@ public struct FriendProfileFeature {
                 return .none
 
             case .userLoaded(.failure):
+                return .none
+
+            case .friendsLoaded(.success(let friends)):
+                state.isCheckingFriend = false
+                if !state.isFriend {
+                    state.isFriend = friends.contains(where: { $0.userId == state.userId })
+                }
+                return .none
+
+            case .friendsLoaded(.failure):
+                state.isCheckingFriend = false
                 return .none
 
             case .view(.addFriendTapped):
