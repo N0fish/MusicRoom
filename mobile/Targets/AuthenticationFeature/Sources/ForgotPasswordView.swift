@@ -12,6 +12,7 @@ public struct ForgotPasswordView: View {
     public var body: some View {
         ZStack {
             LiquidBackground()
+                .ignoresSafeArea()
 
             VStack(spacing: 30) {
                 // Header

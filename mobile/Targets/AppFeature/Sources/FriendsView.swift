@@ -14,11 +14,11 @@ public struct FriendsView: View {
     public var body: some View {
         @Bindable var store = store
         NavigationStack(path: $store.scope(state: \.path, action: \.path)) {
-            ZStack {
+            ZStack(alignment: .top) {
                 LiquidBackground()
                     .ignoresSafeArea()
 
-                VStack {
+                VStack(spacing: 0) {
                     Picker("Segment", selection: $store.selectedSegment.sending(\.segmentChanged)) {
                         ForEach(FriendsFeature.Segment.allCases) { segment in
                             Text(segment.rawValue).tag(segment)
@@ -27,32 +27,49 @@ public struct FriendsView: View {
                     .pickerStyle(.segmented)
                     .padding()
 
-                    switch store.selectedSegment {
-                    case .friends:
-                        if store.friends.isEmpty && !store.isLoading {
-                            ContentUnavailableView(
-                                "No Friends Yet", systemImage: "person.2.slash",
-                                description: Text("Search and add friends to see them here.")
-                            )
-                        } else {
-                            friendsList(store: store, friends: store.friends)
-                                .scrollContentBackground(.hidden)
+                    Group {
+                        switch store.selectedSegment {
+                        case .friends:
+                            if store.friends.isEmpty && !store.isLoading {
+                                ContentUnavailableView(
+                                    "No Friends Yet", systemImage: "person.2.slash",
+                                    description: Text("Search and add friends to see them here.")
+                                )
+                                .frame(
+                                    maxWidth: .infinity,
+                                    maxHeight: .infinity,
+                                    alignment: .top
+                                )
+                                .padding(.top, 12)
+                            } else {
+                                friendsList(store: store, friends: store.friends)
+                                    .scrollContentBackground(.hidden)
+                            }
+                        case .requests:
+                            if store.incomingRequests.isEmpty && !store.isLoading {
+                                ContentUnavailableView(
+                                    "No Requests", systemImage: "tray",
+                                    description: Text("You have no incoming friend requests.")
+                                )
+                                .frame(
+                                    maxWidth: .infinity,
+                                    maxHeight: .infinity,
+                                    alignment: .top
+                                )
+                                .padding(.top, 12)
+                            } else {
+                                requestsList(store: store, requests: store.incomingRequests)
+                                    .scrollContentBackground(.hidden)
+                            }
+                        case .search:
+                            searchView(store: store)
                         }
-                    case .requests:
-                        if store.incomingRequests.isEmpty && !store.isLoading {
-                            ContentUnavailableView(
-                                "No Requests", systemImage: "tray",
-                                description: Text("You have no incoming friend requests.")
-                            )
-                        } else {
-                            requestsList(store: store, requests: store.incomingRequests)
-                                .scrollContentBackground(.hidden)
-                        }
-                    case .search:
-                        searchView(store: store)
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .background(Color.green)
                 }
-                .padding(.top)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .background(Color.brown)
             }
             .navigationTitle("Friends")
             .navigationBarTitleDisplayMode(.inline)
@@ -61,6 +78,7 @@ public struct FriendsView: View {
             .onAppear {
                 store.send(.onAppear)
             }
+            .background(Color.orange)
         } destination: { store in
             FriendProfileView(store: store)
         }

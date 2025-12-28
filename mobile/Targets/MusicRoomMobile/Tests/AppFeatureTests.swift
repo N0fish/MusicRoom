@@ -44,6 +44,52 @@ final class AppFeatureTests: XCTestCase {
         }
     }
 
+    func testShakePresentsSettingsSheet() async {
+        let store = TestStore(initialState: AppFeature.State()) {
+            AppFeature()
+        }
+
+        await store.send(.shakeDetected) {
+            $0.isSettingsPresented = true
+        }
+    }
+
+    func testSettingsSavedTriggersReloadsWhenInApp() async {
+        var initialState = AppFeature.State()
+        initialState.destination = .app
+        initialState.eventList.hasLoaded = true
+        initialState.profile.hasLoaded = true
+        initialState.friends.hasLoaded = true
+
+        let store = TestStore(initialState: initialState) {
+            AppFeature()
+        }
+        store.exhaustivity = .off
+
+        await store.send(.settings(.settingsSaved(AppSettings.default))) {
+            $0.eventList.hasLoaded = false
+            $0.profile.hasLoaded = false
+            $0.friends.hasLoaded = false
+        }
+
+        await store.receive(.eventList(.loadEvents)) {
+            $0.eventList.isLoading = true
+            $0.eventList.errorMessage = nil
+        }
+        await store.receive(.eventList(.startRealtimeConnection))
+        await store.receive(.playlistList(.loadPlaylists)) {
+            $0.playlistList.isLoading = true
+            $0.playlistList.errorMessage = nil
+        }
+        await store.receive(.playlistList(.startRealtimeConnection))
+        await store.receive(.friends(.loadData)) {
+            $0.friends.isLoading = true
+            $0.friends.errorMessage = nil
+        }
+        await store.receive(.profile(.onAppear)) {
+            $0.profile.isLoading = true
+        }
+    }
 
     func testDestinationChangedToLoginResetsStatePreservingSettings() async {
         let customURL = URL(string: "https://custom.musicroom.app")!

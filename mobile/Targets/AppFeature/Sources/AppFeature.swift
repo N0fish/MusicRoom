@@ -20,6 +20,7 @@ public struct AppFeature: Sendable {
             case splash
         }
         public var destination: Destination = .splash
+        public var isSettingsPresented: Bool = false
         public var authentication = AuthenticationFeature.State()
         public var settings: SettingsFeature.State
         public var eventList = EventListFeature.State()
@@ -74,6 +75,8 @@ public struct AppFeature: Sendable {
         case handleDeepLink(URL)
         case networkStatusChanged(NetworkStatus)
         case checkInitialLoad
+        case shakeDetected
+        case setSettingsPresented(Bool)
     }
 
     @Dependency(\.musicRoomAPI) var musicRoomAPI
@@ -119,6 +122,20 @@ public struct AppFeature: Sendable {
 
         Reduce { state, action in
             switch action {
+            case .settings(.settingsSaved):
+                guard state.destination == .app else { return .none }
+                state.eventList.hasLoaded = false
+                state.profile.hasLoaded = false
+                state.friends.hasLoaded = false
+                return .concatenate(
+                    .send(.eventList(.loadEvents)),
+                    .send(.eventList(.startRealtimeConnection)),
+                    .send(.playlistList(.loadPlaylists)),
+                    .send(.playlistList(.startRealtimeConnection)),
+                    .send(.friends(.loadData)),
+                    .send(.profile(.onAppear))
+                )
+
             case .settings:
                 return .none
 
@@ -240,6 +257,15 @@ public struct AppFeature: Sendable {
                     await authentication.logout()
                     await send(.destinationChanged(.login))
                 }
+
+            case .shakeDetected:
+                guard !state.isSettingsPresented else { return .none }
+                state.isSettingsPresented = true
+                return .none
+
+            case .setSettingsPresented(let isPresented):
+                state.isSettingsPresented = isPresented
+                return .none
             }
         }
     }

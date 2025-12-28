@@ -21,6 +21,7 @@ public struct AuthenticationView: View {
         ZStack {
             // New "Liquid Glass" Background
             LiquidBackground()
+                .ignoresSafeArea()
 
             ScrollView {
                 scrollViewContent

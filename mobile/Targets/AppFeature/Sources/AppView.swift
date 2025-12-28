@@ -9,31 +9,59 @@ import SwiftUI
 public struct AppView: View {
     private let store: StoreOf<AppFeature>
 
+    private struct ViewState: Equatable {
+        let destination: AppFeature.State.Destination
+        let isSettingsPresented: Bool
+    }
+
     public init(store: StoreOf<AppFeature>) {
         self.store = store
     }
 
     public var body: some View {
-        WithViewStore(store, observe: { $0.destination }) { viewStore in
-            Group {
-                switch viewStore.state {
-                case .login:
-                    AuthenticationView(
-                        store: store.scope(
-                            state: \.authentication,
-                            action: \.authentication
+        WithViewStore(
+            store,
+            observe: { ViewState(destination: $0.destination, isSettingsPresented: $0.isSettingsPresented) }
+        ) { viewStore in
+            ShakeDetectingView(onShake: { viewStore.send(.shakeDetected, animation: .default) }) {
+                Group {
+                    switch viewStore.state.destination {
+                    case .login:
+                        AuthenticationView(
+                            store: store.scope(
+                                state: \.authentication,
+                                action: \.authentication
+                            )
                         )
-                    )
-                case .app:
-                    appContent
-                case .splash:
-                    SplashView()
+                    case .app:
+                        appContent
+                    case .splash:
+                        SplashView()
+                    }
                 }
             }
             .task {
                 await viewStore.send(.task).finish()
             }
+            .sheet(
+                isPresented: viewStore.binding(
+                    get: { $0.isSettingsPresented },
+                    send: AppFeature.Action.setSettingsPresented
+                )
+            ) {
+                NavigationStack {
+                    SettingsView(
+                        store: store.scope(
+                            state: \.settings,
+                            action: \.settings
+                        )
+                    )
+                }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
         }
+        .ignoresSafeArea()
     }
 
     private var appContent: some View {
@@ -60,7 +88,7 @@ public struct AppView: View {
                 Label("Playlists", systemImage: "music.note")
             }
 
-            // Tab 2: Profile
+            // Tab 3: Profile
             NavigationStack {
                 ProfileView(
                     store: store.scope(
@@ -73,25 +101,12 @@ public struct AppView: View {
                 Label("Profile", systemImage: "person.crop.circle")
             }
 
-            // Tab 3: Friends
+            // Tab 4: Friends
             FriendsView(
                 store: store.scope(state: \.friends, action: \.friends)
             )
             .tabItem {
                 Label("Friends", systemImage: "person.2.fill")
-            }
-
-            // Tab 3: Settings
-            NavigationStack {
-                SettingsView(
-                    store: store.scope(
-                        state: \.settings,
-                        action: \.settings
-                    )
-                )
-            }
-            .tabItem {
-                Label("Settings", systemImage: "gear")
             }
         }
         // Assuming .liquidAccent is defined or available globally, otherwise it would need to be defined.
