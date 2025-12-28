@@ -130,7 +130,6 @@ public struct CreateEventView: View {
                                             .foregroundStyle(.gray)
 
                                         Picker("Radius", selection: $store.geoRadiusM) {
-                                            Text("50m").tag(50)
                                             Text("100m").tag(100)
                                             Text("500m").tag(500)
                                             Text("1km").tag(1000)
