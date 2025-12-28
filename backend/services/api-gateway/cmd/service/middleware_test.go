@@ -112,7 +112,7 @@ func TestRateLimitMiddleware_TooManyRequests(t *testing.T) {
 	// reset limiters for deterministic tests
 	globalLimiter = newRateLimiter(5 * time.Minute)
 
-	mw := rateLimitMiddleware(1, rateKeyIP)
+	mw := rateLimitMiddleware(1, rateKeyIP, "test")
 
 	calledCount := 0
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -136,6 +136,44 @@ func TestRateLimitMiddleware_TooManyRequests(t *testing.T) {
 
 	if calledCount != 1 {
 		t.Fatalf("next handler should be called once, got %d", calledCount)
+	}
+}
+
+func TestRateLimitMiddleware_ScopedSeparately(t *testing.T) {
+	// reset limiters for deterministic tests
+	globalLimiter = newRateLimiter(5 * time.Minute)
+
+	mwA := rateLimitMiddleware(1, rateKeyIP, "scopeA")
+	mwB := rateLimitMiddleware(1, rateKeyIP, "scopeB")
+
+	calledA := 0
+	calledB := 0
+
+	nextA := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calledA++
+		w.WriteHeader(http.StatusOK)
+	})
+	nextB := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calledB++
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+
+	rrA := httptest.NewRecorder()
+	mwA(nextA).ServeHTTP(rrA, req)
+	if rrA.Code != http.StatusOK {
+		t.Fatalf("scopeA first request expected 200, got %d", rrA.Code)
+	}
+
+	rrB := httptest.NewRecorder()
+	mwB(nextB).ServeHTTP(rrB, req)
+	if rrB.Code != http.StatusOK {
+		t.Fatalf("scopeB first request expected 200, got %d", rrB.Code)
+	}
+
+	if calledA != 1 || calledB != 1 {
+		t.Fatalf("expected each scope to be called once, got A=%d B=%d", calledA, calledB)
 	}
 }
 

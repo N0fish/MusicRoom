@@ -70,7 +70,7 @@ func setupRouter(cfg Config) *chi.Mux {
 	r.Use(middleware.Recoverer)
 
 	// Global rate limit for public traffic (IP-based)
-	r.Use(rateLimitMiddleware(cfg.RateLimitRPS, rateKeyIP))
+	r.Use(rateLimitMiddleware(cfg.RateLimitRPS, rateKeyIP, "global"))
 	r.Use(corsMiddleware)
 	r.Use(requestLogMiddleware)
 
@@ -154,13 +154,13 @@ func setupRouter(cfg Config) *chi.Mux {
 
 	api.Group(func(r chi.Router) {
 		r.Use(jwtAuthMiddleware(cfg.JWTSecret))
-		r.Use(rateLimitMiddleware(getenvInt("AUTHED_RPS", 30), rateKeyUserOrIP))
+		r.Use(rateLimitMiddleware(getenvInt("AUTHED_RPS", 30), rateKeyUserOrIP, "authed"))
 
 		r.Method(http.MethodGet, "/users/me", userProxy)
 
 		r.With(
 			bodySizeLimitMiddleware(int64(getenvInt("USER_PATCH_BODY_LIMIT", 4096))),
-			rateLimitMiddleware(getenvInt("USER_PATCH_RPS", 5), rateKeyUserOrIP),
+			rateLimitMiddleware(getenvInt("USER_PATCH_RPS", 5), rateKeyUserOrIP, "user_patch"),
 		).Method(http.MethodPatch, "/users/me", userProxy)
 
 		r.Method(http.MethodPost, "/users/me/premium", userProxy)
@@ -168,7 +168,7 @@ func setupRouter(cfg Config) *chi.Mux {
 		r.Method(http.MethodPost, "/users/me/avatar/random", userProxy)
 		r.With(
 			bodySizeLimitMiddleware(6*1024*1024),
-			rateLimitMiddleware(getenvInt("AVATAR_UPLOAD_RPS", 1), rateKeyUserOrIP),
+			rateLimitMiddleware(getenvInt("AVATAR_UPLOAD_RPS", 1), rateKeyUserOrIP, "avatar_upload"),
 		).Method(http.MethodPost, "/users/me/avatar/upload", userProxy)
 
 		r.Method(http.MethodGet, "/users/search", userProxy)
@@ -176,13 +176,13 @@ func setupRouter(cfg Config) *chi.Mux {
 		r.Method(http.MethodGet, "/users/me/friends", userProxy)
 		r.Method(http.MethodGet, "/users/me/friends/requests/incoming", userProxy)
 
-		r.With(bodySizeLimitMiddleware(2048), rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5), rateKeyUserOrIP)).
+		r.With(bodySizeLimitMiddleware(2048), rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5), rateKeyUserOrIP, "friend_request")).
 			Method(http.MethodPost, "/users/me/friends/{id}/request", userProxy)
-		r.With(bodySizeLimitMiddleware(2048), rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5), rateKeyUserOrIP)).
+		r.With(bodySizeLimitMiddleware(2048), rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5), rateKeyUserOrIP, "friend_request")).
 			Method(http.MethodPost, "/users/me/friends/{id}/accept", userProxy)
-		r.With(bodySizeLimitMiddleware(2048), rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5), rateKeyUserOrIP)).
+		r.With(bodySizeLimitMiddleware(2048), rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5), rateKeyUserOrIP, "friend_request")).
 			Method(http.MethodPost, "/users/me/friends/{id}/reject", userProxy)
-		r.With(bodySizeLimitMiddleware(2048), rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5), rateKeyUserOrIP)).
+		r.With(bodySizeLimitMiddleware(2048), rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5), rateKeyUserOrIP, "friend_request")).
 			Method(http.MethodDelete, "/users/me/friends/{id}", userProxy)
 
 		r.Method(http.MethodGet, "/users/{id}", userProxy)
@@ -194,7 +194,7 @@ func setupRouter(cfg Config) *chi.Mux {
 
 	api.Group(func(r chi.Router) {
 		r.Use(jwtAuthMiddleware(cfg.JWTSecret))
-		r.Use(rateLimitMiddleware(getenvInt("PLAYLIST_AUTHED_RPS", 30), rateKeyUserOrIP))
+		r.Use(rateLimitMiddleware(getenvInt("PLAYLIST_AUTHED_RPS", 30), rateKeyUserOrIP, "playlist_authed"))
 
 		r.With(playlistCreateRateLimitMiddleware).
 			Method(http.MethodPost, "/playlists", playlistProxy)
@@ -217,7 +217,7 @@ func setupRouter(cfg Config) *chi.Mux {
 	// Events & Voting
 	api.Group(func(r chi.Router) {
 		r.Use(jwtAuthMiddleware(cfg.JWTSecret))
-		r.Use(rateLimitMiddleware(getenvInt("VOTE_AUTHED_RPS", 30), rateKeyUserOrIP))
+		r.Use(rateLimitMiddleware(getenvInt("VOTE_AUTHED_RPS", 30), rateKeyUserOrIP, "vote_authed"))
 
 		r.Method(http.MethodGet, "/events", voteProxy)
 		r.Method(http.MethodPost, "/events", voteProxy)
@@ -244,7 +244,7 @@ func setupRouter(cfg Config) *chi.Mux {
 	// Music provider
 	api.Group(func(r chi.Router) {
 		r.Use(jwtAuthMiddleware(cfg.JWTSecret))
-		r.Use(rateLimitMiddleware(getenvInt("MUSIC_AUTHED_RPS", 30), rateKeyUserOrIP))
+		r.Use(rateLimitMiddleware(getenvInt("MUSIC_AUTHED_RPS", 30), rateKeyUserOrIP, "music_authed"))
 		r.Method(http.MethodGet, "/music/search", musicProxy)
 	})
 

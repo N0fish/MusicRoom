@@ -219,13 +219,13 @@ func rateKeyIP(r *http.Request) string {
 	return "ip:" + clientIP(r)
 }
 
-func rateLimitMiddleware(rps int, keyFn func(*http.Request) string) func(http.Handler) http.Handler {
+func rateLimitMiddleware(rps int, keyFn func(*http.Request) string, scope string) func(http.Handler) http.Handler {
 	window := time.Second
 	lim := globalLimiter
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			key := keyFn(r)
+			key := scope + ":" + keyFn(r)
 			ok, retry := lim.allow(key, window, rps)
 			if !ok {
 				w.Header().Set("Retry-After", strconv.Itoa(retry))
