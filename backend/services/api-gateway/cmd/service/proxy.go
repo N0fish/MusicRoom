@@ -42,9 +42,10 @@ func mustNewReverseProxy(target string) http.Handler {
 		log.Fatalf("api-gateway: invalid service URL %q: %v", target, err)
 	}
 	fmt.Fprintf(os.Stderr, "url.Parsed: %s, target: %s\n", u.String(), target)
+	fmt.Fprintln(os.Stderr, "ENVS", os.Getenv("HTTP_PROXY"), os.Getenv("HTTPS_PROXY"), os.Getenv("NO_PROXY"))
 	proxy := httputil.NewSingleHostReverseProxy(u)
 	proxy.Transport = &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
+		Proxy: nil,
 		DialContext: (&net.Dialer{
 			Timeout:   10 * time.Second,
 			KeepAlive: 30 * time.Second,
