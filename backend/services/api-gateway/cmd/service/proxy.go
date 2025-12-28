@@ -1,12 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/netip"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -39,6 +41,7 @@ func mustNewReverseProxy(target string) http.Handler {
 	if err != nil {
 		log.Fatalf("api-gateway: invalid service URL %q: %v", target, err)
 	}
+	fmt.Fprintf(os.Stderr, "url.Parsed: %s, target: %s\n", u.String(), target)
 	proxy := httputil.NewSingleHostReverseProxy(u)
 	proxy.Transport = &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
