@@ -1046,9 +1046,11 @@ window.initGlobalEventSupervisor = function() {
 async function endVotingRound(eventId) {
     if (!authService.isLoggedIn()) return;
 
-    // Mark as processed in this session so Supervisor doesn't loop
-    window.mrState.processedExpiredRounds = window.mrState.processedExpiredRounds || new Set();
-    window.mrState.processedExpiredRounds.add(eventId);
+    // 1. Prevent concurrent finalization (multi-tab or multi-trigger)
+    if (!localStorage.getItem('mr_round_end_' + eventId)) {
+        return;
+    }
+    localStorage.removeItem('mr_round_end_' + eventId);
 
     // Cleanup local interval
     if (window.mrState['roundInterval_' + eventId]) {
@@ -1085,6 +1087,12 @@ async function endVotingRound(eventId) {
             eventName = 'Event';
         }
 
+        // 3. Double-check if already finalized on server (voteEnd is empty)
+        if (eventObj && !eventObj.voteEnd) {
+            console.log('Round already finalized on server.');
+            return;
+        }
+
         // Check ownership
         try {
             const meRes = await authService.fetchWithAuth(authService.apiUrl + '/users/me');
@@ -1100,14 +1108,20 @@ async function endVotingRound(eventId) {
         
         console.log('endVotingRound: isOwner =', isOwner);
 
-        // If NOT owner, we stop here. We've stopped the UI timer.
-        // We leave the localStorage key so the Owner can process it when they log in.
+        // If NOT owner, we stop here.
         if (!isOwner) {
             if (onPage) window.showToast('Round ended. Waiting for host to finalize results...');
             return;
         }
 
         // --- OWNER LOGIC BELOW ---
+
+        // Immediately signal server that we are finalizing
+        await authService.fetchWithAuth(authService.apiUrl + '/events/' + eventId, {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ vote_end: "" })
+        });
 
         // 2. Get Playlist & Tracks
         const playlistId = await getOrCreateEventPlaylist(eventId, eventName, eventObj);
@@ -1137,7 +1151,7 @@ async function endVotingRound(eventId) {
         let tally = await tallyRes.json();
         if (!tally) tally = [];
         
-        // 4. Filter Tally
+        // 7. Filter Tally (Skip tracks already in playlist)
         const candidates = tally.filter(row => {
             let trackObj = {};
             try {
@@ -1201,16 +1215,6 @@ async function endVotingRound(eventId) {
 
         // Refresh Tally
         if (onPage) loadTally(eventId);
-
-        // FINAL SUCCESS: Remove the timer key
-        localStorage.removeItem('mr_round_end_' + eventId);
-        
-        // Clear on server
-        await authService.fetchWithAuth(authService.apiUrl + '/events/' + eventId, {
-            method: 'PATCH',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ vote_end: "" })
-        });
         
         if(onPage) window.showToast('Round finalized.');
 
