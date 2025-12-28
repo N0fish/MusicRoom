@@ -628,11 +628,15 @@ async function loadPlaylistInvites(playlistId) {
         li.className = 'flex justify-between items-center bg-white/5 px-2 py-1 rounded';
         const displayName = inv.displayName ? `${inv.displayName} (@${inv.username})` : inv.username;
         li.innerHTML = `
-           <span class="truncate pr-2" title="${inv.userId}">${displayName}</span>
+           <a href="/users/${inv.userId}" class="truncate pr-2 hover:underline transition-all" title="${inv.userId}">${displayName}</a>
            <button onclick="removePlaylistInvite('${inv.userId}')" class="text-error hover:text-red-400">&times;</button>
         `;
         ul.appendChild(li);
     });
+
+    if (window.htmx) {
+        window.htmx.process(ul);
+    }
 }
 
 window.sendPlaylistInvite = async function() {

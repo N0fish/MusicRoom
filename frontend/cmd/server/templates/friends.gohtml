@@ -63,9 +63,11 @@
             <p class="text-sm text-text-muted">@${friend.username}</p>
           </div>
         </a>
-        <button class="btn-small btn-danger" onclick="removeFriend('${friend.userId}')">Remove</button>
-      </div>
     `).join('');
+
+    if (window.htmx) {
+      window.htmx.process(friendsList);
+    }
   }
 
   window.removeFriend = async function(userId) {
@@ -121,6 +123,10 @@
         <button id="add-friend-${user.userId}" class="btn-small" onclick="confirmSendFriendRequest('${user.userId}', '${user.displayName}')">Add Friend</button>
       </div>
     `).join('');
+
+    if (window.htmx) {
+      window.htmx.process(searchResults);
+    }
   }
 
   window.confirmSendFriendRequest = function(userId, displayName) {

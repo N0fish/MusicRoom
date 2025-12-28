@@ -68,6 +68,12 @@ function onYouTubeIframeAPIReady() {
 function onPlayerReady(event) {
     window.mrState.isPlayerReady = true;
     updatePlayerUI(YT.PlayerState.PAUSED);
+    
+    // If we already have a queue, make sure the bar is visible
+    if (window.mrState.playerQueue.length > 0) {
+        const bar = document.getElementById('player-bar');
+        if (bar) bar.classList.remove('translate-y-full');
+    }
 }
 
 function onPlayerStateChange(event) {
