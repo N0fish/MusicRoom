@@ -53,6 +53,7 @@ func main() {
 	r.Get("/events/{id}", app.eventDetailPage())
 	r.Get("/realtime", app.page("realtime.gohtml", nil))
 	r.Get("/me", app.page("me.gohtml", nil))
+	r.Get("/users/{id}", app.userProfilePage())
 	r.Get("/friends", app.page("friends.gohtml", nil))
 	r.Get("/friends/requests", app.page("friend-requests.gohtml", nil))
 
@@ -117,6 +118,16 @@ func main() {
 
 	log.Printf("Go frontend on :%s (API=%s, WS=%s)", port, api, ws)
 	log.Fatal(http.ListenAndServe(":"+port, r))
+}
+
+func (a *App) userProfilePage() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		data := map[string]any{
+			"TargetUserID": id,
+		}
+		a.page("user-profile.gohtml", data)(w, r)
+	}
 }
 
 func (a *App) playlistsPage() http.HandlerFunc {

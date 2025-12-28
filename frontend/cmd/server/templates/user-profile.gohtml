@@ -1,0 +1,160 @@
+{{define "content"}}
+<div class="flex flex-col items-center justify-center px-6 py-8 mx-auto lg:py-0">
+  <div class="w-full bg-card-bg rounded-lg shadow md:mt-0 sm:max-w-xl xl:p-0">
+    <div class="p-6 space-y-4 md:space-y-6 sm:p-8">
+      <h1 class="text-xl font-bold leading-tight tracking-tight text-text md:text-2xl text-center" id="profile-title">User Profile</h1>
+      <div class="flex flex-col items-center">
+        <div class="relative group">
+          <img id="avatar" class="w-32 h-32 rounded-full shadow-lg" alt="User avatar" src="{{.API}}/avatars/default.png">
+        </div>
+      </div>
+      <div id="profile-details" class="mt-4 space-y-2">
+        <div class="flex items-center justify-between py-2 border-b border-gray-700">
+          <span class="font-semibold text-text-muted">Username</span>
+          <span id="username" class="text-text"></span>
+        </div>
+        <div class="flex items-center justify-between py-2 border-b border-gray-700">
+          <span class="font-semibold text-text-muted">Display Name</span>
+          <span id="displayName" class="text-text"></span>
+        </div>
+        <div class="py-2 border-b border-gray-700">
+          <span class="font-semibold text-text-muted">Bio</span>
+          <p id="bio" class="text-text mt-1 break-words"></p>
+        </div>
+        
+        <!-- Music Preferences -->
+        <div class="flex items-center justify-between py-2 border-b border-gray-700">
+          <span class="font-semibold text-text-muted">Genres</span>
+          <span id="genres" class="text-text"></span>
+        </div>
+        <div class="flex items-center justify-between py-2 border-b border-gray-700">
+          <span class="font-semibold text-text-muted">Artists</span>
+          <span id="artists" class="text-text"></span>
+        </div>
+        <div class="flex items-center justify-between py-2 border-b border-gray-700">
+          <span class="font-semibold text-text-muted">Moods</span>
+          <span id="moods" class="text-text"></span>
+        </div>
+      </div>
+      
+      <div id="friend-actions" class="mt-6 flex justify-center">
+          <!-- Button will be inserted here by JS -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+{
+  const targetUserId = "{{.TargetUserID}}";
+  let profile = {};
+
+  async function loadProfile() {
+    try {
+      const res = await authService.fetchWithAuth(authService.apiUrl + "/users/" + targetUserId);
+      if (!res.ok) {
+          if (res.status === 404) {
+              showAlert({ title: 'Error', content: 'User profile not found.' });
+              return;
+          }
+          throw new Error("Failed to load user profile");
+      }
+      profile = await res.json();
+
+      document.getElementById("profile-title").textContent = profile.displayName ? `${profile.displayName}'s Profile` : `@${profile.username}'s Profile`;
+      
+      const avatarEl = document.getElementById("avatar");
+      const avatarPath = profile.avatarUrl || "/avatars/default.png";
+      avatarEl.src = avatarPath.startsWith("http")
+        ? avatarPath
+        : authService.apiUrl + avatarPath;
+
+      document.getElementById("username").textContent = profile.username || "Not set";
+      document.getElementById("displayName").textContent = profile.displayName || "N/A";
+      document.getElementById("bio").textContent = profile.bio || "No bio yet.";
+
+      const preferences = profile.preferences || {};
+      document.getElementById("genres").textContent = (preferences.genres || []).join(', ') || "N/A";
+      document.getElementById("artists").textContent = (preferences.artists || []).join(', ') || "N/A";
+      document.getElementById("moods").textContent = (preferences.moods || []).join(', ') || "N/A";
+
+      checkFriendStatus();
+    } catch (error) {
+      console.error(error.message);
+      showAlert({ title: 'Error', content: error.message });
+    }
+  }
+
+  async function checkFriendStatus() {
+      // We can check if they are already friends by listing our friends
+      try {
+          const res = await authService.fetchWithAuth(authService.apiUrl + "/users/me/friends");
+          if (res.ok) {
+              const data = await res.json();
+              const friends = data.items || [];
+              const isFriend = friends.some(f => f.userId === targetUserId);
+              
+              const actionsDiv = document.getElementById('friend-actions');
+              if (isFriend) {
+                  actionsDiv.innerHTML = `<button class="btn-small btn-danger" onclick="removeFriend()">Remove Friend</button>`;
+              } else {
+                  // check if we are the user itself (though unlikely to visit this page for self)
+                  const meRes = await authService.fetchWithAuth(authService.apiUrl + "/users/me");
+                  if (meRes.ok) {
+                      const me = await meRes.json();
+                      if (me.userId !== targetUserId) {
+                          actionsDiv.innerHTML = `<button class="btn" onclick="sendFriendRequest()">Add Friend</button>`;
+                      }
+                  }
+              }
+          }
+      } catch (e) {
+          console.error("Failed to check friend status", e);
+      }
+  }
+
+  window.sendFriendRequest = async function() {
+    try {
+      const res = await authService.fetchWithAuth(`${authService.apiUrl}/users/me/friends/${targetUserId}/request`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to send friend request');
+      }
+      showAlert({ title: 'Success', content: 'Friend request sent.' });
+      document.getElementById('friend-actions').innerHTML = `<button class="btn-small" disabled>Request Sent</button>`;
+    } catch (error) {
+      console.error(error.message);
+      showAlert({ title: 'Error', content: error.message });
+    }
+  }
+
+  window.removeFriend = async function() {
+    showConfirm({
+        title: 'Remove Friend',
+        content: `Are you sure you want to remove this friend?`,
+        onConfirm: async () => {
+            try {
+              const res = await authService.fetchWithAuth(`${authService.apiUrl}/users/me/friends/${targetUserId}`, {
+                method: 'DELETE',
+              });
+              if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error || 'Failed to remove friend');
+              }
+              showAlert({ title: 'Success', content: 'Friend removed.' });
+              loadProfile();
+            } catch (error) {
+              console.error(error.message);
+              showAlert({ title: 'Error', content: error.message });
+            }
+        }
+    });
+  }
+
+  loadProfile();
+}
+</script>
+{{end}}
+{{ template "base" . }}

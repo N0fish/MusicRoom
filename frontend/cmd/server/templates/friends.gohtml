@@ -57,12 +57,12 @@
 
     friendsList.innerHTML = friends.map(friend => `
       <div class="flex items-center justify-between p-2 bg-card-bg-hover rounded-lg">
-        <div class="flex items-center space-x-4">
+        <a href="/users/${friend.userId}" class="flex items-center space-x-4 hover:opacity-80 transition-opacity">
           <div>
             <p class="font-semibold text-text">${friend.displayName}</p>
             <p class="text-sm text-text-muted">@${friend.username}</p>
           </div>
-        </div>
+        </a>
         <button class="btn-small btn-danger" onclick="removeFriend('${friend.userId}')">Remove</button>
       </div>
     `).join('');
@@ -112,12 +112,12 @@
 
     searchResults.innerHTML = users.map(user => `
       <div class="flex items-center justify-between p-2 bg-card-bg-hover rounded-lg">
-        <div class="flex items-center space-x-4">
+        <a href="/users/${user.userId}" class="flex items-center space-x-4 hover:opacity-80 transition-opacity">
           <div>
             <p class="font-semibold text-text">${user.displayName}</p>
             <p class="text-sm text-text-muted">@${user.username}</p>
           </div>
-        </div>
+        </a>
         <button id="add-friend-${user.userId}" class="btn-small" onclick="confirmSendFriendRequest('${user.userId}', '${user.displayName}')">Add Friend</button>
       </div>
     `).join('');
