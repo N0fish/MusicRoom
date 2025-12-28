@@ -1,11 +1,15 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
 :root {
-  --color-primary: rgb(255, 115, 0);
+  --color-primary-rgb: 255 115 0;
+  --color-primary: rgb(var(--color-primary-rgb));
   --color-primary-hover: rgb(201, 90, 0);
 
-  --color-background: rgb(25, 25, 25);
-  --color-card-bg: rgb(42, 42, 42);
+  --color-background-rgb: 25 25 25;
+  --color-background: rgb(var(--color-background-rgb));
+  
+  --color-card-bg-rgb: 42 42 42;
+  --color-card-bg: rgb(var(--color-card-bg-rgb));
 
   --color-text: white;
   --color-text-muted: white;

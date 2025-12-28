@@ -14,14 +14,14 @@
         theme: {
           extend: {
             colors: {
-              primary: "var(--color-primary)",
+              primary: "rgb(var(--color-primary-rgb) / <alpha-value>)",
               "primary-hover": "var(--color-primary-hover)",
 
               text: "var(--color-text)",
               "text-muted": "var(--color-text-muted)",
 
-              background: "var(--color-background)",
-              "card-bg": "var(--color-card-bg)",
+              background: "rgb(var(--color-background-rgb) / <alpha-value>)",
+              "card-bg": "rgb(var(--color-card-bg-rgb) / <alpha-value>)",
 
               "input-bg": "var(--color-input-bg)",
               "input-border": "var(--color-input-border)",
@@ -44,7 +44,7 @@
   </head>
   <body class="bg-background min-h-screen text-text" hx-boost="true" hx-target="#app-container" hx-select="#app-container" hx-swap="outerHTML">
     <div id="app-container" hx-history-elt>
-      <header class="sticky top-0 z-10 bg-card-bg/90 backdrop-blur border-b border-input-border">
+      <header class="sticky top-0 z-50 bg-card-bg/90 backdrop-blur border-b border-input-border">
         <div class="max-w-5xl mx-auto px-4">
           <div class="flex items-center justify-between h-16">
             <a id="brand-link" class="text-2xl font-bold text-primary cursor-default">MusicRoom</a>
@@ -120,7 +120,7 @@
     </div>
 
     <!-- Modal -->
-    <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-25 backdrop-filter backdrop-blur-sm overflow-y-auto h-full w-full">
+    <div id="modal" class="hidden fixed inset-0 z-[100] bg-black bg-opacity-25 backdrop-filter backdrop-blur-sm overflow-y-auto h-full w-full">
       <div class="relative top-20 mx-auto p-5 w-96 shadow-lg rounded-md bg-card-bg">
         <div class="mt-3 text-center">
           <h3 class="text-lg leading-6 font-medium text-text" id="modal-title"></h3>
@@ -135,13 +135,13 @@
     </div>
 
     <!-- Toast Notification -->
-    <div id="toast" class="hidden fixed top-5 left-5 z-20 w-auto max-w-sm p-4 rounded-lg shadow-lg bg-card-bg text-white">
+    <div id="toast" class="hidden fixed top-5 left-5 z-[110] w-auto max-w-sm p-4 rounded-lg shadow-lg bg-card-bg text-white">
       <h3 class="text-lg leading-6 font-medium" id="toast-title"></h3>
       <p class="text-sm text-text-muted" id="toast-content"></p>
     </div>
 
     <!-- Player Bar -->
-    <div id="player-bar" class="fixed bottom-0 left-0 right-0 bg-card-bg border-t border-input-border transform translate-y-full transition-transform duration-300 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+    <div id="player-bar" class="fixed bottom-0 left-0 right-0 bg-card-bg border-t border-input-border transform translate-y-full transition-transform duration-300 z-40 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
         <!-- Progress Bar -->
         <div class="relative w-full h-1 bg-white/10 cursor-pointer group">
              <div class="h-full bg-primary relative" id="progress-fill" style="width: 0%"></div>
