@@ -69,6 +69,7 @@ public struct AppFeature: Sendable {
         case friends(FriendsFeature.Action)
         case playlistList(PlaylistListFeature.Action)
         case task
+        case sessionEvent(SessionEvent)
         case destinationChanged(State.Destination)
         case startApp
         case logoutButtonTapped
@@ -85,14 +86,23 @@ public struct AppFeature: Sendable {
     @Dependency(\.telemetry) var telemetry
     @Dependency(\.authentication) var authentication
     @Dependency(\.networkMonitor) var networkMonitor
+    @Dependency(\.sessionEvents) var sessionEvents
 
     public init() {}
 
-    private func resetAppStatePreservingSettings(_ state: inout AppFeature.State) {
+    private enum CancelID { case sessionEvents }
+
+    private func resetAppStatePreservingSettings(
+        _ state: inout AppFeature.State,
+        authMessage: String? = nil
+    ) {
         let settings = state.settings
         state = AppFeature.State()
         state.settings = settings
         state.destination = .login
+        if let authMessage {
+            state.authentication.errorMessage = authMessage
+        }
     }
 
     public var body: some ReducerOf<Self> {
@@ -140,7 +150,7 @@ public struct AppFeature: Sendable {
                 return .none
 
             case .eventList(.delegate(.sessionExpired)):
-                return .send(.logoutButtonTapped)
+                return .send(.sessionEvent(.expired))
 
             case .eventList(.eventsLoaded), .eventList(.eventsLoadedFromCache):
                 return .send(.checkInitialLoad)
@@ -179,16 +189,39 @@ public struct AppFeature: Sendable {
                 return .none
 
             case .task:
-                return .run { [authentication = self.authentication] send in
-                    if authentication.isAuthenticated() {
-                        // Trigger initial loads
-                        await send(.eventList(.onAppear))
-                        await send(.profile(.onAppear))
-                        await send(.friends(.onAppear))
-                        await send(.startApp)
-                    } else {
-                        await send(.destinationChanged(.login))
+                return .merge(
+                    .run { [sessionEvents] send in
+                        for await event in sessionEvents.stream() {
+                            await send(.sessionEvent(event))
+                        }
                     }
+                    .cancellable(id: CancelID.sessionEvents, cancelInFlight: true),
+                    .run { [authentication = self.authentication] send in
+                        if authentication.isAuthenticated() {
+                            // Trigger initial loads
+                            await send(.eventList(.onAppear))
+                            await send(.profile(.onAppear))
+                            await send(.friends(.onAppear))
+                            await send(.startApp)
+                        } else {
+                            await send(.destinationChanged(.login))
+                        }
+                    }
+                )
+
+            case .sessionEvent(.expired):
+                guard state.destination != .login else { return .none }
+                let userId = state.eventList.currentUserId
+                resetAppStatePreservingSettings(
+                    &state,
+                    authMessage: "Session expired. Please log in again."
+                )
+                return .run { [authentication = self.authentication, telemetry] _ in
+                    await telemetry.log(
+                        "user.session.expired",
+                        userId.map { ["userId": $0] } ?? [:]
+                    )
+                    await authentication.logout()
                 }
 
             case .destinationChanged(let destination):

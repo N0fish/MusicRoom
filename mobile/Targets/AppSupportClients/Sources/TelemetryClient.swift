@@ -29,7 +29,12 @@ extension TelemetryClient: DependencyKey {
         // 2. Backend Audit Trail
         @Dependency(\.appSettings) var settings
         @Dependency(\.authentication) var authentication
-        let executor = AuthenticatedRequestExecutor(urlSession: .shared, authentication: authentication)
+        @Dependency(\.sessionEvents) var sessionEvents
+        let executor = AuthenticatedRequestExecutor(
+            urlSession: .shared,
+            authentication: authentication,
+            sessionEvents: sessionEvents
+        )
 
         let backendURL = settings.load().backendURL
         let endpoint = backendURL.appendingPathComponent("audit/logs")  // Generic endpoint for logs

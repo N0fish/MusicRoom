@@ -40,7 +40,12 @@ extension PlaylistClient {
     static func live(urlSession: URLSession = .shared) -> Self {
         @Dependency(\.appSettings) var appSettings
         @Dependency(\.authentication) var authentication
-        let executor = AuthenticatedRequestExecutor(urlSession: urlSession, authentication: authentication)
+        @Dependency(\.sessionEvents) var sessionEvents
+        let executor = AuthenticatedRequestExecutor(
+            urlSession: urlSession,
+            authentication: authentication,
+            sessionEvents: sessionEvents
+        )
 
         @Sendable func baseURLString() -> String {
             appSettings.load().backendURLString

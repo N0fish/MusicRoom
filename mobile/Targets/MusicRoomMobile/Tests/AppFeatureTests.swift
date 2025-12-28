@@ -19,7 +19,7 @@ final class AppFeatureTests: XCTestCase {
             $0.authentication.logout = { logoutCalled.setValue(true) }
             $0.authentication.isAuthenticated = { true }
             $0.telemetry.log = { action, _ in
-                XCTAssertEqual(action, "user.logout")
+                XCTAssertEqual(action, "user.session.expired")
             }
         }
         store.exhaustivity = .off
@@ -32,16 +32,15 @@ final class AppFeatureTests: XCTestCase {
         // Simulate event list delegate action
         await store.send(.eventList(.delegate(.sessionExpired)))
 
-        // Verifying it triggers logout button tapped logic
-        await store.receive(\.logoutButtonTapped)
-
-        // Should trigger logout side effect
-        XCTAssertTrue(logoutCalled.value)
-
-        // And navigate to login
-        await store.receive(\.destinationChanged) {
-            $0.destination = .login
+        await store.receive(.sessionEvent(.expired)) {
+            var reset = AppFeature.State()
+            reset.settings = $0.settings
+            reset.destination = .login
+            reset.authentication.errorMessage = "Session expired. Please log in again."
+            $0 = reset
         }
+
+        XCTAssertTrue(logoutCalled.value)
     }
 
     func testShakePresentsSettingsSheet() async {

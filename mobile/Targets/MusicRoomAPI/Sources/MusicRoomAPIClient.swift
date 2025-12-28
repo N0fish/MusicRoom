@@ -85,7 +85,12 @@ extension MusicRoomAPIClient: DependencyKey {
     public static func live(urlSession: URLSession = .shared) -> MusicRoomAPIClient {
         @Dependency(\.appSettings) var settings
         @Dependency(\.authentication) var authentication
-        let executor = AuthenticatedRequestExecutor(urlSession: urlSession, authentication: authentication)
+        @Dependency(\.sessionEvents) var sessionEvents
+        let executor = AuthenticatedRequestExecutor(
+            urlSession: urlSession,
+            authentication: authentication,
+            sessionEvents: sessionEvents
+        )
 
         let appVersion =
             Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
