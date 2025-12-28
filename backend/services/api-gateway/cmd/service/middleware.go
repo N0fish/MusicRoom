@@ -239,7 +239,7 @@ func rateLimitMiddleware(rps int, keyFn func(*http.Request) string, scope string
 
 func loginRateLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ok, _ := loginLimiter.allow(rateKeyIP(r), time.Second, 1)
+		ok, _ := loginLimiter.allow(rateKeyIP(r), time.Second, 10)
 		if !ok {
 			writeError(w, http.StatusTooManyRequests, "too many login attempts")
 			return
@@ -250,7 +250,7 @@ func loginRateLimitMiddleware(next http.Handler) http.Handler {
 
 func playlistCreateRateLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ok, _ := playlistLimiter.allow(rateKeyUserOrIP(r), 5*time.Second, 1)
+		ok, _ := playlistLimiter.allow(rateKeyUserOrIP(r), 5*time.Second, 10)
 		if !ok {
 			writeError(w, http.StatusTooManyRequests, "too many playlist creations")
 			return
