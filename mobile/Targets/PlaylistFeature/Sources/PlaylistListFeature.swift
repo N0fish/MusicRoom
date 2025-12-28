@@ -185,7 +185,11 @@ struct PlaylistRow: View {
                         .font(.headline)
                         .foregroundColor(.white)
 
-                    if !playlist.description.isEmpty {
+                    if playlist.isEventPlaylist {
+                        Text("Event Playlist - Read-only")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.7))
+                    } else if !playlist.description.isEmpty {
                         Text(playlist.description)
                             .font(.subheadline)
                             .foregroundColor(.white.opacity(0.7))

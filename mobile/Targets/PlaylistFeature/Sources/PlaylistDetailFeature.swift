@@ -79,10 +79,15 @@ public struct PlaylistDetailFeature: Sendable {
                 return .none
 
             case .addTrackButtonTapped:
+                guard !state.playlist.isEventPlaylist else { return .none }
                 state.musicSearch = MusicSearchFeature.State()
                 return .none
 
             case .musicSearch(.presented(.delegate(.trackTapped(let item)))):
+                guard !state.playlist.isEventPlaylist else {
+                    state.musicSearch = nil
+                    return .none
+                }
                 state.musicSearch = nil
                 state.isLoading = true
                 let request = AddTrackRequest(
@@ -153,6 +158,7 @@ public struct PlaylistDetailFeature: Sendable {
                 return .none
 
             case .deleteTrackTapped(let track):
+                guard !state.playlist.isEventPlaylist else { return .none }
                 // Optimistic removal
                 state.tracks.removeAll { $0.id == track.id }
                 return .run { [playlistId = state.playlist.id, trackId = track.id] send in
@@ -264,6 +270,7 @@ public struct PlaylistDetailView: View {
     }
 
     public var body: some View {
+        let isEventPlaylistReadOnly = store.playlist.isEventPlaylist
         ZStack {
             LiquidBackground()
                 .ignoresSafeArea()
@@ -289,12 +296,14 @@ public struct PlaylistDetailView: View {
                         }
                     }
 
-                    Button {
-                        store.send(.addTrackButtonTapped)
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title2)
-                            .foregroundColor(.white)
+                    if !isEventPlaylistReadOnly {
+                        Button {
+                            store.send(.addTrackButtonTapped)
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.title2)
+                                .foregroundColor(.white)
+                        }
                     }
                 }
             }
@@ -317,6 +326,21 @@ public struct PlaylistDetailView: View {
     @ViewBuilder
     private var viewContent: some View {
         VStack {
+            if store.playlist.isEventPlaylist {
+                HStack(spacing: 8) {
+                    Image(systemName: "calendar")
+                    Text("Event Playlist - Read-only")
+                        .fontWeight(.semibold)
+                }
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.85))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.white.opacity(0.15))
+                .clipShape(Capsule())
+                .padding(.top, 8)
+            }
+
             if store.isLoading && store.tracks.isEmpty {
                 VStack {
                     Spacer()
@@ -334,11 +358,17 @@ public struct PlaylistDetailView: View {
                     Text("No tracks yet")
                         .font(.headline)
                         .foregroundColor(.white.opacity(0.5))
-                    Button("Add Tracks") {
-                        store.send(.addTrackButtonTapped)
+                    if store.playlist.isEventPlaylist {
+                        Text("Event playlists are read-only.")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.5))
+                    } else {
+                        Button("Add Tracks") {
+                            store.send(.addTrackButtonTapped)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.white)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.white)
                     Spacer()
                 }
             } else {
@@ -352,9 +382,11 @@ public struct PlaylistDetailView: View {
                                 onPlayPause: {
                                     store.send(.togglePlayback(track))
                                 },
-                                onDelete: {
-                                    store.send(.deleteTrackTapped(track))
-                                }
+                                onDelete: store.playlist.isEventPlaylist
+                                    ? nil
+                                    : {
+                                        store.send(.deleteTrackTapped(track))
+                                    }
                             )
                         }
                     }
@@ -433,7 +465,7 @@ struct TrackRow: View {
     var isPlaying: Bool = false
     var isCurrent: Bool = false
     var onPlayPause: () -> Void = {}
-    let onDelete: () -> Void
+    var onDelete: (() -> Void)?
 
     var body: some View {
         GlassView {
@@ -475,9 +507,11 @@ struct TrackRow: View {
                 }
                 .padding(.trailing, 8)
 
-                Button(action: onDelete) {
-                    Image(systemName: "trash")
-                        .foregroundColor(.red.opacity(0.7))
+                if let onDelete {
+                    Button(action: onDelete) {
+                        Image(systemName: "trash")
+                            .foregroundColor(.red.opacity(0.7))
+                    }
                 }
             }
             .padding(12)

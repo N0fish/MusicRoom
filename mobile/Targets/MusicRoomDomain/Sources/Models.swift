@@ -293,6 +293,8 @@ public struct PlaylistUpdate: Sendable, Equatable {
 }
 
 public struct Playlist: Codable, Sendable, Equatable, Identifiable {
+    public static let eventDescriptionPrefix = "Event Playlist for "
+
     public let id: String
     public let ownerId: String
     public var name: String
@@ -302,6 +304,10 @@ public struct Playlist: Codable, Sendable, Equatable, Identifiable {
     public var createdAt: Date
     public var currentTrackId: String?
     public var playingStartedAt: Date?
+
+    public var isEventPlaylist: Bool {
+        description.hasPrefix(Self.eventDescriptionPrefix)
+    }
 
     public init(
         id: String,
