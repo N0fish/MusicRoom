@@ -52,7 +52,6 @@ const swaggerUIHTML = `
 
 func stripTrustedHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Prevent header spoofing by clients
 		r.Header.Del("X-User-Id")
 		r.Header.Del("X-User-Email")
 		next.ServeHTTP(w, r)
@@ -60,7 +59,6 @@ func stripTrustedHeadersMiddleware(next http.Handler) http.Handler {
 }
 
 func setupRouter(cfg Config) *chi.Mux {
-	// Configure trusted proxies for clientIP()
 	setTrustedProxyCIDRs(cfg.TrustedProxyCIDRs)
 
 	r := chi.NewRouter()
@@ -71,7 +69,6 @@ func setupRouter(cfg Config) *chi.Mux {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	// Global rate limit for public traffic (IP-based)
 	r.Use(rateLimitMiddleware(cfg.RateLimitRPS, rateKeyIP, "global"))
 	r.Use(requestLogMiddleware)
 

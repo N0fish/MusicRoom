@@ -22,7 +22,6 @@ services:
     image: redis:7-alpine
     ports:
       - "6380:6379"
-      # - "6379:6379"
     volumes:
       - ./docker/redis.conf:/usr/local/etc/redis/redis.conf:ro
     command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
@@ -113,7 +112,6 @@ services:
 
   mock-service:
     build: ./backend/services/mock-service
-    # нам нужен этот порт их .env, если мы будем использовать этот сервис
     # env_file:
     #   - ./backend/services/mock-service/.env
     ports:
