@@ -21,7 +21,7 @@ echo "✅ Created .env (root)"
 JWT_SECRET="supersecretdev"
 DB_URL="postgres://musicroom:musicroom@postgres:5432/musicroom?sslmode=disable"
 REDIS_URL="redis://redis:6379"
-YOUTUBE_API_KEY="AIzaSyBeDpLXg_R02KCnUEJlO7_-c26RCFIJj_Q"
+YOUTUBE_API_KEY=
 
 FRONTEND_PORT=5175
 GATEWAY_PORT=8080
@@ -69,7 +69,7 @@ VOTE_SERVICE_URL=http://vote-service:3003
 MOCK_SERVICE_URL=http://mock-service:3006
 REALTIME_SERVICE_URL=http://realtime-service:3004
 MUSIC_PROVIDER_SERVICE_URL=http://music-provider-service:3007
-FRONTEND_BASE_URL=http://localhost:5175
+FRONTEND_BASE_URL=http://localhost:${FRONTEND_PORT}
 
 # JWT secret must be the same as in auth-service
 JWT_SECRET=${JWT_SECRET}
@@ -78,8 +78,8 @@ JWT_SECRET=${JWT_SECRET}
 RATE_LIMIT_RPS=20
 
 # CORS
-CORS_ALLOWED_ORIGIN=*
-# CORS_ALLOWED_ORIGIN=http://localhost:5175
+# CORS_ALLOWED_ORIGIN=*
+CORS_ALLOWED_ORIGIN=http://localhost:5175
 
 # limit
 USER_PATCH_BODY_LIMIT=4096
@@ -97,7 +97,7 @@ MUSIC_AUTHED_RPS=30
 # TLS_KEY_FILE=/certs/key.pem
 
 TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
-# TRUSTED_PROXY_CIDRS=10.0.0.0/8 // для теста на localhost
+# TRUSTED_PROXY_CIDRS=10.0.0.0/8 // for localhost
 EENV
       ;;
 
@@ -112,13 +112,12 @@ JWT_SECRET=${JWT_SECRET}
 ACCESS_TOKEN_TTL=15m
 REFRESH_TOKEN_TTL=720h
 
-# OAuth2 Google (заполни своими значениями)
+# OAuth2 Google
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URL=http://localhost:${GATEWAY_PORT}/auth/google/callback
-# Пока localhost, в дальнейшем при https заменить на LOCAL_IP в скрипте
 
-# OAuth2 42 (Intra) (заполни своими значениями)
+# OAuth2 42 (Intra)
 FT_CLIENT_ID=
 FT_CLIENT_SECRET=
 FT_REDIRECT_URL=http://localhost:${GATEWAY_PORT}/auth/42/callback
@@ -166,6 +165,7 @@ DATABASE_URL=${DB_URL}
 REDIS_URL=${REDIS_URL}
 USER_SERVICE_URL=http://user-service:3005
 PLAYLIST_SERVICE_URL=http://playlist-service:3002
+REALTIME_SERVICE_URL=http://realtime-service:3004
 EENV
       ;;
 
@@ -199,8 +199,8 @@ EENV
     "frontend")
       cat > "$ENV_FILE" <<EENV
 # API / WS
-API_URL=http://${LOCAL_IP}:${GATEWAY_PORT}
-WS_URL=ws://${LOCAL_IP}:3004/ws
+API_URL=http://localhost:${GATEWAY_PORT}
+WS_URL=ws://localhost:3004/ws
 PORT=${FRONTEND_PORT}
 EENV
       ;;

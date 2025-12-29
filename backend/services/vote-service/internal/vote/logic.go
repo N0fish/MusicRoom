@@ -190,6 +190,14 @@ func canUserVote(ctx context.Context, store Store, ev *Event, userID string, lat
 
 	switch ev.LicenseMode {
 	case "", licenseEveryone:
+		// Even for "everyone" mode, user must be joined/invited
+		invited, err := store.IsInvited(ctx, ev.ID, userID)
+		if err != nil {
+			return false, "", err
+		}
+		if !invited {
+			return false, "you must join the event to vote", nil
+		}
 		return true, "", nil
 
 	case licenseInvited:

@@ -115,6 +115,11 @@ test-go:
 
 test-mobile:
 	@echo "Running mobile tests..."
-	$(MAKE) -C mobile test
+	@cd mobile && tuist build
+	@if [ -d "mobile/MusicRoomMobile.xcworkspace" ]; then \
+		$(MAKE) -C mobile test; \
+	else \
+		echo "Skipping mobile tests (workspace not generated). Run 'cd mobile && make generate' first."; \
+	fi
 
 test: test-go test-mobile

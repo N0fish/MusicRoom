@@ -162,27 +162,33 @@ func TestHandleReorderTracks_ComplexPositions(t *testing.T) {
 				t.Fatalf("Expected 200 OK, got %d. Body: %s", w.Code, w.Body.String())
 			}
 
-			// Verification
-			if tt.fromPos == tt.toPos {
-				if len(executedSQLs) > 0 {
-					t.Errorf("Expected no SQL updates for no-op move, got %d", len(executedSQLs))
-				}
-				return
+		// Verification
+		if tt.fromPos == tt.toPos {
+			if len(executedSQLs) > 0 {
+				t.Errorf("Expected no SQL updates for no-op move, got %d", len(executedSQLs))
 			}
+			return
+		}
 
-			if len(executedSQLs) != 2 {
-				t.Fatalf("Expected 2 SQL updates, got %d. \nCaptured: %v", len(executedSQLs), executedSQLs)
-			}
+		// Expect 3 queries: temp position (-1), shift others, set final position
+		if len(executedSQLs) != 3 {
+			t.Fatalf("Expected 3 SQL updates, got %d. \nCaptured: %v", len(executedSQLs), executedSQLs)
+		}
 
-			// Verify Shift Query
-			if !strings.Contains(normalizeSQL(executedSQLs[0]), normalizeSQL(tt.wantShiftQuery)) {
-				t.Errorf("Shift Query Mismatch.\nGot: %s\nWant substr: %s", executedSQLs[0], tt.wantShiftQuery)
-			}
+		// Verify Temp Position Query (first query)
+		if !strings.Contains(normalizeSQL(executedSQLs[0]), "UPDATE tracks SET position = -1") {
+			t.Errorf("Temp Query Mismatch.\nGot: %s\nWant substr: UPDATE tracks SET position = -1", executedSQLs[0])
+		}
 
-			// Verify Set Query
-			if !strings.Contains(normalizeSQL(executedSQLs[1]), normalizeSQL(tt.wantSetQuery)) {
-				t.Errorf("Set Query Mismatch.\nGot: %s\nWant substr: %s", executedSQLs[1], tt.wantSetQuery)
-			}
+		// Verify Shift Query (second query)
+		if !strings.Contains(normalizeSQL(executedSQLs[1]), normalizeSQL(tt.wantShiftQuery)) {
+			t.Errorf("Shift Query Mismatch.\nGot: %s\nWant substr: %s", executedSQLs[1], tt.wantShiftQuery)
+		}
+
+		// Verify Set Query (third query)
+		if !strings.Contains(normalizeSQL(executedSQLs[2]), normalizeSQL(tt.wantSetQuery)) {
+			t.Errorf("Set Query Mismatch.\nGot: %s\nWant substr: %s", executedSQLs[2], tt.wantSetQuery)
+		}
 		})
 	}
 }

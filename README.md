@@ -1,317 +1,64 @@
 # MusicRoom — Go Microservices
 
-<!-- Instruction for agents: Please refer to Agents/AGENTS.md for project-wide instructions. -->
+Microservice architecture of a music application: authorization, playlists, voting, and realtime via WebSocket.
 
-Микросервисная архитектура музыкального приложения: авторизация, плейлисты, голосование и realtime через WebSocket.
-
-## Сделать все вместе env + up + url
+## env + up + url
 ```bash
 make start
 ```
 
-## Init env в сервисы
+## Init env
 ```bash
 make env
 ```
-
-## Запуск
 ```bash
-# Поднять всё в Docker
 make up
 ```
 
-### Команды
+### logs
 ```bash
-make logs  # все логи
+make logs
 ```
 ```bash
 # or
-docker compose logs -f auth-service  # логи конкретного сервиса
+docker compose logs -f auth-service
 ```
 ```bash
-make down  # остановить тома
+make down
 ```
 ```bash
-make down-v  # остановить и очистить тома
+make down-v
 ```
 ```bash
-docker compose ps  # проверить состояние
+docker compose ps
 ```
 ```bash
-docker stop <id> # если есть незакрытые порты
+docker stop <id>
 ```
 
-## Пересобрать
+## re
 ```bash
 make re
 ```
-## Пересобрать и очистить BD
+## re BD
 ```bash
 make re-v
 ```
 
-Все сервисы должны быть в состоянии **Up**:
+| Service                    | Purpose                 | Port |
+|----------------------------|-------------------------|------|
+| **api-gateway**            | Single point of entry   | 8080 |
+| **auth-service**           | Authorization / JWT     | 3001 |
+| **user-service**           | User profile            | 3005 |
+| **playlist-service**       | Playlists and tracks    | 3002 |
+| **vote-service**           | Events and voting       | 3003 |
+| **realtime-service**       | WebSocket notifications | 3004 |
+| **mock-service**           | Mock / statistical data | 3006 |
+| **music-provider-service** | Provider service        | 3007 |
+| **postgres**               | Shared database         | 5432 |
+| **redis**                  | Pub/Sub messages        | 6379 |
 
-| Сервис            | Назначение             | Порт |
-|--------------------|------------------------|------|
-| **api-gateway**    | Единая точка входа     | 8080 |
-| **auth-service**   | Авторизация / JWT      | 3001 |
-| **user-service**    | Профиль пользователя  | 3005 |
-| **playlist-service** | Плейлисты и треки    | 3002 |
-| **vote-service**   | События и голосование  | 3003 |
-| **realtime-service** | WebSocket уведомления | 3004 |
-| **mock-service**     | Mock / статистические данные | 3006 |
-| **postgres**       | Общая база данных      | 5432 |
-| **redis**          | Pub/Sub сообщения      | 6379 |
 
-- API Gateway: http://localhost:8080
-- Auth: http://localhost:3001
-- User: http://localhost:3005
-- Playlist: http://localhost:3002
-- Vote: http://localhost:3003
-- Realtime WS: ws://localhost:3004/ws
-- Mock API: http://localhost:3006
-- Postgres: localhost:5432 (user: postgres / password: postgres, db: musicroom)
-- Redis: localhost:6379
-
-### Запустить только на `go` по сервису (без докер):
-Пример:
-```bash
-go run ./backend/services/mock-service/cmd/service
-```
-
----
-
-## Архитектура
-
-```sql
-                 frontend/mobile                
-                       │
-                       ▼
-                ┌─────────────┐         ┌───────────────────┐
-     requests → │ API Gateway │ /mock → │   mock-service    │
-                └─────┬───────┘         └───────────────────┘
-                      │
-        ┌─────────────┼──────────────┬───────────────┐
-        ↓             ↓              ↓               ↓
- ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐
- │auth-service│ │user-service│ │playlist-s. │ │vote-service│
- └────┬───────┘ └────┬───────┘ └─────┬──────┘ └──────┬─────┘
-      │              │               │               │
-      │     SQL      │               │               │
-      └──→ Postgres ←────────────────┘               │
-             ↑                                       │
-             │             SQL                       │
-             │              ↑                        │
-             │              │                        │
-             └──────→ Redis pub/sub ←────────────────┘
-                         │
-                   ┌───────────────┐
-                   │realtime-s. WS │
-                   └───────────────┘
-```
-`Postgres` - каждый сервис может делать SQL-запросы.
-
-```sql
-         ┌─────────────────────────────────┐
-         │         frontend                │
-         │  HTTP → API Gateway             │
-         │  WS   → realtime-service        │
-         └───────────────┬─────────────────┘
-                         │
-                         │ HTTP
-                         ▼
-           ┌─────────────────────────────┐
-requests → │         API Gateway   :8080 │ ← фронт / мобилка
-           │ /auth      → auth-service   │  
-           │ /playlists → playlist-s.    │         ┌───────────────────┐
-           │ /events    → vote-service   │ /mock → │   mock-service    │
-           │ /users     → user-service   │         │             :3006 │
-           └────────────┬────────────────┘         └───────────────────┘
-                        │
-     ┌──────────────────┼─────────────────────────────┐
-     ↓                  ↓                             ↓
-  ┌────────────┐   ┌────────────┐               ┌────────────┐
-  │auth-service│   │playlist-s. │               │vote-service│
-  │      :3001 │   │      :3002 │               │      :3003 │
-  └────────────┘   └────────────┘               └────────────┘
-        ↓                ↓                             ↓
-        ┌────────────────┴───────────────┐             ↓
-        │                                │             ↓
-        ↓                                ↓             ↓
-  ┌────────────┐                    ┌────────────┐  ┌────────────┐
-  │user-service│                    │realtime-s. │  │   Redis    │
-  │      :3005 │                    │      :3004 │  │      :6379 │
-  └────────────┘                    └────────────┘  └────────────┘
-         ↓
-         │ (SQL)
-         ↓
-   ┌───────────┐
-   │ Postgres  │ :5432 
-   └───────────┘
-```
-
----
-
-## Сервисы:
-### 1. API Gateway
-### `api-gateway` — Единая точка входа (порт 8080) - единый backend / API.
-- Проксирует:
-  - `/auth` → `auth-service`
-  - `/users` → `user-service`
-  - `/playlists` → `playlist-service`
-  - `/events` → `vote-service`
-  - `/realtime` → `realtime-service`
-  - `/mock` → `mock-service`
-- Фрокт и мобилка могут обращаться **только к `localhost:8080`**, не к внутренним сервисам.
-
-Смотри инфу по использованию этого сервиса в `backend/services/api-gateway/api_front-mobil.md`
-
----
-
-### 2. Auth
-### `auth-service` — Авторизация (порт 3001)
-- POST /auth/register
-- POST /auth/login
-- POST /auth/refresh
-- GET /auth/me
-- POST /auth/request-email-verification
-- GET /auth/verify-email
-- POST /auth/forgot-password
-- POST /auth/reset-password
-- GET /auth/google/login
-- GET /auth/google/callback
-- GET /auth/42/login
-- GET /auth/42/callback
-
----
-
-### 3. User
-### `user-service` — Профили пользователей (порт 3005)
-- GET /users/me
-- PATCH /users/me
-- GET /users/{id}
-- GET /users/search
-- GET /users/friends
-- POST /users/me/friends/{id}/request
-- POST /users/me/friends/{id}/accept
-- POST /users/me/friends/{id}/reject
-- DELETE /users/me/friends/{id}
-- POST /users/me/avatar/random
-
-Ex : GET /users/me
-```json
-{
-	"id": "uuid-профиля",
-	"userId": "uuid-пользователя",
-	"username": "quiet-dragon",
-	"displayName": "Alla",
-	"avatarUrl": "/static/avatars/default.png",
-	"hasCustomAvatar": false,
-	"bio": "DJ from Paris",
-	"visibility": "private",
-	"preferences": {
-		"genres": [
-			"techno",
-			"house"
-		],
-		"artists": [
-			"Syuzi Dogs"
-		],
-		"moods": [
-			"party"
-		]
-	},
-	"createdAt": "...",
-	"updatedAt": "..."
-}
-```
-
----
-
-### 4. Playlist
-### `playlist-service` — Плейлисты и треки (порт 3002)
-маршруты в разработке:
-- GET /playlists
-- POST /playlists
-- PATCH /playlists/{id}
-- /playlists, /playlists/:id/tracks,
-- /events, /events/:id/votes, /events/:id/tally,
-
----
-
-### 5. Vote
-### `vote-service` — События и голосование (порт 3003)
-в разработке :
-- GET /events/{id}/vote — проголосовать  
-- `/events` — создать событие  
-- `/events/:id/tally` — посмотреть результаты  
-- Также публикует события в Redis.
-
----
-
-### 6. Realtime
-### `realtime-service` — WebSocket уведомления (порт 3004)
-- Клиенты подключаются к `ws://localhost:3004/ws`
-- Принимает события от Redis и рассылает в браузеры
-- Проверка:
-  - открыть `ws.html` в браузере,
-  - нажать **Connect**,
-  - добавить трек или проголосовать — появится событие `playlist.created` или `vote.cast`.
-
----
-
-### 7. Mock
-### `mock-service` — Заглушечные данные для фронта/мобилки (порт 3006) СТАРАЯ ВЕРСИЯ
-- надо переделать до актуальной версии. 
-
-Сервис возвращает **фиксированные тестовые данные**, чтобы фронт и мобильное приложение
-могли показывать заполненные экраны, даже если база пустая или реальный backend ещё не готов.
-
-Эндпоинты (через API Gateway):
-
-- `GET /mock/initial` — стартовый набор данных:
-  - текущий пользователь (mock),
-  - список плейлистов,
-  - список событий.
-- `GET /mock/user` — только мок-пользователь.
-- `GET /mock/playlists` — только мок-плейлисты.
-- `GET /mock/events` — только мок-события.
-
----
-
-## Ramp-up
-```bash
-# 1000 запросов, 50 одновременно, на health-check
-hey -n 1000 -c 50 http://localhost:8080/health
-```
-```bash
-# 1000 запросов на публичные плейлисты:
-hey -n 1000 -c 50 http://localhost:8080/playlists
-```
-
----
-
-## Создать самоподписаные сертификаты
-```bash
-openssl req -x509 -newkey rsa:4096 -sha256 -days 365 \
-  -nodes -keyout key.pem -out cert.pem \
-  -subj "/CN=localhost" \
-  -addext "subjectAltName=DNS:localhost"
-```
-
----
-
-## Нужно сделать:
-
-- RAMPUP.md - дока по нагрузочному тестированию
-- может быть мок сервис доделать, хотя он не обязателен
-- понять что будет происходить если нет инернета и как пользователь может продолжать пользоваться приложением
-- написать тесты. думаю займусь этим в самом конце
-- сделать сертификаты и перейти на https, нужны ли они, если мы используем отдельный сервер ?  
-(самоподписаные сертификаты закоментированы в коде(api and front), env, и в докер-композ)
-
-## Полезные ссылки
 ```http
 https://api.intra.42.fr/apidoc
 ```
@@ -322,8 +69,8 @@ https://profile.intra.42.fr/oauth/applications/new
 https://console.cloud.google.com
 ```
 ```http
-https://musicroom-auth-service.onrender.com/health
+https://musicroom-4k3a.onrender.com/health
 ```
 ```http
-https://musicroom-4k3a.onrender.com/health
+https://musicroom-frontend.onrender.com
 ```

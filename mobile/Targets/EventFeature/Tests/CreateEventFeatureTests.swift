@@ -17,10 +17,9 @@ final class CreateEventFeatureTests: XCTestCase {
             $0.date = .constant(now)
         }
 
-        await store.send(.binding(.set(\.voteStart, now))) {
-            $0.voteStart = now.addingTimeInterval(60)
-            $0.voteEnd = now.addingTimeInterval(120)
-        }
+        await store.send(.binding(.set(\.voteStart, now)))
+        XCTAssertEqual(store.state.voteStart, now.addingTimeInterval(60))
+        XCTAssertEqual(store.state.voteEnd, now.addingTimeInterval(120))
     }
 
     func testVoteEndBindingClampsToStartPlusMinute() async {
@@ -35,9 +34,8 @@ final class CreateEventFeatureTests: XCTestCase {
             $0.date = .constant(now)
         }
 
-        await store.send(.binding(.set(\.voteEnd, now.addingTimeInterval(90)))) {
-            $0.voteEnd = now.addingTimeInterval(120)
-        }
+        await store.send(.binding(.set(\.voteEnd, now.addingTimeInterval(90))))
+        XCTAssertEqual(store.state.voteEnd, now.addingTimeInterval(120))
     }
 
     func testVoteStartBindingBumpsEndIfNeeded() async {

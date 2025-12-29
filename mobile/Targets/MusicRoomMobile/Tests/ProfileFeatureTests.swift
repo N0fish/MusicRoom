@@ -220,6 +220,18 @@ final class ProfileFeatureTests: XCTestCase {
 
         var state = ProfileFeature.State()
         state.userProfile = profile
+        state.alert = AlertState {
+            TextState("Reset Password")
+        } actions: {
+            ButtonState(role: .destructive, action: .confirmPasswordReset) {
+                TextState("Reset")
+            }
+            ButtonState(role: .cancel) {
+                TextState("Cancel")
+            }
+        } message: {
+            TextState("Send password reset instructions to \(email)?")
+        }
 
         let forgotCalled = LockIsolated<[String]>([])
         let logoutCalled = LockIsolated(false)
@@ -238,6 +250,7 @@ final class ProfileFeatureTests: XCTestCase {
         await store.send(.alert(.presented(.confirmPasswordReset))) {
             $0.isLoading = true
             $0.errorMessage = nil
+            $0.alert = nil
         }
 
         await store.receive(.forgotPasswordResponse(.success(true))) {

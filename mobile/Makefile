@@ -16,6 +16,10 @@ build:
 		-destination $(DESTINATION)
 
 test:
+	@if [ ! -d "$(WORKSPACE)" ]; then \
+		echo "Workspace not found. Run 'make generate' first or skip mobile tests."; \
+		exit 1; \
+	fi
 	rm -rf TestResults.xcresult
 	set -o pipefail && xcodebuild test \
 		-workspace $(WORKSPACE) \
