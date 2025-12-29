@@ -21,7 +21,7 @@ public struct CreateEventFeature: Sendable {
         public var selectedFriendIDs: Set<String> = []
 
         // Geo + Time
-        public var voteStart: Date = Date()
+        public var voteStart: Date = Date().addingTimeInterval(60)
         public var voteEnd: Date = Date().addingTimeInterval(3600 * 24)  // Default 24h
         public var geoLat: Double?
         public var geoLng: Double?
@@ -66,6 +66,7 @@ public struct CreateEventFeature: Sendable {
     @Dependency(\.friendsClient) var friendsClient
     @Dependency(\.locationClient) var locationClient
     @Dependency(\.appSettings) var appSettings
+    @Dependency(\.date) var date
     @Dependency(\.dismiss) var dismiss
 
     public init() {}
@@ -81,6 +82,24 @@ public struct CreateEventFeature: Sendable {
             case .binding(\.visibility):
                 if state.visibility == .privateEvent && state.licenseMode == .everyone {
                     state.licenseMode = .invitedOnly
+                }
+                return .none
+
+            case .binding(\.voteStart):
+                let minStart = date.now.addingTimeInterval(60)
+                if state.voteStart < minStart {
+                    state.voteStart = minStart
+                }
+                let minEnd = state.voteStart.addingTimeInterval(60)
+                if state.voteEnd < minEnd {
+                    state.voteEnd = minEnd
+                }
+                return .none
+
+            case .binding(\.voteEnd):
+                let minEnd = state.voteStart.addingTimeInterval(60)
+                if state.voteEnd < minEnd {
+                    state.voteEnd = minEnd
                 }
                 return .none
 
