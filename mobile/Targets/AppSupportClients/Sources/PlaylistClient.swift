@@ -8,6 +8,7 @@ public struct PlaylistClient: Sendable {
     public var create: @Sendable (CreatePlaylistRequest) async throws -> Playlist
     public var get: @Sendable (String) async throws -> PlaylistResponse
     public var update: @Sendable (String, UpdatePlaylistRequest) async throws -> Playlist
+    public var delete: @Sendable (String) async throws -> Void
     public var addTrack: @Sendable (String, AddTrackRequest) async throws -> Track
     public var deleteTrack: @Sendable (String, String) async throws -> Void
     public var moveTrack: @Sendable (String, String, Int) async throws -> Void
@@ -22,6 +23,7 @@ extension PlaylistClient: DependencyKey {
         create: { _ in .mock() },
         get: { _ in .mock() },
         update: { _, _ in .mock() },
+        delete: { _ in },
         addTrack: { _, _ in .mock() },
         deleteTrack: { _, _ in },
         moveTrack: { _, _, _ in },
@@ -106,6 +108,15 @@ extension PlaylistClient {
                 request.addValue("application/json", forHTTPHeaderField: "Content-Type")
                 request.httpBody = try JSONEncoder().encode(payload)
                 return try await performRequest(request)
+            },
+            delete: { id in
+                let baseUrl = baseURLString()
+                guard let url = URL(string: "\(baseUrl)/playlists/\(id)") else {
+                    throw URLError(.badURL)
+                }
+                var request = URLRequest(url: url)
+                request.httpMethod = "DELETE"
+                try await performRequestNoContent(request)
             },
             addTrack: { id, payload in
                 let baseUrl = baseURLString()

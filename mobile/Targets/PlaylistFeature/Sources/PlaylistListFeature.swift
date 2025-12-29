@@ -14,6 +14,7 @@ public struct PlaylistListFeature: Sendable {
         public var errorMessage: String?
         public var path = StackState<PlaylistDetailFeature.State>()
         @Presents public var createPlaylist: CreatePlaylistFeature.State?
+        public var currentUserId: String?
 
         public init() {}
     }
@@ -28,6 +29,10 @@ public struct PlaylistListFeature: Sendable {
         case path(StackAction<PlaylistDetailFeature.State, PlaylistDetailFeature.Action>)
         case startRealtimeConnection
         case realtimeMessageReceived(RealtimeMessage)
+        case fetchCurrentUser
+        case currentUserLoaded(TaskResult<String>)
+        case deletePlaylist(Playlist)
+        case playlistDeleted(TaskResult<String>)
     }
 
     private enum CancelID { case realtime }
@@ -43,7 +48,8 @@ public struct PlaylistListFeature: Sendable {
             case .onAppear:
                 return .merge(
                     .send(.loadPlaylists),
-                    .send(.startRealtimeConnection)
+                    .send(.startRealtimeConnection),
+                    .send(.fetchCurrentUser)
                 )
 
             case .loadPlaylists:
@@ -94,9 +100,51 @@ public struct PlaylistListFeature: Sendable {
                 case "playlist.invited":
                     // Reload playlists when invited
                     return .send(.loadPlaylists)
+                case "playlist.deleted":
+                    if let dict = msg.payload.value as? [String: Any],
+                        let playlistId = dict["playlistId"] as? String
+                    {
+                        state.playlists.removeAll { $0.id == playlistId }
+                    }
+                    return .none
                 default:
                     return .none
                 }
+
+            case .fetchCurrentUser:
+                return .run { send in
+                    await send(
+                        .currentUserLoaded(
+                            TaskResult {
+                                let response = try await musicRoomAPI.authMe()
+                                return response.userId
+                            }))
+                }
+
+            case .currentUserLoaded(.success(let userId)):
+                state.currentUserId = userId
+                return .none
+
+            case .currentUserLoaded(.failure):
+                return .none
+
+            case .deletePlaylist(let playlist):
+                return .run { send in
+                    await send(
+                        .playlistDeleted(
+                            TaskResult {
+                                try await playlistClient.delete(playlist.id)
+                                return playlist.id
+                            }))
+                }
+
+            case .playlistDeleted(.success(let playlistId)):
+                state.playlists.removeAll { $0.id == playlistId }
+                return .none
+
+            case .playlistDeleted(.failure(let error)):
+                state.errorMessage = "Failed to delete playlist: \(error.localizedDescription)"
+                return .none
             }
         }
         .forEach(\.path, action: \.path) {
@@ -135,18 +183,13 @@ public struct PlaylistListView: View {
                             .buttonStyle(.bordered)
                         }
                     } else {
-                        ScrollView {
-                            LazyVStack(spacing: 16) {
-                                ForEach(store.playlists) { playlist in
-                                    Button {
-                                        store.send(.playlistTapped(playlist))
-                                    } label: {
-                                        PlaylistRow(playlist: playlist)
-                                    }
-                                }
+                        List {
+                            ForEach(store.playlists) { playlist in
+                                playlistRow(playlist)
                             }
-                            .padding()
                         }
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
                     }
                 }
             }
@@ -170,6 +213,34 @@ public struct PlaylistListView: View {
             }
         } destination: { store in
             PlaylistDetailView(store: store)
+        }
+    }
+
+    @ViewBuilder
+    private func playlistRow(_ playlist: Playlist) -> some View {
+        let canDelete =
+            playlist.ownerId == store.currentUserId && !playlist.isEventPlaylist
+
+        let row = PlaylistRow(playlist: playlist)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+            .contentShape(Rectangle())
+            .onTapGesture {
+                store.send(.playlistTapped(playlist))
+            }
+
+        if canDelete {
+            row.swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                Button(role: .destructive) {
+                    store.send(.deletePlaylist(playlist))
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .tint(.red)
+            }
+        } else {
+            row
         }
     }
 }
