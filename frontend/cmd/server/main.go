@@ -120,6 +120,18 @@ func main() {
 	log.Fatal(http.ListenAndServe(":"+port, r))
 }
 
+	// Это сертификаты для https. Они нужны если мы решим использовать https в качестве общего протокола для сервисов.
+	// tlsEnabled := strings.EqualFold(getenv("TLS_ENABLED", "false"), "true")
+	// if tlsEnabled {
+	// 	certFile := getenv("TLS_CERT_FILE", "../../../certs/cert.pem")
+	// 	keyFile := getenv("TLS_KEY_FILE", "../../../certs/key.pem")
+	// 	log.Printf("Go frontend on HTTPS :%s (API=%s, WS=%s)", port, api, ws)
+	// 	log.Fatal(http.ListenAndServeTLS(":"+port, certFile, keyFile, r))
+	// } else {
+	// 	log.Printf("Go frontend on HTTP :%s (API=%s, WS=%s)", port, api, ws)
+	// 	log.Fatal(http.ListenAndServe(":"+port, r))
+	// }
+
 func (a *App) userProfilePage() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
