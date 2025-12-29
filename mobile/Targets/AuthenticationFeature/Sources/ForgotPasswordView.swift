@@ -48,12 +48,22 @@ public struct ForgotPasswordView: View {
                             Image(systemName: "envelope.fill")
                                 .foregroundColor(.liquidPrimary)
                                 .frame(width: 24)
-                            TextField("Email Address", text: $store.email)
-                                .textContentType(.emailAddress)
-                                .keyboardType(.emailAddress)
-                                .autocapitalization(.none)
-                                .foregroundColor(.white)
-                                .font(.liquidBody)
+                            ZStack(alignment: .leading) {
+                                if store.email.isEmpty {
+                                    Text("Email Address")
+                                        .font(.liquidBody)
+                                        .foregroundColor(.white.opacity(0.6))
+                                }
+                                TextField("", text: $store.email)
+                                    .textContentType(.emailAddress)
+                                    .keyboardType(.emailAddress)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled(true)
+                                    .submitLabel(.done)
+                                    .foregroundColor(.white)
+                                    .tint(.white)
+                                    .font(.liquidBody)
+                            }
                         }
                         .padding()
                         .background(Color.black.opacity(0.3))
