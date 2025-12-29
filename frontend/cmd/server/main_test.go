@@ -54,7 +54,7 @@ func TestApp_Page(t *testing.T) {
 	// If not certain, we stick to getenv.
 	// But let's try.
 
-	handler := app.page("home.gohtml")
+	handler := app.page("home.gohtml", nil)
 	req := httptest.NewRequest("GET", "/", nil)
 	w := httptest.NewRecorder()
 
