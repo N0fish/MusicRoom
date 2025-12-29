@@ -4,6 +4,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -135,7 +136,15 @@ func setupRouter(cfg Config) *chi.Mux {
 	api.Method(http.MethodPost, "/auth/reset-password", authProxy)
 	api.Get("/auth/reset-password", func(w http.ResponseWriter, r *http.Request) {
 		token := r.URL.Query().Get("token")
-		http.Redirect(w, r, getenv("FRONTEND_BASE_URL", "")+"/auth?mode=reset-password&token="+token, http.StatusFound)
+		if token == "" {
+			http.Error(w, "missing token", http.StatusBadRequest)
+			return
+		}
+		redirectURL := cfg.frontendBaseURL +
+			"/auth?mode=reset-password&token=" +
+			url.QueryEscape(token)
+
+		http.Redirect(w, r, redirectURL, http.StatusFound)
 	})
 	api.Method(http.MethodPost, "/auth/request-email-verification", authProxy)
 	api.Method(http.MethodGet, "/auth/verify-email", authProxy)

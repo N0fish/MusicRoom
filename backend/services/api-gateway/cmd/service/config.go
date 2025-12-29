@@ -16,6 +16,7 @@ type Config struct {
 	MockURL          string
 	RealtimeURL      string
 	MusicProviderURL string
+	frontendBaseURL  string
 
 	JWTSecret    []byte
 	RateLimitRPS int
@@ -34,6 +35,7 @@ func loadConfigFromEnv() (Config, error) {
 		MockURL:          getenv("MOCK_SERVICE_URL", "http://mock-service:3006"),
 		RealtimeURL:      getenv("REALTIME_SERVICE_URL", "http://realtime-service:3004"),
 		MusicProviderURL: getenv("MUSIC_PROVIDER_SERVICE_URL", "http://music-provider-service:3007"),
+		frontendBaseURL:  getenv("FRONTEND_BASE_URL", "http://localhost:5175"),
 		JWTSecret:        []byte(getenv("JWT_SECRET", "")),
 		RateLimitRPS:     getenvInt("RATE_LIMIT_RPS", 20),
 	}
