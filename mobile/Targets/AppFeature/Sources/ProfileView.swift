@@ -248,32 +248,13 @@ public struct ProfileView: View {
                         // Security & Linked Accounts
                         profileSection("Security & Accounts") {
                             VStack(spacing: 12) {
-                                if !store.isChangingPassword {
-                                    Button("Change Password") {
-                                        store.send(.toggleChangePasswordMode)
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .tint(.white)
-                                } else {
-                                    SecureField(
-                                        "Current Password", text: $store.currentPassword
-                                    )
-                                    .textFieldStyle(.roundedBorder)
-                                    SecureField("New Password", text: $store.newPassword)
-                                        .textFieldStyle(.roundedBorder)
-                                    SecureField("Confirm New", text: $store.confirmNewPassword)
-                                        .textFieldStyle(.roundedBorder)
-
-                                    HStack {
-                                        Button("Cancel") {
-                                            store.send(.toggleChangePasswordMode)
-                                        }
-                                        .foregroundStyle(.red)
-                                        Spacer()
-                                        Button("Update") {
-                                            store.send(.changePasswordButtonTapped)
-                                        }
-                                    }
+                                Button(action: {
+                                    store.send(.forgotPasswordButtonTapped)
+                                }) {
+                                    Text("Forgot Password?")
+                                        .font(.liquidCaption)
+                                        .foregroundColor(.white.opacity(0.8))
+                                        .frame(maxWidth: .infinity, alignment: .trailing)
                                 }
 
                                 Divider().background(.white.opacity(0.2))
@@ -384,6 +365,7 @@ public struct ProfileView: View {
         ) { url in
             store.send(.imagePlaygroundResponse(url))
         }
+        .alert($store.scope(state: \.alert, action: \.alert))
         .preferredColorScheme(.dark)
     }
 

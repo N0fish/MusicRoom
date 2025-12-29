@@ -23,16 +23,10 @@ public struct ProfileFeature: Sendable {
         public var editableBio: String = ""
         public var editableVisibility: String = "public"
         public var editableMusicPreferences: String = ""
-
-        // Password change fields
-        public var currentPassword = ""
-        public var newPassword = ""
-        public var confirmNewPassword = ""
-        public var isChangingPassword = false
-        public var passwordChangeSuccessMessage: String?
         public var isOffline: Bool = false
         public var hasLoaded: Bool = false
         public var isImagePlaygroundPresented: Bool = false
+        @Presents public var alert: AlertState<Action.Alert>?
 
         public init() {}
     }
@@ -48,9 +42,8 @@ public struct ProfileFeature: Sendable {
         case linkAccount(AuthenticationClient.SocialHelper.SocialProvider)
         case unlinkAccount(AuthenticationClient.SocialHelper.SocialProvider)
         case linkAccountResponse(TaskResult<UserProfile>)
-        case changePasswordButtonTapped
-        case changePasswordResponse(TaskResult<Bool>)
-        case toggleChangePasswordMode
+        case forgotPasswordButtonTapped
+        case forgotPasswordResponse(TaskResult<Bool>)
         case generateRandomAvatarTapped
         case generateRandomAvatarResponse(TaskResult<UserProfile>)
         case fetchStats
@@ -61,6 +54,11 @@ public struct ProfileFeature: Sendable {
         case imagePlaygroundResponse(URL?)
         case uploadGeneratedAvatar(Data)
         case uploadGeneratedAvatarResponse(TaskResult<UserProfile>)
+        case alert(PresentationAction<Alert>)
+
+        public enum Alert: Equatable {
+            case confirmPasswordReset
+        }
     }
 
     @Dependency(\.user) var userClient
@@ -188,6 +186,31 @@ public struct ProfileFeature: Sendable {
                     await authClient.logout()
                 }
 
+            case .forgotPasswordButtonTapped:
+                if state.isOffline {
+                    state.errorMessage = "You cannot reset your password while offline."
+                    return .none
+                }
+                let email = (state.userProfile?.email ?? state.editableEmail)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !email.isEmpty else {
+                    state.errorMessage = "No email address found for this account."
+                    return .none
+                }
+                state.alert = AlertState {
+                    TextState("Reset Password")
+                } actions: {
+                    ButtonState(role: .destructive, action: .confirmPasswordReset) {
+                        TextState("Reset")
+                    }
+                    ButtonState(role: .cancel) {
+                        TextState("Cancel")
+                    }
+                } message: {
+                    TextState("Send password reset instructions to \(email)?")
+                }
+                return .none
+
             case .linkAccount(let provider):
                 if state.isOffline {
                     state.errorMessage = "You cannot link accounts while offline."
@@ -273,58 +296,36 @@ public struct ProfileFeature: Sendable {
                 state.errorMessage = "Failed to link/unlink account: \(error.localizedDescription)"
                 return .none
 
-            case .toggleChangePasswordMode:
-                state.isChangingPassword.toggle()
-                state.errorMessage = nil
-                state.passwordChangeSuccessMessage = nil
-                state.currentPassword = ""
-                state.newPassword = ""
-                state.confirmNewPassword = ""
-                return .none
-
-            case .changePasswordButtonTapped:
+            case .alert(.presented(.confirmPasswordReset)):
                 if state.isOffline {
-                    state.errorMessage = "You cannot change password while offline."
+                    state.errorMessage = "You cannot reset your password while offline."
                     return .none
                 }
-                guard !state.currentPassword.isEmpty, !state.newPassword.isEmpty,
-                    !state.confirmNewPassword.isEmpty
-                else {
-                    state.errorMessage = "Please fill in all password fields."
-                    return .none
-                }
-                guard state.newPassword == state.confirmNewPassword else {
-                    state.errorMessage = "New passwords do not match."
+                let email = (state.userProfile?.email ?? state.editableEmail)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !email.isEmpty else {
+                    state.errorMessage = "No email address found for this account."
                     return .none
                 }
                 state.isLoading = true
                 state.errorMessage = nil
-
-                return .run {
-                    [current = state.currentPassword, new = state.newPassword, userClient] send in
-                    await send(
-                        .changePasswordResponse(
-                            TaskResult {
-                                try await userClient.changePassword(current, new)
-                                return true
-                            }))
+                return .run { [authClient, email] send in
+                    do {
+                        try await authClient.forgotPassword(email)
+                        await send(.forgotPasswordResponse(.success(true)))
+                    } catch {
+                        await send(.forgotPasswordResponse(.failure(error)))
+                    }
+                    await send(.logoutButtonTapped)
                 }
 
-            case .changePasswordResponse(.success):
+            case .forgotPasswordResponse(.success):
                 state.isLoading = false
-                state.isChangingPassword = false
-                state.passwordChangeSuccessMessage = "Password changed successfully."
-                state.currentPassword = ""
-                state.newPassword = ""
-                state.confirmNewPassword = ""
-                return .run { [userId = state.userProfile?.userId, telemetry] _ in
-                    await telemetry.log(
-                        "user.password.change.success", userId.map { ["userId": $0] } ?? [:])
-                }
+                return .none
 
-            case .changePasswordResponse(.failure(let error)):
+            case .forgotPasswordResponse(.failure(let error)):
                 state.isLoading = false
-                state.errorMessage = "Failed to change password: \(error.localizedDescription)"
+                state.errorMessage = "Failed to reset password: \(error.localizedDescription)"
                 return .none
 
             case .generateRandomAvatarTapped:
@@ -461,8 +462,12 @@ public struct ProfileFeature: Sendable {
             case .statsResponse(.failure):
                 // stats failure shouldn't block profile, maybe just log or ignore
                 return .none
+
+            case .alert:
+                return .none
             }
         }
+        .ifLet(\.$alert, action: \.alert)
     }
 
     private func normalizeAvatarUrl(_ profile: UserProfile) -> UserProfile {

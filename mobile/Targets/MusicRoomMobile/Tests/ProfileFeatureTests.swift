@@ -166,6 +166,90 @@ final class ProfileFeatureTests: XCTestCase {
         XCTAssertTrue(logoutCalled.value)
     }
 
+    func testForgotPasswordButtonTapped_PresentsAlert() async {
+        let profile = UserProfile(
+            id: "1",
+            userId: "user1",
+            username: "testuser",
+            displayName: "Test User",
+            avatarUrl: nil,
+            hasCustomAvatar: false,
+            preferences: UserPreferences(),
+            isPremium: false,
+            linkedProviders: [],
+            email: "test@example.com"
+        )
+
+        var state = ProfileFeature.State()
+        state.userProfile = profile
+
+        let store = TestStore(initialState: state) {
+            ProfileFeature()
+        }
+
+        await store.send(ProfileFeature.Action.forgotPasswordButtonTapped) {
+            $0.alert = AlertState {
+                TextState("Reset Password")
+            } actions: {
+                ButtonState(role: .destructive, action: .confirmPasswordReset) {
+                    TextState("Reset")
+                }
+                ButtonState(role: .cancel) {
+                    TextState("Cancel")
+                }
+            } message: {
+                TextState("Send password reset instructions to test@example.com?")
+            }
+        }
+    }
+
+    func testForgotPasswordConfirm_SendsRequestAndLogsOut() async {
+        let email = "test@example.com"
+        let profile = UserProfile(
+            id: "1",
+            userId: "user1",
+            username: "testuser",
+            displayName: "Test User",
+            avatarUrl: nil,
+            hasCustomAvatar: false,
+            preferences: UserPreferences(),
+            isPremium: false,
+            linkedProviders: [],
+            email: email
+        )
+
+        var state = ProfileFeature.State()
+        state.userProfile = profile
+
+        let forgotCalled = LockIsolated<[String]>([])
+        let logoutCalled = LockIsolated(false)
+
+        let store = TestStore(initialState: state) {
+            ProfileFeature()
+        } withDependencies: {
+            $0.authentication.forgotPassword = { email in
+                forgotCalled.setValue([email])
+            }
+            $0.authentication.logout = {
+                logoutCalled.setValue(true)
+            }
+        }
+
+        await store.send(.alert(.presented(.confirmPasswordReset))) {
+            $0.isLoading = true
+            $0.errorMessage = nil
+        }
+
+        await store.receive(.forgotPasswordResponse(.success(true))) {
+            $0.isLoading = false
+        }
+
+        await store.receive(.logoutButtonTapped)
+
+        XCTAssertEqual(forgotCalled.value, [email])
+        XCTAssertTrue(logoutCalled.value)
+    }
+
     func testLinkAccount_Success() async {
 
         let profileLinked = UserProfile(
@@ -268,67 +352,6 @@ final class ProfileFeatureTests: XCTestCase {
         }
     }
 
-    func testChangePassword_Success() async {
-        let store = TestStore(initialState: ProfileFeature.State()) {
-            ProfileFeature()
-        } withDependencies: {
-            $0.user.changePassword = { current, new in
-                XCTAssertEqual(current, "oldPass")
-                XCTAssertEqual(new, "newPass")
-            }
-        }
-
-        await store.send(ProfileFeature.Action.toggleChangePasswordMode) {
-            $0.isChangingPassword = true
-        }
-
-        await store.send(ProfileFeature.Action.binding(.set(\.currentPassword, "oldPass"))) {
-            $0.currentPassword = "oldPass"
-        }
-        await store.send(ProfileFeature.Action.binding(.set(\.newPassword, "newPass"))) {
-            $0.newPassword = "newPass"
-        }
-        await store.send(ProfileFeature.Action.binding(.set(\.confirmNewPassword, "newPass"))) {
-            $0.confirmNewPassword = "newPass"
-        }
-
-        await store.send(ProfileFeature.Action.changePasswordButtonTapped) {
-            $0.isLoading = true
-        }
-
-        await store.receive(.changePasswordResponse(.success(true))) {
-            $0.isLoading = false
-            $0.isChangingPassword = false
-            $0.passwordChangeSuccessMessage = "Password changed successfully."
-            $0.currentPassword = ""
-            $0.newPassword = ""
-            $0.confirmNewPassword = ""
-        }
-    }
-
-    func testChangePassword_ValidationMismatch() async {
-        let store = TestStore(initialState: ProfileFeature.State()) {
-            ProfileFeature()
-        }
-
-        await store.send(ProfileFeature.Action.toggleChangePasswordMode) {
-            $0.isChangingPassword = true
-        }
-
-        await store.send(ProfileFeature.Action.binding(.set(\.currentPassword, "oldPass"))) {
-            $0.currentPassword = "oldPass"
-        }
-        await store.send(ProfileFeature.Action.binding(.set(\.newPassword, "new1"))) {
-            $0.newPassword = "new1"
-        }
-        await store.send(ProfileFeature.Action.binding(.set(\.confirmNewPassword, "new2"))) {
-            $0.confirmNewPassword = "new2"
-        }
-
-        await store.send(ProfileFeature.Action.changePasswordButtonTapped) {
-            $0.errorMessage = "New passwords do not match."
-        }
-    }
     func testRandomizeAvatar() async {
         let backendURL = URL(string: "http://test.backend")!
 
