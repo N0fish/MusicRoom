@@ -186,14 +186,22 @@ func setupRouter(cfg Config) *chi.Mux {
 		r.Method(http.MethodGet, "/users/me/friends", userProxy)
 		r.Method(http.MethodGet, "/users/me/friends/requests/incoming", userProxy)
 
-		r.With(bodySizeLimitMiddleware(2048), rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5), rateKeyUserOrIP, "friend_request")).
-			Method(http.MethodPost, "/users/me/friends/{id}/request", userProxy)
-		r.With(bodySizeLimitMiddleware(2048), rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5), rateKeyUserOrIP, "friend_request")).
-			Method(http.MethodPost, "/users/me/friends/{id}/accept", userProxy)
-		r.With(bodySizeLimitMiddleware(2048), rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5), rateKeyUserOrIP, "friend_request")).
-			Method(http.MethodPost, "/users/me/friends/{id}/reject", userProxy)
-		r.With(bodySizeLimitMiddleware(2048), rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5), rateKeyUserOrIP, "friend_request")).
-			Method(http.MethodDelete, "/users/me/friends/{id}", userProxy)
+		r.With(
+			bodySizeLimitMiddleware(2048),
+			rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5), rateKeyUserOrIP, "friend_request"),
+		).Method(http.MethodPost, "/users/me/friends/{id}/request", userProxy)
+		r.With(
+			bodySizeLimitMiddleware(2048),
+			rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5), rateKeyUserOrIP, "friend_request"),
+		).Method(http.MethodPost, "/users/me/friends/{id}/accept", userProxy)
+		r.With(
+			bodySizeLimitMiddleware(2048),
+			rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5), rateKeyUserOrIP, "friend_request"),
+		).Method(http.MethodPost, "/users/me/friends/{id}/reject", userProxy)
+		r.With(
+			bodySizeLimitMiddleware(2048),
+			rateLimitMiddleware(getenvInt("FRIEND_REQUEST_RPS", 5), rateKeyUserOrIP, "friend_request"),
+		).Method(http.MethodDelete, "/users/me/friends/{id}", userProxy)
 
 		r.Method(http.MethodGet, "/users/{id}", userProxy)
 	})
