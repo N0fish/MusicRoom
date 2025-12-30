@@ -370,7 +370,7 @@ https://console.cloud.google.com
 ---
 
 ## Authors
-Backend · Mobile · Web frontend · API · Realtime · Sécurité · DevOps · Architecture · Bonus IA · etc.  
+Backend · Mobile · Web frontend · API · Realtime · Security · DevOps · Architecture · Bonus IA · etc.  
 
 Made with by:
 - [algultse](https://github.com/N0fish) - Developer
