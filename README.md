@@ -365,7 +365,6 @@ requests → │         API Gateway            :8080 │
 ## Authors
 Backend · Mobile · Web frontend · API · Realtime · Security · DevOps · Architecture · Bonus IA · etc.  
 
-Made with by:
 - [algultse](https://github.com/N0fish) - Developer
 - [wstygg](https://github.com/TheWeaklessOne) - Mobile
 - [ankhabar](https://github.com/UrbanSamuraii) - Frontend
