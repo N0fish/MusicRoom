@@ -353,17 +353,10 @@ requests → │         API Gateway            :8080 │
 <details>
 <summary>Useful links</summary>
 
-```http
-https://api.intra.42.fr/apidoc
-```
-
-```http
-https://profile.intra.42.fr/oauth/applications/new
-```
-
-```http
-https://console.cloud.google.com
-```
+- [apidoc-42](https://api.intra.42.fr/apidoc)
+- [oauth/applications/new-42](https://profile.intra.42.fr/oauth/applications/new)
+- [console.cloud.google](https://console.cloud.google.com)
+- [swagger](https://editor.swagger.io)
 
 </details>
 
